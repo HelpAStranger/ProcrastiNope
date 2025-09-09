@@ -2044,6 +2044,31 @@
                 }
             };
 
+            // FIX: Define shared variables and functions first to avoid initialization errors.
+            let user = initialUser;
+            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+            const audioCtx = window.AudioContext ? new AudioContext() : null;
+            
+            function playSound(type) {
+                if (!audioCtx || settings.volume === 0) return;
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.connect(g); g.connect(audioCtx.destination);
+                let v = settings.volume, d = 0.2;
+                switch (type) {
+                    case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
+                    case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
+                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
+                    case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
+                    case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
+                    case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
+                    case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
+                    case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
+                    case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
+                }
+                g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
+                o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
+            }
+
             const openModal = (modal) => {
                 if(modal) {
                     if (activeMobileActionsItem) {
@@ -2101,6 +2126,7 @@
                             }, { merge: true });
                             await batch.commit();
                             
+                             closeModal(usernameModal);
                             // This was causing the loop, onAuthStateChanged will handle the UI transition
                             // window.location.reload(); 
                         } catch (error) {
@@ -2112,11 +2138,8 @@
             }
 
 
-            let user = initialUser;
-            
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
-            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
             let actionsTimeoutId = null;
@@ -2183,7 +2206,6 @@
             const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
-            const audioCtx = window.AudioContext ? new AudioContext() : null;
             let confirmCallback = null;
 
             async function saveData(data) {
@@ -2207,7 +2229,8 @@
                 standaloneMainQuests = data.standaloneMainQuests || [];
                 generalTaskGroups = data.generalTaskGroups || [];
                 playerData = data.playerData || { level: 1, xp: 0 };
-                settings = data.settings || { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+                // Overwrite the default settings with loaded data
+                settings = { ...settings, ...(data.settings || {}) }; 
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
@@ -2338,25 +2361,7 @@
                 const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.length === 0);
                 return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
             }
-            function playSound(type) {
-                if (!audioCtx || settings.volume === 0) return;
-                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-                o.connect(g); g.connect(audioCtx.destination);
-                let v = settings.volume, d = 0.2;
-                switch (type) {
-                    case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
-                    case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
-                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
-                    case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
-                    case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
-                    case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
-                    case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
-                    case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
-                    case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
-                }
-                g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
-                o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
-            }
+            
             const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
             const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
             const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
