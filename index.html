@@ -224,6 +224,8 @@
             /* Custom Scrollbar Styles */
             scrollbar-width: thin;
             scrollbar-color: var(--accent) var(--surface);
+            /* FIX: Prevent layout shift when modals open/close */
+            scrollbar-gutter: stable;
         }
 
         body {
@@ -599,10 +601,10 @@
             bottom: 0;
             left: 0;
             right: 0;
-            height: 70px; /* MODIFIED: Make it narrower */
+            height: 80px; /* MODIFIED: Make it taller for better feel */
             background-color: var(--surface);
             border-top: var(--border-width) solid var(--border);
-            box-shadow: 0px -4px 0 var(--shadow);
+            box-shadow: 0px -6px 0 var(--shadow); /* MODIFIED: Thicker shadow */
             z-index: 500;
         }
         .mobile-nav-content {
@@ -618,6 +620,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center; /* MODIFIED: Center content vertically */
             gap: 4px;
             font-family: var(--font-main);
             font-weight: 700;
@@ -625,6 +628,11 @@
             opacity: 0.6;
             transition: all var(--transition-speed) ease;
         }
+        /* MODIFIED: Bolder font for text label */
+        .mobile-nav-btn span {
+            font-weight: 900;
+        }
+
         .mobile-nav-btn.active {
             opacity: 1;
             transform: translateY(-5px);
@@ -673,6 +681,15 @@
             100% { transform: translate(0, 0); }
         }
         
+        /* NEW: Set min-height to prevent modal resizing between tabs */
+        #friends-modal .tab-content {
+            min-height: 250px;
+        }
+
+        #friends-modal h3 {
+            font-weight: 900; /* Bolder headers */
+        }
+        
         .friends-list-container, .friend-requests-container {
             max-height: 200px;
             overflow-y: auto;
@@ -688,7 +705,16 @@
             align-items: center;
             padding: 0.75rem;
             border-radius: calc(var(--radius) / 2);
+            gap: 0.75rem; /* Add gap for level display */
         }
+
+        /* NEW: Bolder font for friend names */
+        .friend-item .friend-name, 
+        .friend-request-item span {
+            font-weight: 700;
+            flex-grow: 1; /* Allow name to take space */
+        }
+
 
         .friend-item:not(:last-child), .friend-request-item:not(:last-child) {
             border-bottom: var(--border-width) dashed var(--border);
@@ -697,7 +723,24 @@
         .friend-item-actions, .friend-request-actions {
             display: flex;
             gap: 0.5rem;
+            flex-shrink: 0; /* Prevent buttons from shrinking */
         }
+
+        /* NEW: Friend Level Display Box */
+        .friend-level-display {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+            font-weight: 900;
+            padding: 0.25rem 0.75rem;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 4px 4px 0 var(--shadow);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
         
         /* NEW: Neobrutalism styling for friend action buttons */
         .friend-item-actions .remove-friend-btn,
@@ -1848,7 +1891,7 @@
         <div class="modal-content">
             <h2 id="add-task-modal-title">Add New Quest</h2>
             <form id="add-task-form">
-                <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
+                <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required maxlength="30">
                 <div id="weekly-goal-container" style="display: none;">
                     <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">None</span></label>
                     <div class="weekly-goal-slider-container">
@@ -1868,7 +1911,7 @@
             <h2 id="edit-task-modal-title">Edit Quest</h2>
             <form id="edit-task-form">
                 <input type="hidden" id="edit-task-id">
-                <input type="text" id="edit-task-input" required>
+                <input type="text" id="edit-task-input" required maxlength="30">
                 <div id="edit-weekly-goal-container" style="display: none;">
                     <label for="edit-task-weekly-goal-slider">Weekly Goal: <span id="edit-task-weekly-goal-display">3</span> days</label>
                     <div class="weekly-goal-slider-container">
@@ -1887,7 +1930,7 @@
         <div class="modal-content">
             <h2>Create New Group</h2>
             <form id="add-group-form">
-                <input type="text" id="new-group-input" placeholder="e.g., Project Overlord" required>
+                <input type="text" id="new-group-input" placeholder="e.g., Project Overlord" required maxlength="30">
                 <div class="modal-actions">
                     <button type="button" class="btn" data-close-modal="add-group-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Create</button>
@@ -3318,13 +3361,14 @@
                 } else {
                     friendsListContainer.innerHTML = '';
                     // Efficiently fetch multiple user profiles with a 'in' query
-                    const friendsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where('__name__', 'in', friendUIDs));
+                    const friendsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', friendUIDs));
                     const friendDocs = await window.firebaseSDK.getDocs(friendsQuery);
                     friendDocs.forEach(doc => {
                          const friend = doc.data();
+                         const level = friend.appData?.playerData?.level || 1;
                          const friendEl = document.createElement('div');
                          friendEl.className = 'friend-item';
-                         friendEl.innerHTML = `<span>${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
+                         friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
                          friendsListContainer.appendChild(friendEl);
                     });
                 }
@@ -3334,7 +3378,7 @@
                     friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
                 } else {
                     friendRequestsContainer.innerHTML = '';
-                    const requestsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where('__name__', 'in', requestUIDs));
+                    const requestsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', requestUIDs));
                     const requestDocs = await window.firebaseSDK.getDocs(requestsQuery);
                     requestDocs.forEach(doc => {
                         const requestUser = doc.data();
