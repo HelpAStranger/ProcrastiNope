@@ -601,43 +601,64 @@
             bottom: 0;
             left: 0;
             right: 0;
-            height: 80px; /* MODIFIED: Make it taller for better feel */
+            height: 80px;
             background-color: var(--surface);
             border-top: var(--border-width) solid var(--border);
-            box-shadow: 0px -6px 0 var(--shadow); /* MODIFIED: Thicker shadow */
+            box-shadow: 0px -6px 0 var(--shadow);
             z-index: 500;
+            border-top-left-radius: var(--radius);
+            border-top-right-radius: var(--radius);
+            padding: 0 1rem;
+            border-left: var(--border-width) solid var(--border);
+            border-right: var(--border-width) solid var(--border);
         }
         .mobile-nav-content {
             display: flex;
             justify-content: space-around;
             align-items: center;
             height: 100%;
-            padding: 0 1rem;
+            border: var(--border-width) dashed rgba(var(--surface-rgb), 0.2);
+            border-bottom: none;
+            border-radius: calc(var(--radius) - var(--border-width));
+            padding-bottom: 5px;
+            transform: translateY(2px);
         }
         .mobile-nav-btn {
-            background: none;
+            background-color: var(--surface);
             border: none;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center; /* MODIFIED: Center content vertically */
+            justify-content: center;
             gap: 4px;
             font-family: var(--font-main);
             font-weight: 700;
             color: var(--text);
             opacity: 0.6;
             transition: all var(--transition-speed) ease;
+            padding: 0.5rem;
+            border-radius: var(--radius);
+            border: var(--border-width) solid transparent;
+            box-shadow: 4px 4px 0 transparent;
+            flex: 1 1 0px;
         }
-        /* MODIFIED: Bolder font for text label */
         .mobile-nav-btn span {
             font-weight: 900;
         }
 
         .mobile-nav-btn.active {
             opacity: 1;
+            border-color: var(--border);
+            box-shadow: 4px 4px 0 var(--shadow);
             transform: translateY(-5px);
             color: var(--accent);
+            background-color: var(--bg);
         }
+
+        .mobile-nav-btn.active svg {
+            color: var(--accent);
+        }
+        
         .mobile-nav-btn svg {
             width: 28px;
             height: 28px;
@@ -691,7 +712,7 @@
         }
         
         .friends-list-container, .friend-requests-container {
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             border: var(--border-width) solid var(--border);
             border-radius: var(--radius);
@@ -2351,6 +2372,7 @@
                 o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
             }
 
+            let lastSection = 'daily';
             const openModal = (modal) => {
                 if(modal) {
                     if (activeMobileActionsItem) {
@@ -3020,6 +3042,15 @@
                 const modal = document.getElementById(modalId);
                 if (modal.getAttribute('data-persistent') !== 'true') {
                     closeModal(modal);
+                    if (modalId === 'friends-modal') {
+                        // FIX: Restore the active mobile nav button
+                        const activeBtn = mobileNav.querySelector(`.mobile-nav-btn.active`);
+                        const prevSection = activeBtn.dataset.section;
+                        // Trigger the show section logic
+                        document.querySelectorAll('.task-group').forEach(group => {
+                            group.classList.toggle('mobile-visible', group.dataset.section === prevSection);
+                        });
+                    }
                 }
             }));
             [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal].forEach(m => { 
@@ -3509,6 +3540,11 @@
 
                 const section = button.dataset.section;
                 
+                // Keep track of the last selected section that is not friends, so we can return to it.
+                if (section !== 'friends') {
+                    lastSection = section;
+                }
+
                 mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
 
