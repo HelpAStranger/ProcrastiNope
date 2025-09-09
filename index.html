@@ -266,18 +266,16 @@
             }
 
             /* Hover effects for action buttons on desktop */
-            .task-item .task-actions,
-            .task-item .timer-clock-btn,
+            .task-buttons-wrapper,
             .main-quest-group-header .group-actions {
                 opacity: 0;
                 transition: opacity var(--transition-speed) ease;
                 pointer-events: none;
             }
 
-            .task-item:hover .task-actions,
-            .task-item:hover .timer-clock-btn,
+            .task-item:hover .task-buttons-wrapper,
             .main-quest-group-header:hover .group-actions,
-            .task-item.timer-active .timer-clock-btn {
+            .task-item.timer-active .task-buttons-wrapper {
                 opacity: 1;
                 pointer-events: auto;
             }
@@ -676,6 +674,13 @@
             --shadow-color: var(--accent-red);
         }
         
+        /* NEW: Style for when a timer finishes */
+        .task-item.timer-finished {
+            border-color: var(--accent-red);
+            --shadow-color: var(--accent-red);
+            animation: shake 0.7s cubic-bezier(.36,.07,.19,.97) 3; /* Shake 3 times and stop */
+        }
+
         .task-item.daily-completed {
             max-height: 50px;
             padding-top: 0.5rem;
@@ -742,10 +747,10 @@
             word-break: break-word; /* Ensure long text wraps */
         }
         
-        .task-controls {
+        .task-buttons-wrapper {
             display: flex;
             gap: 0.5rem;
-            margin-left: auto; /* Push all controls to the right */
+            margin-left: auto;
             align-items: center;
         }
 
@@ -906,15 +911,11 @@
         ==========================================================================
         */
         @media (max-width: 1023px) {
-             .task-controls {
-                position: static;
-             }
-            /* On mobile, action buttons (edit/delete) are hidden until tap */
-            .task-item .task-actions {
+            /* On mobile, action buttons are hidden until tap */
+            .task-buttons-wrapper {
                 opacity: 0;
                 pointer-events: none;
                 
-                /* FIX: Style as an overlay centered on the whole item */
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -930,39 +931,62 @@
                 transition: opacity var(--transition-speed) ease;
             }
 
-            /* The timer button is always visible, not part of the hide/show group */
-            .task-item .timer-clock-btn {
-                opacity: 1;
-                pointer-events: auto;
-            }
-
             /* When a task is tapped, show the action buttons */
-            .task-item.actions-visible .task-actions {
+            .task-item.actions-visible .task-buttons-wrapper {
                 opacity: 1;
                 pointer-events: auto;
             }
             
             /* And blur the content behind the overlay */
             .task-item.actions-visible .task-content,
-            .task-item.actions-visible .timer-clock-btn,
             .task-item.actions-visible .complete-btn {
                 filter: blur(3px);
                 transition: filter var(--transition-speed) ease;
                 pointer-events: none; /* Prevent clicking blurred items */
             }
             
-            /* EXCEPTION: If a timer is active, don't hide/blur its button */
-            .task-item.timer-active .timer-clock-btn {
+            /* EXCEPTION: If a timer is active, keep its button visible and not part of the overlay */
+            .task-item.timer-active .task-buttons-wrapper {
                 opacity: 1 !important;
                 pointer-events: auto !important;
+                position: static;
+                width: auto;
+                height: auto;
+                background: transparent;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                z-index: auto;
+                margin-left: auto;
             }
-            .task-item.timer-active.actions-visible .timer-clock-btn {
-                filter: none;
-            }
-
-            /* EXCEPTION: Don't show edit/delete actions if a timer is active */
             .task-item.timer-active .task-actions {
                 display: none;
+            }
+            
+            /* NEW: Group Header Mobile Actions */
+            .main-quest-group-header .group-actions {
+                opacity: 0;
+                pointer-events: none;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                justify-content: center;
+                align-items: center;
+                background-color: rgba(var(--surface-rgb), 0.7);
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+                z-index: 5;
+                transition: opacity var(--transition-speed) ease;
+            }
+            .main-quest-group-header.actions-visible .group-actions {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .main-quest-group-header.actions-visible .group-title-container {
+                filter: blur(3px);
+                transition: filter var(--transition-speed) ease;
+                pointer-events: none;
             }
         }
         
@@ -1817,7 +1841,7 @@
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
             let actionsTimeoutId = null;
-            let activeMobileActionsItem = null;
+            let activeMobileActionsItem = null; // Can be a task-item or a main-quest-group-header
             
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
@@ -2011,6 +2035,7 @@
                 switch (type) {
                     case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
                     case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
+                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
                     case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
                     case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
                     case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
@@ -2033,8 +2058,17 @@
                 const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
                 let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
                 let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
-                li.innerHTML = `<div class="task-actions"><button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></div><button class="complete-btn"></button><div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-controls"><button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button></div>`;
+                li.innerHTML = `<button class="complete-btn"></button>
+                    <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
+                    <div class="task-buttons-wrapper">
+                        <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                        <div class="task-actions">
+                            <button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                            <button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                        </div>
+                    </div>`;
                 if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
+                if (task.timerFinished) li.classList.add('timer-finished');
                 if (task.timerStartTime && task.timerRemaining > 0) {
                     li.classList.add('timer-active');
                     const ring = li.querySelector('.progress-ring-circle');
@@ -2069,6 +2103,10 @@
             const deleteTask = (id) => { stopTimer(id); const { list } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
             const completeTask = (id) => {
                 stopTimer(id); const { task, type } = findTaskAndContext(id); if (!task) return;
+                 // If timer had finished, remove the flag
+                if (task.timerFinished) {
+                    delete task.timerFinished;
+                }
                 addXp(XP_PER_TASK); playSound('complete');
                 if (type === 'daily') {
                     if(task.completedToday) return; task.completedToday = true; task.lastCompleted = new Date().toDateString();
@@ -2094,52 +2132,84 @@
                     renderAllLists();
                 }
             };
-            function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('levelUp'); addXp(mins * XP_PER_TIMER_MINUTE); completeTask(id); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
+            function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('timerUp'); stopTimer(id); task.timerFinished = true; const taskEl = document.querySelector(`.task-item[data-id="${id}"]`); if (taskEl) taskEl.classList.add('timer-finished'); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
             function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); renderAllLists(); } } }
-            function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { addXp(t.timerDuration / 60 * XP_PER_TIMER_MINUTE); stopTimer(t.id); completeTask(t.id); } } }); }
+            function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { stopTimer(t.id); t.timerFinished = true; } } }); }
             
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
                 const taskItem = e.target.closest('.task-item');
                 const groupHeader = e.target.closest('.main-quest-group-header');
+
+                function handleMobileActions(element) {
+                     if (window.innerWidth > 1023) return;
+                     if (e.target.closest('button')) { 
+                         clearTimeout(actionsTimeoutId);
+                         return;
+                     }
+                     clearTimeout(actionsTimeoutId);
+                     if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+                         activeMobileActionsItem.classList.remove('actions-visible');
+                     }
+                     const wasVisible = element.classList.contains('actions-visible');
+                     element.classList.toggle('actions-visible');
+                     if (!wasVisible) {
+                         activeMobileActionsItem = element;
+                         actionsTimeoutId = setTimeout(() => {
+                             if(element.classList.contains('actions-visible')) {
+                                 element.classList.remove('actions-visible');
+                                 activeMobileActionsItem = null;
+                             }
+                         }, 3000);
+                     } else {
+                         activeMobileActionsItem = null;
+                     }
+                }
                 
-                if (groupHeader) { const groupId = e.target.closest('.main-quest-group').dataset.groupId; if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId); else { const g = generalTaskGroups.find(g => g.id === groupId); if (g) g.isExpanded = !g.isExpanded; saveState(); renderAllLists(); } return; }
+                if (groupHeader) { 
+                    const isButton = e.target.closest('button');
+                    if (isButton) {
+                        const groupId = e.target.closest('.main-quest-group').dataset.groupId; 
+                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } 
+                        else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
+                    } else {
+                        // Toggle expansion OR show actions on mobile
+                         if (window.innerWidth <= 1023) {
+                             handleMobileActions(groupHeader);
+                         } else {
+                            const groupId = e.target.closest('.main-quest-group').dataset.groupId;
+                            const g = generalTaskGroups.find(g => g.id === groupId); 
+                            if (g) g.isExpanded = !g.isExpanded; 
+                            saveState(); 
+                            renderAllLists();
+                         }
+                    }
+                    return; 
+                }
 
                 if (taskItem) {
-                    if (window.innerWidth <= 1023) {
-                        if (e.target.closest('button')) { clearTimeout(actionsTimeoutId); } 
-                        else {
-                            clearTimeout(actionsTimeoutId);
-                            if (activeMobileActionsItem && activeMobileActionsItem !== taskItem) { activeMobileActionsItem.classList.remove('actions-visible'); }
-                            const wasVisible = taskItem.classList.contains('actions-visible');
-                            taskItem.classList.toggle('actions-visible');
-                            if (!wasVisible) {
-                                activeMobileActionsItem = taskItem;
-                                actionsTimeoutId = setTimeout(() => { if(taskItem.classList.contains('actions-visible')) { taskItem.classList.remove('actions-visible'); activeMobileActionsItem = null; } }, 3000);
-                            } else { activeMobileActionsItem = null; }
-                            if(!e.target.closest('button')) return;
-                        }
-                    }
-                    
-                    const id = taskItem.dataset.id;
-                    currentEditingTaskId = id;
-                    if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; }
-                    if (e.target.closest('.complete-btn')) completeTask(id);
-                    else if (e.target.closest('.delete-btn')) deleteTask(id);
-                    else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
-                    else if (e.target.closest('.edit-btn')) {
-                        const { task, type } = findTaskAndContext(id);
-                        if (task) {
-                            editTaskIdInput.value = task.id;
-                            editTaskInput.value = task.text;
-                            editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
-                            if (type === 'daily') {
-                                editWeeklyGoalInput.value = task.weeklyGoal || '';
-                                editWeeklyGoalContainer.style.display = 'block';
-                            } else {
-                                editWeeklyGoalContainer.style.display = 'none';
+                    handleMobileActions(taskItem);
+                    if(e.target.closest('button')) {
+                        const id = taskItem.dataset.id;
+                        currentEditingTaskId = id;
+                        if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; }
+                        if (e.target.closest('.complete-btn')) completeTask(id);
+                        else if (e.target.closest('.delete-btn')) deleteTask(id);
+                        else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
+                        else if (e.target.closest('.edit-btn')) {
+                            const { task, type } = findTaskAndContext(id);
+                            if (task) {
+                                editTaskIdInput.value = task.id;
+                                editTaskInput.value = task.text;
+                                editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
+                                if (type === 'daily') {
+                                    editWeeklyGoalInput.value = task.weeklyGoal || '';
+                                    editWeeklyGoalContainer.style.display = 'block';
+                                } else {
+                                    editWeeklyGoalContainer.style.display = 'none';
+                                }
+                                openModal(editTaskModal);
+                                editTaskInput.focus();
                             }
-                            openModal(editTaskModal);
-                            editTaskInput.focus();
                         }
                     }
                 } 
@@ -2449,3 +2519,4 @@
     </script>
 </body>
 </html>
+
