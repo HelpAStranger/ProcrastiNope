@@ -28,6 +28,7 @@
             doc, 
             getDoc, 
             setDoc,
+            writeBatch,
             onSnapshot,
             collection,
             query,
@@ -49,6 +50,7 @@
             doc,
             getDoc,
             setDoc,
+            writeBatch,
             onSnapshot,
             collection,
             query,
@@ -672,6 +674,9 @@
             max-height: 1000px; /* Increased max-height for very long lists */
             margin-top: 1rem;
             transition: max-height 0.25s ease-in;
+            /* FIX: Add padding to prevent shadow clipping on child elements */
+            padding-right: 0.5rem;
+            padding-bottom: 0.5rem;
         }
 
 
@@ -1627,7 +1632,6 @@
                 <div id="weekly-goal-container" style="display: none;">
                     <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">None</span></label>
                     <div class="weekly-goal-slider-container">
-                         <!-- FIX: Set default weekly goal to 0 (optional) -->
                          <input type="range" id="new-task-weekly-goal-slider" min="0" max="7" value="0">
                     </div>
                 </div>
@@ -1810,25 +1814,11 @@
     </template>
 
     <script type="module">
-        // --- IMPORTANT: FIREBASE SECURITY RULES ---
-        // To make this app work, you MUST update your Firestore Security Rules.
-        // Go to your Firebase project -> Firestore Database -> Rules tab
-        // and replace the default rules with the following:
-        /*
-            rules_version = '2';
-            service cloud.firestore {
-              match /databases/{database}/documents {
-                match /users/{userId} {
-                  allow read, write: if request.auth != null && request.auth.uid == userId;
-                }
-                match /usernames/{username} {
-                    allow read;
-                    allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-                }
-              }
-            }
-        */
-
+        // --- NOTE ON SECURITY ---
+        // All client-side code (like this script) is visible in the browser.
+        // Your Firebase config is meant to be public. True security is enforced 
+        // by your Firestore Security Rules in the Firebase console, not by hiding code.
+        
         // --- FIREBASE SETUP ---
         const firebaseConfig = {
             apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSM",
@@ -1844,6 +1834,7 @@
         let currentUser = null;
         let unsubscribeFromFirestore = null;
         let appController = null;
+        let isSigningIn = false; // Global flag for auth state transitions
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -1859,6 +1850,8 @@
             db = window.firebaseSDK.getFirestore(app);
             
             window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
+                if (isSigningIn) return; // Don't run logic during sign-in process
+                
                 if (unsubscribeFromFirestore) {
                     unsubscribeFromFirestore(); 
                     unsubscribeFromFirestore = null;
@@ -1953,6 +1946,14 @@
         
         // --- MAIN APPLICATION LOGIC ---
         async function initializeAppLogic(initialUser) {
+
+            // FIX: Helper function to only focus on non-touch devices to prevent mobile keyboard auto-opening
+            const focusOnDesktop = (el) => {
+                if (!window.matchMedia('(pointer: coarse)').matches && el) {
+                    el.focus();
+                }
+            };
+
             const openModal = (modal) => {
                 if(modal) {
                     if (activeMobileActionsItem) {
@@ -1980,7 +1981,7 @@
 
                 const promptForUsername = (user, existingData) => {
                     openModal(usernameModal);
-                    newUsernameInput.focus();
+                    focusOnDesktop(newUsernameInput);
 
                     usernameForm.onsubmit = async (e) => {
                         e.preventDefault();
@@ -2001,16 +2002,16 @@
 
                         const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                         try {
-                            await window.firebaseSDK.setDoc(usernamesRef, { userId: user.uid });
-                            await window.firebaseSDK.setDoc(userDocRef, { 
+                            const batch = window.firebaseSDK.writeBatch(db);
+                            batch.set(usernamesRef, { userId: user.uid });
+                            batch.set(userDocRef, { 
                                 username: username, 
                                 email: user.email,
                                 appData: existingData || {}
                             }, { merge: true });
+                            await batch.commit();
                             
                             closeModal(usernameModal);
-                            // FIX: Force a reload to re-trigger onAuthStateChanged with the now-complete user data.
-                            // This correctly transitions the user to the main app after choosing a username.
                             window.location.reload();
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
@@ -2481,7 +2482,7 @@
                     
                     const isButton = e.target.closest('button');
                     if (isButton) {
-                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); newTaskInput.focus(); } 
+                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); focusOnDesktop(newTaskInput); } 
                         else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
                     } else {
                          if (window.innerWidth <= 1023) {
@@ -2524,7 +2525,7 @@
                                     editWeeklyGoalContainer.style.display = 'none';
                                 }
                                 openModal(editTaskModal);
-                                editTaskInput.focus();
+                                focusOnDesktop(editTaskInput);
                             }
                         }
                     }
@@ -2539,9 +2540,9 @@
             timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
             addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
             
-            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); newTaskInput.focus(); });
-            addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); newTaskInput.focus(); });
-            addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); newGroupInput.focus(); });
+            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => closeModal(document.getElementById(btn.dataset.closeModal))));
             [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
@@ -2702,7 +2703,7 @@
             const defaultMessage = "An unexpected vortex appeared! Please try again.";
             if (!error) return defaultMessage;
             if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
-                return "Permission Denied! Your Firestore Security Rules are likely blocking this action.";
+                return "Permission Denied! Check your Firestore Security Rules.";
             }
             if (error.code === 'permission-denied') {
                  return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
@@ -2762,10 +2763,14 @@
             }
         }
 
-        async function handleSignInSuccess(user) {
+        async function handleSignInSuccess(user, isNewUser = false) {
+            isSigningIn = true; // Set flag
             const isGuestBeforeSignIn = sessionStorage.getItem('isGuest') === 'true';
+            
+            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+            
+            // Only merge data if the user was a guest before this sign-in action
             if (isGuestBeforeSignIn) {
-                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 let finalData = {};
                 if (docSnap.exists() && docSnap.data().appData) {
@@ -2774,11 +2779,20 @@
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     finalData = guestDataString ? JSON.parse(guestDataString) : {};
                 }
-                // Also store the user's email from the auth provider
-                await window.firebaseSDK.setDoc(userDocRef, { email: user.email, appData: finalData }, { merge: true });
+                
+                const dataToSet = { appData: finalData };
+                if (isNewUser) {
+                    dataToSet.email = user.email;
+                }
+                
+                await window.firebaseSDK.setDoc(userDocRef, dataToSet, { merge: true });
                 localStorage.removeItem('anonymousUserData');
                 sessionStorage.removeItem('isGuest');
             }
+             isSigningIn = false; // Unset flag
+             // Manually trigger a "reload" of the auth state logic
+             window.firebaseSDK.onAuthStateChanged(auth, () => {});
+             window.location.reload(); // Force a full refresh to ensure clean state
         }
         
         // Simple modal functions for use before the main app controller is initialized
@@ -2816,8 +2830,6 @@
                     return;
                 }
                 
-                // FIX: Wrap all auth and database operations in a single try/catch block
-                // This ensures any error (auth, permissions, etc.) is shown to the user.
                 try {
                     const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
                     const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
@@ -2829,11 +2841,13 @@
 
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
                     
+                    const batch = window.firebaseSDK.writeBatch(db);
                     const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
-                    await window.firebaseSDK.setDoc(usernamesRef, { userId: userCredential.user.uid });
-                    await window.firebaseSDK.setDoc(userDocRef, { username: username, email: email });
+                    batch.set(usernamesRef, { userId: userCredential.user.uid });
+                    batch.set(userDocRef, { username: username, email: email });
+                    await batch.commit();
                     
-                    await handleSignInSuccess(userCredential.user);
+                    await handleSignInSuccess(userCredential.user, true);
                     
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
@@ -2884,7 +2898,7 @@
                     const provider = new window.firebaseSDK.GoogleAuthProvider();
                     try {
                         const result = await window.firebaseSDK.signInWithPopup(auth, provider);
-                        await handleSignInSuccess(result.user);
+                        await handleSignInSuccess(result.user, true); // Assume Google sign in is a new user for data merge logic
                         onSuccess();
                     } catch (error) {
                          const errorEl = container.querySelector('.login-error');
@@ -2898,3 +2912,4 @@
     </script>
 </body>
 </html>
+
