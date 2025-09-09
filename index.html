@@ -1625,9 +1625,10 @@
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
                 <div id="weekly-goal-container" style="display: none;">
-                    <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">3</span> days</label>
+                    <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">None</span></label>
                     <div class="weekly-goal-slider-container">
-                         <input type="range" id="new-task-weekly-goal-slider" min="0" max="7" value="3">
+                         <!-- FIX: Set default weekly goal to 0 (optional) -->
+                         <input type="range" id="new-task-weekly-goal-slider" min="0" max="7" value="0">
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -2008,7 +2009,9 @@
                             }, { merge: true });
                             
                             closeModal(usernameModal);
-                            // No reload needed, onAuthStateChanged will refire with the now-complete user data and load the full app.
+                            // FIX: Force a reload to re-trigger onAuthStateChanged with the now-complete user data.
+                            // This correctly transitions the user to the main app after choosing a username.
+                            window.location.reload();
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
                         }
@@ -2528,7 +2531,7 @@
                 } 
             });
 
-            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 3; weeklyGoalDisplay.textContent = '3 days'; closeModal(addTaskModal); } });
+            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
             editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
             timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
             timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
@@ -2536,7 +2539,7 @@
             timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
             addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
             
-            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; openModal(addTaskModal); newTaskInput.focus(); });
+            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); newTaskInput.focus(); });
             addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); newTaskInput.focus(); });
             addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); newGroupInput.focus(); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
@@ -2812,19 +2815,20 @@
                     errorEl.textContent = 'Username must be at least 3 characters.';
                     return;
                 }
-
-                const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-
-                if (usernameSnap.exists()) {
-                    errorEl.textContent = 'This username is already taken.';
-                    return;
-                }
-
+                
+                // FIX: Wrap all auth and database operations in a single try/catch block
+                // This ensures any error (auth, permissions, etc.) is shown to the user.
                 try {
+                    const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                    const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                    if (usernameSnap.exists()) {
+                        errorEl.textContent = 'This username is already taken.';
+                        return;
+                    }
+
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
                     
-                    // FIX: Create user documents immediately to prevent race condition
                     const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
                     await window.firebaseSDK.setDoc(usernamesRef, { userId: userCredential.user.uid });
                     await window.firebaseSDK.setDoc(userDocRef, { username: username, email: email });
@@ -2894,4 +2898,3 @@
     </script>
 </body>
 </html>
-
