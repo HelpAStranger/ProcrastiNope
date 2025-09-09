@@ -137,6 +137,27 @@
         html, body {
             height: 100%;
         }
+        
+        /* Custom Scrollbar Styles */
+        html {
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent) var(--surface);
+        }
+
+        body::-webkit-scrollbar {
+            width: 14px;
+        }
+
+        body::-webkit-scrollbar-track {
+            background: var(--surface);
+            border-left: var(--border-width) solid var(--border);
+        }
+
+        body::-webkit-scrollbar-thumb {
+            background-color: var(--accent);
+            border-radius: var(--radius);
+            border: var(--border-width) solid var(--border);
+        }
 
         body::before {
             content: '';
@@ -1036,6 +1057,47 @@
             gap: 10px;
         }
         
+        .google-btn-custom {
+            background-color: #4285F4;
+            color: white;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            font-family: var(--font-main);
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: all var(--transition-speed) ease;
+            box-shadow: 4px 4px 0 var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
+        }
+        .google-btn-custom:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 var(--shadow);
+        }
+        .google-btn-custom:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--shadow);
+        }
+        .dark-mode .google-btn-custom {
+            border-color: var(--border-dark);
+            box-shadow: 4px 4px 0 var(--shadow-dark);
+        }
+        .dark-mode .google-btn-custom:hover {
+            box-shadow: 6px 6px 0 var(--shadow-dark);
+        }
+        .dark-mode .google-btn-custom:active {
+            box-shadow: 2px 2px 0 var(--shadow-dark);
+        }
+        .google-btn-custom svg {
+            width: 20px;
+            height: 20px;
+        }
+        
         .error-message {
             color: var(--accent-red-light);
             font-weight: 700;
@@ -1188,7 +1250,6 @@
                 <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
             </div>
             <div class="header-controls">
-                <span id="user-display"></span>
                 <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
@@ -1628,7 +1689,6 @@
             const xpBarEl = document.getElementById('xp-bar');
             const xpTextEl = document.getElementById('xp-text');
             const levelDisplayEl = document.querySelector('.level-display');
-            const userDisplay = document.getElementById('user-display');
 
 
             const addTaskTriggerBtnDaily = document.querySelector('.add-task-trigger-btn[data-list="daily"]');
@@ -1698,12 +1758,10 @@
             function updateUserUI() {
                 const user = getCurrentUser();
                 if (user) {
-                    userDisplay.textContent = `Welcome, ${user.displayName}!`;
                     createAccountBtn.style.display = 'none';
                     loginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
                 } else {
-                    userDisplay.textContent = 'Anonymous Mode';
                     createAccountBtn.style.display = 'inline-flex';
                     loginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
@@ -1776,57 +1834,76 @@
             });
             
             // --- Google Sign-In Handler ---
-            function parseJwt (token) {
-                try {
-                    return JSON.parse(atob(token.split('.')[1]));
-                } catch (e) {
-                    return null;
-                }
-            };
-
-            async function handleGoogleSignIn(response) {
-                const googleUser = parseJwt(response.credential);
-                if (googleUser) {
-                    await signupOrLoginWithGoogle(googleUser);
-                    closeModal(accountModal);
-                    closeModal(settingsModal);
-                    updateUserUI();
-                    loadUserState();
-                } else {
-                    loginError.textContent = "Google Sign-In failed. Please try again.";
-                }
-            }
-            
-            // Initialize Google Sign In
             function initGoogleSignIn() {
                 const clientId = document.querySelector('meta[name="google-signin-client_id"]').content;
                 const googleBtnContainer = document.getElementById('google-signin-btn-container');
 
-                if (!clientId || clientId.startsWith("YOUR_CLIENT_ID")) {
-                    console.warn("Google Client ID is not set. Google Sign-In will not work. Please get a Client ID from Google Cloud Console and add it to the meta tag in the HTML head.");
-                    // Render a placeholder button
-                    const placeholderBtn = document.createElement('button');
-                    placeholderBtn.type = 'button';
-                    placeholderBtn.className = 'google-btn-placeholder btn';
-                    placeholderBtn.innerHTML = `<svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.618-3.22-11.28-7.581l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.015 35.258 44 30.036 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg> <span>Sign in with Google</span>`;
-                    placeholderBtn.onclick = () => {
-                        alert('Please replace "YOUR_CLIENT_ID.apps.googleusercontent.com" in the HTML head with your actual Google Client ID to enable this feature.');
+                // Clear container and create our custom button
+                googleBtnContainer.innerHTML = ''; 
+                const customBtn = document.createElement('button');
+                customBtn.type = 'button';
+                customBtn.id = 'google-signin-custom-btn';
+                customBtn.className = 'google-btn-custom';
+                customBtn.innerHTML = `<svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.618-3.22-11.28-7.581l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.015 35.258 44 30.036 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg> <span>Sign in with Google</span>`;
+                googleBtnContainer.appendChild(customBtn);
+                
+                // Handle missing client ID
+                if (!clientId || clientId.startsWith("YOUR_CLIENT_ID") || clientId.includes("640953204780")) {
+                    console.warn("Google Client ID is not set correctly. Google Sign-In will not work. Please get a Client ID from Google Cloud Console and add it to the meta tag in the HTML head.");
+                    customBtn.onclick = () => {
+                        alert('Please replace the placeholder Google Client ID in the HTML head to enable this feature.');
                     };
-                    googleBtnContainer.innerHTML = '';
-                    googleBtnContainer.appendChild(placeholderBtn);
+                    customBtn.style.backgroundColor = '#888';
+                    customBtn.style.cursor = 'not-allowed';
                     return;
                 }
 
-                google.accounts.id.initialize({
-                    client_id: clientId,
-                    callback: handleGoogleSignIn
-                });
-                google.accounts.id.renderButton(
-                    googleBtnContainer,
-                    { theme: 'outline', size: 'large', width: '250' } 
-                );
-                google.accounts.id.prompt(); 
-            };
+                try {
+                    // Initialize the OAuth2 token client
+                    const client = google.accounts.oauth2.initTokenClient({
+                        client_id: clientId,
+                        scope: 'https://www.googleapis.com/auth/userinfo.profile',
+                        callback: async (tokenResponse) => {
+                            if (tokenResponse && tokenResponse.access_token) {
+                                try {
+                                    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                        headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
+                                    });
+                                    if (!userInfoResponse.ok) throw new Error(`Google API error: ${userInfoResponse.statusText}`);
+                                    
+                                    const googleUser = await userInfoResponse.json();
+                                    
+                                    await signupOrLoginWithGoogle(googleUser);
+                                    closeModal(accountModal);
+                                    closeModal(settingsModal);
+                                    updateUserUI();
+                                    loadUserState();
+                                } catch (error) {
+                                    loginError.textContent = "Google Sign-In failed. Please try again.";
+                                    console.error('Google Sign-In Error:', error);
+                                }
+                            } else {
+                                loginError.textContent = "Google Sign-In failed. No access token received.";
+                            }
+                        },
+                        error_callback: (error) => {
+                            console.error('Google token client error:', error);
+                            if (error.type !== 'popup_closed') {
+                                loginError.textContent = `Google Sign-In error: ${error.type}.`;
+                            }
+                        }
+                    });
+
+                    // Add click listener to trigger the OAuth2 flow
+                    customBtn.addEventListener('click', () => {
+                        client.requestAccessToken();
+                    });
+                } catch (error) {
+                     console.error("Failed to initialize Google Sign-In:", error);
+                     customBtn.textContent = "Google Sign-In unavailable";
+                     customBtn.disabled = true;
+                }
+            }
 
 
             // Signup/Login Modal Logic
@@ -2896,4 +2973,3 @@
     </script>
 </body>
 </html>
-
