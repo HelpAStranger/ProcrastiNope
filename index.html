@@ -2492,6 +2492,10 @@
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 const existingData = docSnap.exists() ? docSnap.data().appData : null;
+                
+                // FIX: Only prompt for username if they don't have one and were NOT signed up via email/password.
+                // This prevents the username modal from appearing after a successful email sign-up.
+                const isEmailUser = user.providerData.some(p => p.providerId === 'password');
 
                 if (!docSnap.exists() || !docSnap.data().username) {
                     const usernameModal = document.getElementById('username-modal');
@@ -3806,6 +3810,7 @@
                     batch.set(userDocRef, { 
                         username: username, 
                         email: email,
+                        appData: {},
                         friends: [],
                         friendRequests: []
                     });
