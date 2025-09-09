@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- IMPORTANT: Replace with your actual Google Client ID -->
     <meta name="google-signin-client_id" content="640953204780-48o5f3ghr7cdqcs7crar3o4vbg8ke1ps.apps.googleusercontent.com">
     <title>Procrasti-Nope | Task Manager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1848,7 +1847,7 @@
                 googleBtnContainer.appendChild(customBtn);
                 
                 // Handle missing client ID
-                if (!clientId || clientId.startsWith("YOUR_CLIENT_ID") || clientId.includes("640953204780")) {
+                if (!clientId || clientId.startsWith("YOUR_CLIENT_ID")) {
                     console.warn("Google Client ID is not set correctly. Google Sign-In will not work. Please get a Client ID from Google Cloud Console and add it to the meta tag in the HTML head.");
                     customBtn.onclick = () => {
                         alert('Please replace the placeholder Google Client ID in the HTML head to enable this feature.');
@@ -2973,3 +2972,5 @@
     </script>
 </body>
 </html>
+
+
