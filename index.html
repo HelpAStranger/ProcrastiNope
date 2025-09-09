@@ -2800,7 +2800,7 @@
                         if (ring) {
                             const r = 10;
                             const c = r * 2 * Math.PI;
-                            ring.style.strokeDasharray = `${c} ${c}`;
+                            ring.style.strokeDashoffset = c - (p * c);
                         }
                     }
                 }
@@ -3576,8 +3576,8 @@
             deleteAccountBtn.addEventListener('click', () => {
                 showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data.', async () => {
                     try {
-                        // Re-authenticate user before deleting, if they are not a Google user
                         const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
+                        
                         if (!isGoogleUser) {
                            const password = document.getElementById('reauth-password').value;
                            const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
