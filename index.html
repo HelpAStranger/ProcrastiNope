@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- IMPORTANT: Replace with your actual Google Client ID -->
-    <meta name="google-signin-client_id" content="YOUR_CLIENT_ID.apps.googleusercontent.com">
+    <meta name="google-signin-client_id" content="640953204780-48o5f3ghr7cdqcs7crar3o4vbg8ke1ps.apps.googleusercontent.com">
     <title>Procrasti-Nope | Task Manager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,6 +13,8 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- SortableJS for Drag and Drop -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <!-- sql.js for in-browser database -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-asm.js"></script>
     <style>
         /*
         ==========================================================================
@@ -245,6 +247,17 @@
         
         .header-content {
             text-align: left;
+        }
+
+        .header-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        #user-display {
+            font-weight: 700;
         }
         
         .main-title {
@@ -520,6 +533,23 @@
             display: none;
         }
 
+        /* Weekly goal met style */
+        .task-item.weekly-goal-met {
+            border-style: dashed;
+            opacity: 0.8;
+        }
+        .task-item.weekly-goal-met::after {
+            content: 'GOAL MET!';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-10deg);
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--accent);
+            opacity: 0.1;
+            pointer-events: none;
+        }
 
         /* Add/Remove Animation */
         .task-item.adding {
@@ -557,16 +587,17 @@
             gap: 0.5rem;
         }
         
-        .streak-counter {
+        .streak-counter, .weekly-goal-progress {
             display: flex;
             align-items: center;
             gap: 0.25rem;
             font-weight: 700;
             margin-right: 1rem;
-            color: var(--accent-orange);
         }
-        
-        .streak-counter svg {
+        .streak-counter { color: var(--accent-orange); }
+        .weekly-goal-progress { color: var(--accent-blue); }
+
+        .streak-counter svg, .weekly-goal-progress svg {
             width: 20px;
             height: 20px;
         }
@@ -748,7 +779,7 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input, .form-group input {
+        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
@@ -763,11 +794,24 @@
              margin-bottom: 1rem;
         }
 
-        #new-task-input:focus, #new-group-input:focus, .form-group input:focus {
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
         }
+        
+        #weekly-goal-container {
+            margin-top: 1rem;
+            border-top: var(--border-width) dashed var(--border);
+            padding-top: 1rem;
+        }
+        
+        #weekly-goal-container label {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
 
         .modal-actions {
             display: flex;
@@ -937,29 +981,7 @@
             border: var(--border-width) solid var(--border);
             border-radius: var(--radius);
         }
-
-        /* Backup Modal */
-        #backup-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
         
-        .backup-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border: var(--border-width) solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 1rem;
-            background-color: var(--surface);
-        }
-        
-        .backup-item .btn {
-            --shadow-color: var(--shadow);
-        }
-
         /* Account Modal Specific Styles */
         .form-toggle {
             display: flex;
@@ -1166,7 +1188,7 @@
                 <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
             </div>
             <div class="header-controls">
-                <span id="user-display" style="margin-right: 1rem; font-weight: 700;"></span>
+                <span id="user-display"></span>
                 <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
@@ -1224,6 +1246,11 @@
             <h2 id="add-task-modal-title">Add New Task</h2>
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
+                <!-- Weekly Goal Input -->
+                <div id="weekly-goal-container" style="display: none;">
+                    <label for="new-task-weekly-goal">Set a Weekly Goal (Optional)</label>
+                    <input type="number" id="new-task-weekly-goal" placeholder="e.g., 5 times a week" min="1">
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn" data-close-modal="add-task-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Add</button>
@@ -1329,7 +1356,9 @@
              <div class="settings-group">
                 <h3>Data</h3>
                 <div class="data-actions">
-                    <button id="manage-backups-btn" class="btn">Manage Backups</button>
+                    <button id="export-data-btn" class="btn">Export Data</button>
+                    <button id="import-data-btn" class="btn">Import Data</button>
+                    <input type="file" id="import-file-input" style="display: none;" accept=".db,.sqlite">
                     <button id="reset-progress-btn" class="btn">Reset Progress</button>
                 </div>
             </div>
@@ -1382,21 +1411,6 @@
         </div>
     </div>
 
-
-    <!-- Backup Modal -->
-    <div id="backup-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Backups</h2>
-            <p style="margin-bottom: 1rem; opacity: 0.8;">Backups are saved automatically. You can restore your data to a previous point in time.</p>
-            <ul id="backup-list">
-                <!-- Backup items will be populated here -->
-            </ul>
-             <div class="modal-actions">
-                <button class="btn" data-close-modal="backup-modal">Close</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Confirmation Modal -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal-content">
@@ -1410,8 +1424,37 @@
     </div>
 
     <script>
-        // --- DATABASE SIMULATION FUNCTIONS ---
-        
+        // --- DATABASE FUNCTIONS (using sql.js) ---
+        let DB;
+
+        /**
+         * Initializes the in-browser SQLite database.
+         * Creates tables if they don't exist.
+         */
+        async function initDatabase() {
+            try {
+                const SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
+                });
+                DB = new SQL.Database();
+                // Create tables
+                DB.run(`CREATE TABLE IF NOT EXISTS users (
+                    username TEXT PRIMARY KEY,
+                    id TEXT,
+                    passwordHash TEXT,
+                    displayName TEXT,
+                    isGoogleUser INTEGER
+                );`);
+                DB.run(`CREATE TABLE IF NOT EXISTS userdata (
+                    username TEXT PRIMARY KEY,
+                    data TEXT
+                );`);
+                console.log("Database initialized successfully.");
+            } catch (err) {
+                console.error("Database initialization failed:", err);
+            }
+        }
+
         /**
          * A simple (and insecure) hashing function for simulation purposes.
          */
@@ -1426,100 +1469,82 @@
         }
 
         /**
-         * Retrieves all user accounts from localStorage.
-         */
-        function getAccounts() {
-            return JSON.parse(localStorage.getItem('userAccounts')) || {};
-        }
-
-        /**
-         * Saves all user accounts to localStorage.
-         */
-        function saveAccounts(accounts) {
-            localStorage.setItem('userAccounts', JSON.stringify(accounts));
-        }
-
-        /**
-         * Signs up or logs in a user from a Google account.
+         * Signs up or logs in a user from a Google account using the database.
          */
         async function signupOrLoginWithGoogle(googleUser) {
-            const accounts = getAccounts();
             const username = `google_${googleUser.sub}`; // Create a unique username
             
-            if (!accounts[username]) {
+            const userExistsStmt = DB.prepare("SELECT * FROM users WHERE username = :username");
+            userExistsStmt.bind({ ':username': username });
+            const userExists = userExistsStmt.step();
+            userExistsStmt.free();
+
+            if (!userExists) {
                 // If user doesn't exist, create a new account
-                const newUser = {
-                    id: googleUser.sub,
-                    username: username,
-                    isGoogleUser: true,
-                    displayName: googleUser.name,
-                    data: { 
-                        dailyTasks: [],
-                        standaloneMainQuests: [],
-                        generalTaskGroups: [],
-                        playerData: { level: 1, xp: 0 },
-                        settings: {
-                            theme: 'light',
-                            accentColor: 'var(--accent-red)',
-                            volume: 0.3
-                        }
-                    }
-                };
-                accounts[username] = newUser;
-                saveAccounts(accounts);
-            }
-
-            // Log the user in
-            const userToLogin = accounts[username];
-            sessionStorage.setItem('currentUser', JSON.stringify({ id: userToLogin.id, username: userToLogin.username, displayName: userToLogin.displayName }));
-            return { id: userToLogin.id, username: userToLogin.username, displayName: userToLogin.displayName };
-        }
-
-
-        /**
-         * Signs up a new user.
-         */
-        async function signup(username, password) {
-            const accounts = getAccounts();
-            if (accounts[username]) {
-                throw new Error('Username already exists.');
-            }
-
-            const newUser = {
-                id: `user_${Date.now()}`,
-                username,
-                passwordHash: simpleHash(password),
-                data: { 
+                const defaultData = { 
                     dailyTasks: [],
                     standaloneMainQuests: [],
                     generalTaskGroups: [],
                     playerData: { level: 1, xp: 0 },
-                    settings: {
-                        theme: 'light',
-                        accentColor: 'var(--accent-red)',
-                        volume: 0.3
-                    }
-                }
-            };
+                    settings: { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 }
+                };
+                
+                DB.run("INSERT INTO users (username, id, displayName, isGoogleUser) VALUES (?, ?, ?, ?)", [username, googleUser.sub, googleUser.name, 1]);
+                DB.run("INSERT INTO userdata (username, data) VALUES (?, ?)", [username, JSON.stringify(defaultData)]);
+            }
 
-            accounts[username] = newUser;
-            saveAccounts(accounts);
-            sessionStorage.setItem('currentUser', JSON.stringify({ id: newUser.id, username: newUser.username, displayName: newUser.username }));
-            return { id: newUser.id, username: newUser.username, displayName: newUser.username };
+            // Log the user in
+            sessionStorage.setItem('currentUser', JSON.stringify({ id: googleUser.sub, username: username, displayName: googleUser.name }));
+            return { id: googleUser.sub, username: username, displayName: googleUser.name };
         }
 
         /**
-         * Logs in an existing user.
+         * Signs up a new user in the database.
+         */
+        async function signup(username, password) {
+            const userExistsStmt = DB.prepare("SELECT * FROM users WHERE username = :username");
+            userExistsStmt.bind({ ':username': username });
+            if (userExistsStmt.step()) {
+                userExistsStmt.free();
+                throw new Error('Username already exists.');
+            }
+            userExistsStmt.free();
+
+            const userId = `user_${Date.now()}`;
+            const passwordHash = simpleHash(password);
+            const defaultData = { 
+                dailyTasks: [],
+                standaloneMainQuests: [],
+                generalTaskGroups: [],
+                playerData: { level: 1, xp: 0 },
+                settings: { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 }
+            };
+
+            DB.run("INSERT INTO users (username, id, passwordHash, displayName, isGoogleUser) VALUES (?, ?, ?, ?, ?)", [username, userId, passwordHash, username, 0]);
+            DB.run("INSERT INTO userdata (username, data) VALUES (?, ?)", [username, JSON.stringify(defaultData)]);
+            
+            sessionStorage.setItem('currentUser', JSON.stringify({ id: userId, username, displayName: username }));
+            return { id: userId, username, displayName: username };
+        }
+
+        /**
+         * Logs in an existing user from the database.
          */
         async function login(username, password) {
-            const accounts = getAccounts();
-            const user = accounts[username];
-
-            if (!user || user.isGoogleUser || user.passwordHash !== simpleHash(password)) {
-                throw new Error('Invalid username or password.');
+            const stmt = DB.prepare("SELECT * FROM users WHERE username = :username");
+            stmt.bind({ ':username': username });
+            
+            if (stmt.step()) {
+                const user = stmt.getAsObject();
+                stmt.free();
+                if (user.isGoogleUser || user.passwordHash !== simpleHash(password)) {
+                    throw new Error('Invalid username or password.');
+                }
+                sessionStorage.setItem('currentUser', JSON.stringify({ id: user.id, username: user.username, displayName: user.displayName }));
+                return { id: user.id, username: user.username, displayName: user.displayName };
             }
-            sessionStorage.setItem('currentUser', JSON.stringify({ id: user.id, username: user.username, displayName: user.username }));
-            return { id: user.id, username: user.username, displayName: user.username };
+            stmt.free();
+            throw new Error('Invalid username or password.');
         }
 
         /**
@@ -1527,8 +1552,7 @@
          */
         function logout() {
             sessionStorage.removeItem('currentUser');
-            // Also sign out from Google if they were logged in with Google
-            if (typeof google !== 'undefined') {
+            if (typeof google !== 'undefined' && google.accounts) {
                 google.accounts.id.disableAutoSelect();
             }
         }
@@ -1541,29 +1565,32 @@
         }
 
         /**
-         * Saves the application data for the current user.
+         * Saves the application data for the current user to the database or localStorage for anonymous users.
          */
         async function saveData(data) {
             const currentUser = getCurrentUser();
-            if (currentUser) {
-                const accounts = getAccounts();
-                if (accounts[currentUser.username]) {
-                    accounts[currentUser.username].data = data;
-                    saveAccounts(accounts);
-                }
+            if (currentUser && DB) {
+                DB.run("UPDATE userdata SET data = ? WHERE username = ?", [JSON.stringify(data), currentUser.username]);
             } else {
                 localStorage.setItem('anonymousUserData', JSON.stringify(data));
             }
         }
 
         /**
-         * Loads the application data for the current user.
+         * Loads the application data for the current user from the database or localStorage.
          */
         async function loadData() {
             const currentUser = getCurrentUser();
-            if (currentUser) {
-                const accounts = getAccounts();
-                return accounts[currentUser.username]?.data || {};
+            if (currentUser && DB) {
+                const stmt = DB.prepare("SELECT data FROM userdata WHERE username = :username");
+                stmt.bind({ ':username': currentUser.username });
+                if (stmt.step()) {
+                    const result = stmt.getAsObject();
+                    stmt.free();
+                    return JSON.parse(result.data);
+                }
+                stmt.free();
+                return {}; // Should not happen for a logged-in user
             } else {
                 return JSON.parse(localStorage.getItem('anonymousUserData')) || {};
             }
@@ -1571,7 +1598,7 @@
 
 
         // --- MAIN APPLICATION LOGIC ---
-        document.addEventListener('DOMContentLoaded', () => {
+        window.onload = () => {
 
             // =========================================================================
             // STATE MANAGEMENT
@@ -1612,6 +1639,9 @@
             const addTaskModalTitle = document.getElementById('add-task-modal-title');
             const addTaskForm = document.getElementById('add-task-form');
             const newTaskInput = document.getElementById('new-task-input');
+            const weeklyGoalContainer = document.getElementById('weekly-goal-container');
+            const weeklyGoalInput = document.getElementById('new-task-weekly-goal');
+
             
             const addGroupModal = document.getElementById('add-group-modal');
             const addGroupForm = document.getElementById('add-group-form');
@@ -1629,7 +1659,10 @@
             const colorOptions = document.getElementById('color-options');
             const volumeSlider = document.getElementById('volume-slider');
             const resetProgressBtn = document.getElementById('reset-progress-btn');
-            const manageBackupsBtn = document.getElementById('manage-backups-btn');
+            const exportDataBtn = document.getElementById('export-data-btn');
+            const importDataBtn = document.getElementById('import-data-btn');
+            const importFileInput = document.getElementById('import-file-input');
+
 
             const createAccountBtn = document.getElementById('create-account-btn');
             const loginBtn = document.getElementById('login-btn');
@@ -1643,11 +1676,7 @@
             const loginError = document.getElementById('login-error');
             const showSignupTab = document.getElementById('show-signup-tab');
             const showLoginTab = document.getElementById('show-login-tab');
-
             
-            const backupModal = document.getElementById('backup-modal');
-            const backupList = document.getElementById('backup-list');
-
             const confirmModal = document.getElementById('confirm-modal');
             const confirmActionBtn = document.getElementById('confirm-action-btn');
             const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
@@ -1674,7 +1703,7 @@
                     loginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
                 } else {
-                    userDisplay.textContent = '';
+                    userDisplay.textContent = 'Anonymous Mode';
                     createAccountBtn.style.display = 'inline-flex';
                     loginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
@@ -1738,10 +1767,12 @@
 
 
             logoutBtn.addEventListener('click', () => {
-                logout();
-                updateUserUI();
-                loadUserState(); // Reload with local data
-                closeModal(settingsModal);
+                showConfirm("Logout?", "Your current session will end. You can log back in anytime.", () => {
+                    logout();
+                    updateUserUI();
+                    loadUserState(); // Reload with local data
+                    closeModal(settingsModal);
+                });
             });
             
             // --- Google Sign-In Handler ---
@@ -1803,7 +1834,7 @@
                 e.preventDefault();
                 const username = document.getElementById('signup-username').value;
                 const password = document.getElementById('signup-password').value;
-                signupError.style.display = 'none';
+                signupError.textContent = '';
                 try {
                     await signup(username, password);
                     closeModal(accountModal);
@@ -1812,7 +1843,6 @@
                     loadUserState();
                 } catch (error) {
                     signupError.textContent = error.message;
-                    signupError.style.display = 'block';
                 }
             });
 
@@ -1820,7 +1850,7 @@
                 e.preventDefault();
                 const username = document.getElementById('login-username').value;
                 const password = document.getElementById('login-password').value;
-                loginError.style.display = 'none';
+                loginError.textContent = '';
                 try {
                     await login(username, password);
                     closeModal(accountModal);
@@ -1829,7 +1859,6 @@
                     loadUserState();
                 } catch (error) {
                     loginError.textContent = error.message;
-                    loginError.style.display = 'block';
                 }
             });
 
@@ -1849,6 +1878,13 @@
 
             function showRandomQuote() {
                 quoteEl.textContent = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
+            }
+
+            function getStartOfWeek(date) {
+                const d = new Date(date);
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+                return new Date(d.setDate(diff)).setHours(0, 0, 0, 0);
             }
 
             const checkDailyReset = () => {
@@ -2068,9 +2104,25 @@
                     `;
                 }
 
+                let weeklyGoalHTML = '';
+                if (type === 'daily' && task.weeklyGoal > 0) {
+                     weeklyGoalHTML = `
+                        <div class="weekly-goal-progress" title="Weekly goal progress">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/><path d="m13 7-4 5 3 3 5-7z"/></svg>
+                            <span>${task.weeklyCompletions}/${task.weeklyGoal}</span>
+                        </div>
+                    `;
+                    if (task.weeklyCompletions >= task.weeklyGoal) {
+                        li.classList.add('weekly-goal-met');
+                    }
+                }
+
                 li.innerHTML = `
                     <button class="complete-btn" aria-label="Complete task"></button>
-                    ${streakCounterHTML}
+                    <div style="display: flex; align-items: center;">
+                        ${streakCounterHTML}
+                        ${weeklyGoalHTML}
+                    </div>
                     <span class="task-text" contenteditable="false">${task.text}</span>
                     <div class="task-controls">
                         <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer">
@@ -2111,12 +2163,20 @@
             // =========================================================================
             // TASK & GROUP MANIPULATION
             // =========================================================================
-            const addTask = (text, listTypeOrGroupId) => {
+            const addTask = (text, listTypeOrGroupId, weeklyTarget) => {
                 let newTask;
                 const commonProps = { id: Date.now().toString(), text, createdAt: Date.now() };
                 
                 if (listTypeOrGroupId === 'daily') {
-                    newTask = { ...commonProps, completedToday: false, lastCompleted: null, streak: 0 };
+                    newTask = { 
+                        ...commonProps,
+                        completedToday: false,
+                        lastCompleted: null,
+                        streak: 0,
+                        weeklyGoal: weeklyTarget || 0,
+                        weeklyCompletions: 0,
+                        weekStartDate: getStartOfWeek(new Date())
+                    };
                     dailyTasks.push(newTask);
                 } else if (listTypeOrGroupId === 'standalone') {
                     newTask = { ...commonProps };
@@ -2199,7 +2259,7 @@
             
             const completeTask = (id) => {
                 stopTimer(id);
-                const { task, type, group } = findTaskAndContext(id);
+                const { task, type } = findTaskAndContext(id);
                 if (!task) return;
 
                 const taskElement = document.querySelector(`.task-item[data-id="${id}"]`);
@@ -2209,9 +2269,21 @@
                 playSound('complete');
                 
                 if (type === 'daily') {
-                    if(task.completedToday) return;
+                    if(task.completedToday) return; // Can't complete a daily twice a day
                     task.completedToday = true;
                     task.lastCompleted = new Date().toDateString();
+
+                    // Handle weekly goal
+                    if (task.weeklyGoal > 0) {
+                        const now = new Date();
+                        const startOfWeek = getStartOfWeek(now);
+                        if (task.weekStartDate < startOfWeek) {
+                            task.weekStartDate = startOfWeek;
+                            task.weeklyCompletions = 1;
+                        } else {
+                            task.weeklyCompletions = (task.weeklyCompletions || 0) + 1;
+                        }
+                    }
                     renderDailyTasks();
                 } else { 
                     createConfetti(taskElement);
@@ -2257,6 +2329,12 @@
                 const task = dailyTasks.find(t => t.id === id);
                 if (task && task.completedToday) {
                     task.completedToday = false;
+                    
+                    // Revert weekly goal if it was incremented today
+                    if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
+                        task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
+                    }
+                    
                     addXp(-XP_PER_TASK);
                     playSound('delete');
                     saveState();
@@ -2378,6 +2456,7 @@
                 if (groupHeader) {
                     if (target.closest('.add-task-to-group-btn')) {
                         currentListToAdd = groupItem.dataset.groupId;
+                        weeklyGoalContainer.style.display = 'none';
                         addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g => g.id === currentListToAdd).name}"`;
                         openModal(addTaskModal);
                         newTaskInput.focus();
@@ -2443,8 +2522,10 @@
                 e.preventDefault();
                 const text = newTaskInput.value.trim();
                 if (text && currentListToAdd) {
-                    addTask(text, currentListToAdd);
+                    const weeklyTarget = parseInt(weeklyGoalInput.value, 10) || 0;
+                    addTask(text, currentListToAdd, weeklyTarget);
                     newTaskInput.value = '';
+                    weeklyGoalInput.value = '';
                     closeModal(addTaskModal);
                 }
             });
@@ -2456,24 +2537,12 @@
 
                 let durationInMinutes = 0;
                 switch (selectedUnit) {
-                    case 'seconds':
-                        durationInMinutes = durationValue / 60;
-                        break;
-                    case 'minutes':
-                        durationInMinutes = durationValue;
-                        break;
-                    case 'hours':
-                        durationInMinutes = durationValue * 60;
-                        break;
-                    case 'days':
-                        durationInMinutes = durationValue * 60 * 24;
-                        break;
-                    case 'weeks':
-                        durationInMinutes = durationValue * 60 * 24 * 7;
-                        break;
-                    case 'months':
-                        durationInMinutes = durationValue * 60 * 24 * 30; // Approximation
-                        break;
+                    case 'seconds': durationInMinutes = durationValue / 60; break;
+                    case 'minutes': durationInMinutes = durationValue; break;
+                    case 'hours': durationInMinutes = durationValue * 60; break;
+                    case 'days': durationInMinutes = durationValue * 60 * 24; break;
+                    case 'weeks': durationInMinutes = durationValue * 60 * 24 * 7; break;
+                    case 'months': durationInMinutes = durationValue * 60 * 24 * 30; break;
                 }
 
                 if(durationInMinutes > 0 && currentEditingTaskId) {
@@ -2519,6 +2588,7 @@
             
             addTaskTriggerBtnDaily.addEventListener('click', () => {
                 currentListToAdd = 'daily';
+                weeklyGoalContainer.style.display = 'block';
                 addTaskModalTitle.textContent = 'Add Daily Quest';
                 openModal(addTaskModal);
                 newTaskInput.focus();
@@ -2526,6 +2596,7 @@
             
             addStandaloneTaskBtn.addEventListener('click', () => {
                 currentListToAdd = 'standalone';
+                weeklyGoalContainer.style.display = 'none';
                 addTaskModalTitle.textContent = 'Add Main Quest';
                 openModal(addTaskModal);
                 newTaskInput.focus();
@@ -2545,12 +2616,7 @@
                 });
             });
             
-            manageBackupsBtn.addEventListener('click', () => {
-                renderBackups();
-                openModal(backupModal);
-            });
-            
-            [addTaskModal, addGroupModal, settingsModal, confirmModal, backupModal, timerModal, accountModal].forEach(modal => {
+            [addTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal].forEach(modal => {
                 if (modal) {
                     modal.addEventListener('click', (e) => {
                         if (e.target === modal) closeModal(modal);
@@ -2571,7 +2637,7 @@
             confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
 
             // =========================================================================
-            // SETTINGS & BACKUPS
+            // SETTINGS & DATA I/O
             // =========================================================================
             const applySettings = () => {
                 // Apply Accent Color
@@ -2632,7 +2698,7 @@
             });
             
             resetProgressBtn.addEventListener('click', () => {
-                 showConfirm('Reset all progress?', 'This will reset your level to 1, XP to 0, and clear all tasks and streaks. This cannot be undone.', () => {
+                 showConfirm('Reset all progress?', 'This will reset your level to 1, XP to 0, and clear all tasks and streaks for the current user. This cannot be undone.', () => {
                     playerData = { level: 1, xp: 0 };
                     dailyTasks = [];
                     standaloneMainQuests = [];
@@ -2643,82 +2709,51 @@
                     playSound('delete');
                 });
             });
+
+            exportDataBtn.addEventListener('click', () => {
+                if (!DB) {
+                    alert("Database not ready.");
+                    return;
+                }
+                const data = DB.export();
+                const blob = new Blob([data], {type: "application/octet-stream"});
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `procrasti-nope_backup_${new Date().toISOString().slice(0,10)}.db`;
+                a.click();
+            });
+
+            importDataBtn.addEventListener('click', () => importFileInput.click());
+            
+            importFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                showConfirm("Import Data?", "This will overwrite all current user data. Make sure you've exported your current progress first!", () => {
+                    const reader = new FileReader();
+                    reader.onload = async function() {
+                        const Uints = new Uint8Array(reader.result);
+                        const SQL = await initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`});
+                        DB = new SQL.Database(Uints);
+                        console.log("Database imported successfully.");
+                        // Force a reload of the new data for the current user
+                        loadUserState();
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+                 event.target.value = ''; // Reset input to allow re-uploading the same file
+            });
             
             document.body.addEventListener('mouseover', e => {
                 const triggerElement = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title');
                 if (!triggerElement) return;
 
-                // This check prevents the sound from re-triggering when moving between child elements of the button.
                 if (e.relatedTarget && triggerElement.contains(e.relatedTarget)) {
                     return;
                 }
                 
                 playSound('hover');
             });
-            
-            function createBackup() {
-                const backups = JSON.parse(localStorage.getItem('backups')) || [];
-                const currentState = {
-                    dailyTasks,
-                    standaloneMainQuests,
-                    generalTaskGroups,
-                    playerData,
-                    timestamp: Date.now()
-                };
-                
-                backups.push(currentState);
-                if (backups.length > 30) {
-                    backups.shift(); // Remove the oldest
-                }
-                
-                localStorage.setItem('backups', JSON.stringify(backups));
-                localStorage.setItem('lastBackupTime', Date.now().toString());
-            }
-
-            function restoreFromBackup(backupIndex) {
-                 const backups = JSON.parse(localStorage.getItem('backups')) || [];
-                 const backup = backups[backupIndex];
-                 if (backup) {
-                    showConfirm('Restore Backup?', `This will overwrite your current progress with the data from ${new Date(backup.timestamp).toLocaleString()}. Are you sure?`, () => {
-                        dailyTasks = backup.dailyTasks || [];
-                        standaloneMainQuests = backup.standaloneMainQuests || [];
-                        generalTaskGroups = backup.generalTaskGroups || [];
-                        playerData = backup.playerData || { level: 1, xp: 0 };
-                        saveState();
-                        init(); // Full re-initialization
-                        closeModal(backupModal);
-                    });
-                 }
-            }
-            
-            function renderBackups() {
-                const backups = JSON.parse(localStorage.getItem('backups')) || [];
-                backupList.innerHTML = '';
-                if (backups.length === 0) {
-                    backupList.innerHTML = '<p>No backups found yet.</p>';
-                    return;
-                }
-                
-                backups.slice().reverse().forEach((backup, index) => {
-                    const originalIndex = backups.length - 1 - index;
-                    const li = document.createElement('li');
-                    li.className = 'backup-item';
-                    const date = new Date(backup.timestamp);
-                    li.innerHTML = `
-                        <span>${date.toLocaleDateString()} - ${date.toLocaleTimeString()}</span>
-                        <button class="btn restore-btn" data-index="${originalIndex}">Restore</button>
-                    `;
-                    backupList.appendChild(li);
-                });
-            }
-
-            backupList.addEventListener('click', e => {
-                if (e.target.classList.contains('restore-btn')) {
-                    const index = parseInt(e.target.dataset.index, 10);
-                    restoreFromBackup(index);
-                }
-            });
-
 
             // =========================================================================
             // DRAG & DROP
@@ -2730,7 +2765,6 @@
                     onStart: () => document.body.classList.add('is-dragging'),
                     onEnd: (evt) => {
                         document.body.classList.remove('is-dragging');
-                        // General reorder logic is complex due to multiple lists, handle specific cases below
                     }
                  };
 
@@ -2843,28 +2877,23 @@
                 initSortable();
             };
 
-            const init = () => {
+            const init = async () => {
+                await initDatabase(); // Wait for the database to be ready
                 initGoogleSignIn();
                 checkDailyReset();
                 
-                const lastBackupTime = parseInt(localStorage.getItem('lastBackupTime'), 10);
-                if (!lastBackupTime || (Date.now() - lastBackupTime > 30 * 60 * 1000)) {
-                    createBackup();
-                }
-                setInterval(createBackup, 30 * 60 * 1000);
-
-                // Listen for system theme changes
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
 
                 showRandomQuote();
                 updateUserUI();
-                loadUserState();
+                await loadUserState(); // Ensure user data is loaded after DB init
                 resumeTimers();
                 setInterval(checkOverdueTasks, 60 * 1000);
             };
 
             init();
-        });
+        };
     </script>
 </body>
 </html>
+
