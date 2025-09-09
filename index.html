@@ -63,6 +63,7 @@
             --shadow-light: #4E443A;
             --surface-light: #FFFFFF;
             --text-on-accent: #4E443A; /* Dark text for light pastels */
+            --surface-light-rgb: 255, 255, 255;
 
             /* Dark Theme - DEEPER & WARM (MODIFIED) */
             --bg-dark: #1A1612; /* Very dark warm brown, almost black */
@@ -70,6 +71,7 @@
             --border-dark: #EAE2D6;
             --shadow-dark: #000000; /* Pure black shadow for neobrutalism */
             --surface-dark: #2D261E; /* A slightly lighter brown for cards */
+            --surface-dark-rgb: 45, 38, 30;
             
             /* Light Theme Accent Colors */
             --accent-pink-light: #FFB7C5;
@@ -108,6 +110,7 @@
             --accent: var(--accent-red);
             --shadow-color: var(--shadow);
             --noise-opacity: 0.05;
+            --surface-rgb: var(--surface-light-rgb);
 
 
             /* Universal Settings */
@@ -125,6 +128,7 @@
             --surface: var(--surface-dark);
             --text-on-accent: var(--text-dark); /* Use light text for pastels in dark mode */
             --noise-opacity: 0.08;
+            --surface-rgb: var(--surface-dark-rgb);
             
             /* Dark Theme Accent Colors (Darker, more pastel) */
             --accent-pink-dark: #C98B96;
@@ -404,9 +408,10 @@
             cursor: pointer;
             transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
             color: var(--accent);
+            display: inline-block; /* FIX: Shrink hitbox to content */
         }
         .main-title:hover {
-            transform: rotate(-2deg) scale(1.05);
+            transform: rotate(-1deg) scale(1.02); /* FIX: Tone down animation */
         }
 
 
@@ -537,7 +542,7 @@
 
 
         .main-quest-group {
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem; /* FIX: Reduced spacing */
             transition: all var(--transition-speed) ease;
         }
         
@@ -622,7 +627,7 @@
         }
         
         #standalone-task-list {
-            margin-bottom: 2rem;
+            /* FIX: Removed margin-bottom to fix spacing */
         }
 
 
@@ -740,6 +745,7 @@
             gap: 0.5rem;
             margin-left: auto; /* Push all controls to the right */
             align-items: center;
+            position: relative; /* For mobile actions overlay */
         }
 
         .task-item .task-actions {
@@ -891,6 +897,69 @@
         
         .task-item.daily-completed .complete-btn {
             pointer-events: none;
+        }
+
+        /*
+        ==========================================================================
+        MOBILE-SPECIFIC TASK INTERACTIONS
+        ==========================================================================
+        */
+        @media (max-width: 1023px) {
+            /* On mobile, action buttons (edit/delete) are hidden until tap */
+            .task-item .task-actions {
+                opacity: 0;
+                pointer-events: none;
+                
+                /* Style as an overlay */
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: calc(100% + 1rem); /* Cover the controls area */
+                height: calc(100% + 1rem);
+                justify-content: center;
+                
+                background-color: rgba(var(--surface-rgb), 0.7);
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+                border-radius: var(--radius);
+                z-index: 5;
+                transition: opacity var(--transition-speed) ease;
+            }
+
+            /* The timer button is always visible, not part of the hide/show group */
+            .task-item .timer-clock-btn {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* When a task is tapped, show the action buttons */
+            .task-item.actions-visible .task-actions {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            
+            /* And blur the content behind the overlay */
+            .task-item.actions-visible .task-content,
+            .task-item.actions-visible .timer-clock-btn {
+                filter: blur(3px);
+                transition: filter var(--transition-speed) ease;
+                pointer-events: none; /* Prevent clicking blurred items */
+            }
+            
+            /* EXCEPTION: If a timer is active, don't hide/blur its button */
+            .task-item.timer-active .timer-clock-btn {
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
+            .task-item.timer-active.actions-visible .timer-clock-btn {
+                filter: none;
+            }
+
+            /* EXCEPTION: Don't show edit/delete actions if a timer is active */
+            .task-item.timer-active .task-actions {
+                display: none;
+            }
         }
         
         /*
@@ -1682,8 +1751,6 @@
             landingChoices.style.display = 'block';
         }
 
-        // REMOVED: startTheApp function is no longer needed
-
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
             // Manually trigger the auth state observer with a null user.
@@ -1699,7 +1766,6 @@
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
             
-            // This callback is triggered on successful authentication
             const onAuthSuccess = () => {
                  // onAuthStateChanged will automatically handle hiding the landing page and showing the app
             };
@@ -1708,7 +1774,6 @@
             
             landingAuthContainer.querySelector(`.toggle-btn[data-tab="${initialTab}"]`).click();
             
-            // Add a back button if it doesn't exist
             if (!landingAuthContainer.querySelector('#landing-back-btn')) {
                 const backBtn = document.createElement('button');
                 backBtn.id = 'landing-back-btn';
@@ -1721,15 +1786,15 @@
         
         // --- MAIN APPLICATION LOGIC ---
         function initializeAppLogic(initialUser) {
-            // MODIFIED: Use a local, updatable variable for the user.
             let user = initialUser;
             
-            // All app-specific variables and functions go here to keep them scoped
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
             let settings = { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 };
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
+            let actionsTimeoutId = null;
+            let activeMobileActionsItem = null;
             
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
@@ -1787,7 +1852,6 @@
                     localStorage.setItem('anonymousUserData', JSON.stringify(data));
                     return;
                 }
-                // Logged-in mode
                 try {
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     await window.firebaseSDK.setDoc(userDocRef, { appData: data }, { merge: true });
@@ -1814,14 +1878,11 @@
                     loadAndDisplayData(localData);
                     return;
                 }
-
-                // Logged-in mode, setup real-time listener
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         loadAndDisplayData(docSnap.data().appData || {});
                     } else {
-                        // This is a new user, load empty state
                         loadAndDisplayData({});
                     }
                 }, (error) => { console.error("Error listening to Firestore:", getCoolErrorMessage(error)); });
@@ -1833,18 +1894,15 @@
                     logoutBtn.style.display = 'inline-flex';
                     userDisplay.textContent = `Logged in as: ${user.displayName || user.email}`;
                     userDisplay.style.display = 'flex';
-                    // Update data section for logged-in user
                     dataManagementHeading.textContent = "Cloud Data";
                     exportDataBtn.style.display = 'none';
                     importDataBtn.style.display = 'none';
                     resetProgressBtn.textContent = 'Reset Cloud Data';
-
                 } else { // Guest mode
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
                     userDisplay.textContent = 'Playing as Guest';
                     userDisplay.style.display = 'flex';
-                    // Update data section for guest user
                     dataManagementHeading.textContent = "Guest Data (Local)";
                     exportDataBtn.style.display = 'inline-flex';
                     importDataBtn.style.display = 'inline-flex';
@@ -1945,8 +2003,13 @@
                 let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
                 li.innerHTML = `<button class="complete-btn"></button><div class="task-content">${streakHTML}<span class="task-text" contenteditable="false">${task.text}</span>${goalHTML}</div><div class="task-controls"><button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button><div class="task-actions"><button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></div></div>`;
                 if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
-                if (task.timerStartTime && task.timerRemaining > 0) { const ring = li.querySelector('.progress-ring-circle'); if (ring) { const r = ring.r.baseVal.value, c = r * 2 * Math.PI; ring.style.strokeDasharray = `${c} ${c}`; const p = task.timerRemaining / task.timerDuration; ring.style.strokeDashoffset = c - p * c; } }
-                else { const ring = li.querySelector('.progress-ring-circle'); if (ring) ring.style.strokeDasharray = '0, 999'; }
+                if (task.timerStartTime && task.timerRemaining > 0) {
+                    li.classList.add('timer-active');
+                    const ring = li.querySelector('.progress-ring-circle');
+                    if (ring) { const r = ring.r.baseVal.value, c = r * 2 * Math.PI; ring.style.strokeDasharray = `${c} ${c}`; const p = task.timerRemaining / task.timerDuration; ring.style.strokeDashoffset = c - p * c; }
+                } else {
+                    const ring = li.querySelector('.progress-ring-circle'); if (ring) ring.style.strokeDasharray = '0, 999';
+                }
                 return li;
             };
             const saveState = () => { const data = { dailyTasks, standaloneMainQuests, generalTaskGroups, playerData, settings }; saveData(data); };
@@ -1955,13 +2018,13 @@
                 if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()) });
                 else if (list === 'standalone') standaloneMainQuests.push({ ...common });
                 else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common }); } }
-                renderAllLists(); // Re-render immediately for snappy UI
+                renderAllLists();
                 saveState(); 
                 playSound('add');
             };
             const addGroup = (name) => { 
                 generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); 
-                renderAllLists(); // Re-render immediately
+                renderAllLists();
                 saveState(); 
                 playSound('addGroup'); 
             };
@@ -1983,8 +2046,8 @@
                     const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
                     if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
                 }
-                saveState(); // Save state first
-                renderAllLists(); // Then re-render to reflect changes
+                saveState();
+                renderAllLists();
                 const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
             const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
@@ -1992,11 +2055,62 @@
             function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('levelUp'); addXp(mins * XP_PER_TIMER_MINUTE); completeTask(id); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
             function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); renderAllLists(); } } }
             function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { addXp(t.timerDuration / 60 * XP_PER_TIMER_MINUTE); stopTimer(t.id); completeTask(t.id); } } }); }
+            
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
-                const taskItem = e.target.closest('.task-item'), groupHeader = e.target.closest('.main-quest-group-header');
+                const taskItem = e.target.closest('.task-item');
+                const groupHeader = e.target.closest('.main-quest-group-header');
+                
                 if (groupHeader) { const groupId = e.target.closest('.main-quest-group').dataset.groupId; if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId); else { const g = generalTaskGroups.find(g => g.id === groupId); if (g) g.isExpanded = !g.isExpanded; saveState(); renderAllLists(); } return; }
-                if (taskItem) { const id = taskItem.dataset.id; currentEditingTaskId = id; if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; } if (e.target.closest('.complete-btn')) completeTask(id); else if (e.target.closest('.delete-btn')) deleteTask(id); else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); } else if (e.target.closest('.edit-btn')) { const t = taskItem.querySelector('.task-text'); t.contentEditable = true; t.style.borderBottom = `2px solid ${settings.accentColor}`; t.focus(); document.execCommand('selectAll', false, null); } } 
+
+                if (taskItem) {
+                    // --- MOBILE ACTION TOGGLE LOGIC ---
+                    if (window.innerWidth <= 1023) {
+                        if (e.target.closest('button')) {
+                            clearTimeout(actionsTimeoutId);
+                        } else {
+                            clearTimeout(actionsTimeoutId);
+                            if (activeMobileActionsItem && activeMobileActionsItem !== taskItem) {
+                                activeMobileActionsItem.classList.remove('actions-visible');
+                            }
+                            
+                            const wasVisible = taskItem.classList.contains('actions-visible');
+                            taskItem.classList.toggle('actions-visible');
+
+                            if (!wasVisible) {
+                                activeMobileActionsItem = taskItem;
+                                actionsTimeoutId = setTimeout(() => {
+                                    if(taskItem.classList.contains('actions-visible')) {
+                                        taskItem.classList.remove('actions-visible');
+                                        activeMobileActionsItem = null;
+                                    }
+                                }, 3000);
+                            } else {
+                                activeMobileActionsItem = null;
+                            }
+                            if(!e.target.closest('button')) return;
+                        }
+                    }
+                    
+                    // --- REGULAR BUTTON LOGIC ---
+                    const id = taskItem.dataset.id;
+                    currentEditingTaskId = id;
+                    if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; }
+                    if (e.target.closest('.complete-btn')) completeTask(id);
+                    else if (e.target.closest('.delete-btn')) deleteTask(id);
+                    else if (e.target.closest('.timer-clock-btn')) {
+                        const { task } = findTaskAndContext(id);
+                        if (task && task.timerStartTime) openModal(timerMenuModal);
+                        else openModal(timerModal);
+                    }
+                    else if (e.target.closest('.edit-btn')) {
+                        const t = taskItem.querySelector('.task-text');
+                        t.contentEditable = true;
+                        t.style.borderBottom = `2px solid ${settings.accentColor}`;
+                        t.focus(); document.execCommand('selectAll', false, null);
+                    }
+                } 
             });
+
             document.querySelector('.quests-layout').addEventListener('focusout', (e) => { if (e.target.classList.contains('task-text') && e.target.isContentEditable) { const id = e.target.closest('.task-item').dataset.id; e.target.contentEditable = false; e.target.style.borderBottom = "none"; editTask(id, e.target.textContent); } });
             document.querySelector('.quests-layout').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.isContentEditable) { e.preventDefault(); e.target.blur(); } });
             addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { addTask(t, currentListToAdd, parseInt(weeklyGoalInput.value, 10) || 0); newTaskInput.value = ''; weeklyGoalInput.value = ''; closeModal(addTaskModal); } });
@@ -2005,8 +2119,19 @@
             timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
             timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
             addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
-            const openModal = (modal) => { appWrapper.classList.add('blur-background'); modal.classList.add('visible'); playSound('open'); };
+            
+            const openModal = (modal) => {
+                if (activeMobileActionsItem) {
+                    clearTimeout(actionsTimeoutId);
+                    activeMobileActionsItem.classList.remove('actions-visible');
+                    activeMobileActionsItem = null;
+                }
+                appWrapper.classList.add('blur-background');
+                modal.classList.add('visible');
+                playSound('open');
+            };
             const closeModal = (modal) => { appWrapper.classList.remove('blur-background'); modal.classList.remove('visible'); playSound('close'); };
+            
             addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; openModal(addTaskModal); newTaskInput.focus(); });
             addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); newTaskInput.focus(); });
             addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); newGroupInput.focus(); });
@@ -2058,7 +2183,6 @@
                 });
             });
 
-            // MODIFIED: Split initialization into one-time and session-based parts
             async function loadUserSession() {
                 updateUserUI();
                 await initialLoad();
@@ -2073,13 +2197,12 @@
             };
 
             initOnce();
-            loadUserSession(); // Load data for the initial user.
+            loadUserSession();
 
-            // MODIFIED: Return an object to control this instance from the outside.
             return {
                 updateUser: (newUser) => {
-                    user = newUser; // Update the user in the closure
-                    loadUserSession(); // Reload data for the new user
+                    user = newUser;
+                    loadUserSession();
                 }
             };
         }
@@ -2087,24 +2210,15 @@
         // =========================================================================
         // UTILITY/SHARED AUTH FUNCTIONS
         // =========================================================================
-
-        /**
-         * Returns a user-friendly, "cooler" error message from a Firebase error object.
-         * @param {Error} error - The Firebase error object.
-         * @returns {string} A friendly error message.
-         */
         function getCoolErrorMessage(error) {
             const defaultMessage = "An unexpected vortex appeared! Please try again.";
             if (!error) return defaultMessage;
-
-            // Handle Firestore permission errors specifically
             if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
                 return "Permission Denied! Your Firestore Security Rules are likely blocking this action.";
             }
             if (error.code === 'permission-denied') {
                  return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
             }
-
             switch (error.code) {
                 case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
                 case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
@@ -2121,32 +2235,20 @@
             }
         }
 
-        /**
-         * Merges guest data from localStorage with existing cloud data.
-         * @param {object} cloudData - The existing data from Firestore.
-         * @returns {object} The merged data object.
-         */
         function mergeGuestDataWithCloud(cloudData = {}) {
             const guestDataString = localStorage.getItem('anonymousUserData');
             if (!guestDataString) return cloudData;
-
             try {
                 const guestData = JSON.parse(guestDataString);
                 console.log("Merging guest data with cloud data...");
-
-                const mergedData = JSON.parse(JSON.stringify(cloudData)); // Deep copy to avoid mutation
-
-                // Use a Set to avoid duplicates based on task text
+                const mergedData = JSON.parse(JSON.stringify(cloudData));
                 const mergeTasks = (cloudTasks = [], guestTasks = []) => {
                     const existingTexts = new Set(cloudTasks.map(t => t.text));
                     const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
                     return [...cloudTasks, ...newTasks];
                 };
-                
                 mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
                 mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
-                
-                // For groups, merge tasks within existing groups and add new groups
                 if (guestData.generalTaskGroups) {
                     if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
                     guestData.generalTaskGroups.forEach(guestGroup => {
@@ -2158,66 +2260,42 @@
                         }
                     });
                 }
-                
-                // For player data, combine XP and take the higher level
                 if (guestData.playerData) {
                     if (!mergedData.playerData) {
                         mergedData.playerData = guestData.playerData;
                     } else {
                         mergedData.playerData.xp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
                         mergedData.playerData.level = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
-                        // A full XP recalculation would be better here, but this is a simple merge
                     }
                 }
-                
                 return mergedData;
-
             } catch (e) {
                 console.error("Failed to parse or merge guest data:", e);
-                return cloudData; // Return original cloud data if merge fails
+                return cloudData;
             }
         }
 
-        /**
-         * Handles the logic after a successful sign-in, including merging guest data.
-         * @param {User} user - The user object from Firebase Auth.
-         */
         async function handleSignInSuccess(user) {
             const isGuestBeforeSignIn = sessionStorage.getItem('isGuest') === 'true';
-            
             if (isGuestBeforeSignIn) {
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 let finalData = {};
-                
                 if (docSnap.exists()) {
-                    // User has existing data, merge it with guest data
                     finalData = mergeGuestDataWithCloud(docSnap.data().appData);
                 } else {
-                    // New user, just use the guest data as their starting data
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     finalData = guestDataString ? JSON.parse(guestDataString) : {};
                 }
-
                 await window.firebaseSDK.setDoc(userDocRef, { appData: finalData });
-
-                // Clean up guest state
                 localStorage.removeItem('anonymousUserData');
                 sessionStorage.removeItem('isGuest');
             }
         }
 
-
-        /**
-         * Sets up the authentication forms inside a given container element.
-         * @param {HTMLElement} container - The element to populate with auth forms.
-         * @param {Function} onSuccess - A callback function to run on successful login/signup.
-         */
         function setupAuthForms(container, onSuccess) {
             const template = document.getElementById('account-modal-content');
             container.innerHTML = template.innerHTML;
-
-            // Tab switching logic
             container.querySelector('.form-toggle').addEventListener('click', (e) => {
                 if (e.target.matches('.toggle-btn')) {
                     const tab = e.target.dataset.tab;
@@ -2227,8 +2305,6 @@
                     container.querySelectorAll('.error-message').forEach(el => el.textContent = '');
                 }
             });
-
-            // Sign Up form
             container.querySelector('[data-form="signup"]').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = container.querySelector('.signup-email').value;
@@ -2241,8 +2317,6 @@
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
-
-            // Login form
             container.querySelector('[data-form="login"]').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = container.querySelector('.login-email').value;
@@ -2255,8 +2329,6 @@
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
-            
-            // Google Sign-In button
             const googleBtnContainer = container.querySelector('.google-signin-btn-container');
             if (googleBtnContainer) {
                 const customBtn = document.createElement('button');
@@ -2280,3 +2352,4 @@
     </script>
 </body>
 </html>
+
