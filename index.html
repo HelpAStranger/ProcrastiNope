@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Procrasti-Nope | Task Manager</title>
+    <title>Procrasti-Nope</title>
+    <link rel="icon" type="image/png" href="src/images/icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
@@ -74,12 +75,12 @@
             --surface-light-rgb: 255, 255, 255;
 
             /* Dark Theme - DEEPER & WARM (MODIFIED) */
-            --bg-dark: #1A1612; /* Very dark warm brown, almost black */
+            --bg-dark: #211B14; /* Warmer, less dark background */
             --text-dark: #EAE2D6; /* Warm Off-white */
             --border-dark: #EAE2D6;
             --shadow-dark: #000000; /* Pure black shadow for neobrutalism */
-            --surface-dark: #2D261E; /* A slightly lighter brown for cards */
-            --surface-dark-rgb: 45, 38, 30;
+            --surface-dark: #352D25; /* Warmer, lighter surface */
+            --surface-dark-rgb: 53, 45, 37;
             
             /* Light Theme Accent Colors */
             --accent-pink-light: #FFB7C5;
@@ -178,16 +179,16 @@
             padding: 0;
         }
 
-        html, body {
-            height: 100%;
-        }
-        
-        /* Custom Scrollbar Styles */
         html {
+            /* Custom Scrollbar Styles */
             scrollbar-width: thin;
             scrollbar-color: var(--accent) var(--surface);
         }
 
+        body {
+            min-height: 100vh; /* FIX: Allow body to grow with content */
+        }
+        
         body::-webkit-scrollbar {
             width: 14px;
         }
@@ -643,7 +644,7 @@
 
         .main-quest-group:hover ul.task-list-group,
         .main-quest-group.expanded ul.task-list-group {
-            max-height: 600px; /* Arbitrary large value to allow for many tasks */
+            max-height: 1000px; /* Increased max-height for very long lists */
             margin-top: 1rem;
             transition: max-height 0.25s ease-in;
         }
@@ -714,7 +715,8 @@
         .task-item.daily-completed .task-text {
             text-decoration: line-through;
         }
-        .task-item.daily-completed .task-controls {
+        
+        .task-item.daily-completed .task-buttons-wrapper {
             display: none;
         }
 
@@ -1122,16 +1124,14 @@
         .settings-group {
             margin-bottom: 2rem;
         }
+        
         .settings-group h3 {
+            font-weight: 900;
+            font-size: 1.1rem;
+            border-bottom: var(--border-width) solid var(--border);
+            padding-bottom: 0.5rem;
             margin-bottom: 1rem;
-            font-weight: 700;
-            background-color: var(--surface);
-            border: var(--border-width) solid var(--border);
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
-            display: inline-block;
-            --shadow-color: var(--shadow);
+            display: block;
         }
         
         .settings-group .data-actions,
@@ -1876,8 +1876,7 @@
             landingAuthContainer.style.display = 'block';
             
             const onAuthSuccess = () => {
-                closeModal(document.getElementById('account-modal'));
-                closeModal(document.getElementById('settings-modal'));
+                // The onAuthStateChanged listener will handle redirection.
             };
             
             setupAuthForms(landingAuthContainer, onAuthSuccess);
@@ -1898,6 +1897,10 @@
         async function initializeAppLogic(initialUser) {
             const openModal = (modal) => {
                 if(modal) {
+                    if (activeMobileActionsItem) {
+                        activeMobileActionsItem.classList.remove('actions-visible');
+                        activeMobileActionsItem = null;
+                    }
                     appWrapper.classList.add('blur-background');
                     modal.classList.add('visible');
                     playSound('open');
@@ -1948,7 +1951,7 @@
                             }, { merge: true });
                             
                             closeModal(usernameModal);
-                            window.location.reload();
+                            // No reload needed, onAuthStateChanged will refire with the now-complete user data.
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
                         }
@@ -2397,17 +2400,25 @@
                 }
                 
                 if (groupHeader) { 
+                    const groupId = groupHeader.parentElement.dataset.groupId;
+                    const g = generalTaskGroups.find(g => g.id === groupId);
+
+                    // Phone: expand icon is a separate action
+                    if (window.innerWidth <= 1023 && e.target.closest('.expand-icon')) {
+                        if (g) g.isExpanded = !g.isExpanded; 
+                        saveState(); 
+                        renderAllLists();
+                        return; // Prevent action menu from opening
+                    }
+                    
                     const isButton = e.target.closest('button');
                     if (isButton) {
-                        const groupId = e.target.closest('.main-quest-group').dataset.groupId; 
-                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } 
+                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); newTaskInput.focus(); } 
                         else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
                     } else {
                          if (window.innerWidth <= 1023) {
                              handleMobileActions(groupHeader);
                          } else {
-                            const groupId = e.target.closest('.main-quest-group').dataset.groupId;
-                            const g = generalTaskGroups.find(g => g.id === groupId); 
                             if (g) g.isExpanded = !g.isExpanded; 
                             saveState(); 
                             renderAllLists();
