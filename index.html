@@ -240,7 +240,7 @@
         .container {
             max-width: 800px;
             margin: 0 auto;
-            padding: 2rem 1rem;
+            padding: 1rem; /* FIX: Reduced padding to minimize gap */
         }
 
         .quests-layout {
@@ -429,7 +429,7 @@
             display: flex;
             align-items: center;
             gap: 1rem;
-            margin-bottom: 1.5rem; /* FIX: Reduced space */
+            margin-bottom: 0; /* FIX: Removed space to reduce gap */
         }
         
         .level-display {
@@ -574,8 +574,8 @@
         .expand-icon {
             transition: transform 0.2s ease;
             flex-shrink: 0;
-            width: 24px; /* FIX: Increased size */
-            height: 24px; /* FIX: Increased size */
+            width: 28px; /* FIX: Increased icon size */
+            height: 28px; /* FIX: Increased icon size */
         }
 
         .main-quest-group.expanded .expand-icon {
@@ -1024,7 +1024,7 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal, #edit-task-input {
+        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal, #edit-task-input, #edit-task-weekly-goal {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
@@ -1039,19 +1039,19 @@
              margin-bottom: 1rem;
         }
 
-        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus, #edit-task-input:focus {
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus, #edit-task-input:focus, #edit-task-weekly-goal:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
         }
         
-        #weekly-goal-container {
+        #weekly-goal-container, #edit-weekly-goal-container {
             margin-top: 1rem;
             border-top: var(--border-width) dashed var(--border);
             padding-top: 1rem;
         }
         
-        #weekly-goal-container label {
+        #weekly-goal-container label, #edit-weekly-goal-container label {
             font-weight: 700;
             margin-bottom: 0.5rem;
             display: block;
@@ -1546,10 +1546,15 @@
 
     <div id="edit-task-modal" class="modal-overlay">
         <div class="modal-content">
-            <h2>Edit Quest</h2>
+            <h2 id="edit-task-modal-title">Edit Quest</h2>
             <form id="edit-task-form">
                 <input type="hidden" id="edit-task-id">
                 <input type="text" id="edit-task-input" required>
+                <!-- FIX: Added weekly goal editor for daily quests -->
+                <div id="edit-weekly-goal-container" style="display: none;">
+                    <label for="edit-task-weekly-goal">Set a Weekly Goal (Optional)</label>
+                    <input type="number" id="edit-task-weekly-goal" placeholder="e.g., 5 times a week" min="1">
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn" data-close-modal="edit-task-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Save Changes</button>
@@ -1834,6 +1839,8 @@
             const editTaskForm = document.getElementById('edit-task-form');
             const editTaskInput = document.getElementById('edit-task-input');
             const editTaskIdInput = document.getElementById('edit-task-id');
+            const editWeeklyGoalContainer = document.getElementById('edit-weekly-goal-container');
+            const editWeeklyGoalInput = document.getElementById('edit-task-weekly-goal');
 
             const weeklyGoalContainer = document.getElementById('weekly-goal-container');
             const weeklyGoalInput = document.getElementById('new-task-weekly-goal');
@@ -2019,7 +2026,7 @@
             const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
             const createGroupElement = (group) => {
                 const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
-                el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-icon" viewBox="0 0 24 24"><path d="M10 8L16 12L10 16V8Z" fill="var(--text)"/></svg><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+                el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
                 const ul = el.querySelector('ul'); if (group.tasks) group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); return el;
             };
             const createTaskElement = (task, type) => {
@@ -2076,7 +2083,17 @@
                 const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
             const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
-            const editTask = (id, text) => { const { task } = findTaskAndContext(id); if (task) { task.text = text; saveState(); renderAllLists(); } };
+            const editTask = (id, text, goal) => { // FIX: Added goal parameter
+                const { task, type } = findTaskAndContext(id);
+                if (task) {
+                    task.text = text;
+                    if (type === 'daily') {
+                        task.weeklyGoal = goal;
+                    }
+                    saveState();
+                    renderAllLists();
+                }
+            };
             function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('levelUp'); addXp(mins * XP_PER_TIMER_MINUTE); completeTask(id); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
             function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); renderAllLists(); } } }
             function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { addXp(t.timerDuration / 60 * XP_PER_TIMER_MINUTE); stopTimer(t.id); completeTask(t.id); } } }); }
@@ -2110,10 +2127,17 @@
                     else if (e.target.closest('.delete-btn')) deleteTask(id);
                     else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
                     else if (e.target.closest('.edit-btn')) {
-                        const { task } = findTaskAndContext(id);
+                        const { task, type } = findTaskAndContext(id);
                         if (task) {
                             editTaskIdInput.value = task.id;
                             editTaskInput.value = task.text;
+                            editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
+                            if (type === 'daily') {
+                                editWeeklyGoalInput.value = task.weeklyGoal || '';
+                                editWeeklyGoalContainer.style.display = 'block';
+                            } else {
+                                editWeeklyGoalContainer.style.display = 'none';
+                            }
                             openModal(editTaskModal);
                             editTaskInput.focus();
                         }
@@ -2122,7 +2146,7 @@
             });
 
             addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { addTask(t, currentListToAdd, parseInt(weeklyGoalInput.value, 10) || 0); newTaskInput.value = ''; weeklyGoalInput.value = ''; closeModal(addTaskModal); } });
-            editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); if(id && newText) { editTask(id, newText); closeModal(editTaskModal); } });
+            editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalInput.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
             timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
             timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
             timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
@@ -2154,8 +2178,78 @@
             importDataBtn.addEventListener('click', () => importFileInput.click());
             importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
             document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
-            function initSortable() { const o = { animation: 150, group: 'tasks', onStart: () => document.body.classList.add('is-dragging'), onEnd: (e) => { document.body.classList.remove('is-dragging'); if (e.from !== e.to || e.oldIndex !== e.newIndex) { console.log("Reordering list..."); } } }; new Sortable(dailyTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(dailyTasks,e.oldIndex,e.newIndex);}}); new Sortable(standaloneTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(standaloneMainQuests,e.oldIndex,e.newIndex);}}); new Sortable(generalTaskListContainer,{animation:150,handle:'.main-quest-group-header',onStart:()=>document.body.classList.add('is-dragging'),onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(generalTaskGroups,e.oldIndex,e.newIndex)}}); document.querySelectorAll('.task-list-group').forEach(l=>{new Sortable(l,{...o,onEnd:(e)=>{document.body.classList.remove('is-dragging');const id=e.to.dataset.groupId,g=generalTaskGroups.find(g=>g.id===id);if(g)reorderList(g.tasks,e.oldIndex,e.newIndex);}});}); }
-            function reorderList(list, oldI, newI) { if (oldI === newI) return; const [item] = list.splice(oldI, 1); list.splice(newI, 0, item); saveState(); }
+            
+            function initSortable() {
+                // This is the new, unified drag/drop handler for tasks
+                function onTaskDrop(evt) {
+                    document.body.classList.remove('is-dragging');
+                    const taskId = evt.item.dataset.id;
+                    if (!taskId) return;
+
+                    // Find the task object and remove it from its original source array
+                    const { task, list: sourceListArray } = findTaskAndContext(taskId);
+                    if (!task || !sourceListArray) return;
+                    const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
+                    if (originalIndex > -1) {
+                        sourceListArray.splice(originalIndex, 1);
+                    } else { return; } // Should not happen
+
+                    // Find the destination array
+                    const toListEl = evt.to;
+                    const toListId = toListEl.id;
+                    const toGroupId = toListEl.dataset.groupId;
+                    let destListArray;
+
+                    if (toListId === 'daily-task-list') {
+                        destListArray = dailyTasks;
+                    } else if (toListId === 'standalone-task-list') {
+                        destListArray = standaloneMainQuests;
+                    } else if (toGroupId) {
+                        const group = generalTaskGroups.find(g => g.id === toGroupId);
+                        if (group) {
+                            if (!group.tasks) group.tasks = [];
+                            destListArray = group.tasks;
+                        }
+                    }
+
+                    if (!destListArray) { // Failsafe
+                        sourceListArray.splice(originalIndex, 0, task); // Put it back
+                        return;
+                    }
+                    
+                    destListArray.splice(evt.newIndex, 0, task);
+                    saveState();
+                    renderAllLists();
+                }
+
+                const commonTaskOptions = {
+                    animation: 150,
+                    delay: 500, // For mobile hold-to-drag
+                    delayOnTouchOnly: true,
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: onTaskDrop 
+                };
+
+                new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'dailyQuests' });
+                new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'mainQuests' });
+                document.querySelectorAll('.task-list-group').forEach(listEl => {
+                    new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
+                });
+                new Sortable(generalTaskListContainer, {
+                    animation: 150,
+                    handle: '.main-quest-group-header',
+                    delay: 500,
+                    delayOnTouchOnly: true,
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: (e) => {
+                        document.body.classList.remove('is-dragging');
+                        const [item] = generalTaskGroups.splice(e.oldIndex, 1);
+                        generalTaskGroups.splice(e.newIndex, 0, item);
+                        saveState();
+                    }
+                });
+            }
+
             function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
             function createFullScreenConfetti(party, o = null) {
                 for (let i = 0; i < (party ? 200 : 100); i++) {
@@ -2355,4 +2449,3 @@
     </script>
 </body>
 </html>
-
