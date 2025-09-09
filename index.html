@@ -165,6 +165,22 @@
             overflow-x: hidden;
         }
 
+        #background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        #background-animation.active {
+            opacity: 1;
+        }
+
+
         .container {
             max-width: 800px;
             margin: 0 auto;
@@ -826,6 +842,60 @@
             box-shadow: 0 0 0 var(--border-width) var(--border);
             transform: scale(1.1);
         }
+
+        /* Toggle Switch Style */
+        .toggle-switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: 34px;
+            transition: .4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: var(--border);
+            border-radius: 50%;
+            transition: .4s;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+            background-color: var(--text-on-accent);
+        }
         
         /* Volume and Timer Slider Styles */
         .volume-slider-container, .timer-slider-container {
@@ -1072,6 +1142,8 @@
 </head>
 <body>
 
+    <svg id="background-animation"></svg>
+
     <header class="sticky-header">
         <div class="header-content">
             <h1 class="main-title">Procrasti-Nope</h1>
@@ -1217,6 +1289,16 @@
                     <div class="color-swatch" data-color="var(--accent-pink)" style="background-color: var(--accent-pink);"></div>
                 </div>
             </div>
+             <div class="settings-group">
+                <h3>Visuals</h3>
+                 <div class="toggle-switch-container">
+                    <label for="background-animation-toggle" style="font-weight: 700;">Background Animation</label>
+                    <label class="switch">
+                      <input type="checkbox" id="background-animation-toggle">
+                      <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
             <div class="settings-group">
                 <h3>Sound Volume</h3>
                 <div class="volume-slider-container">
@@ -1276,7 +1358,8 @@
             let settings = JSON.parse(localStorage.getItem('settings')) || {
                 theme: 'light',
                 accentColor: 'var(--accent-red)',
-                volume: 0.3
+                volume: 0.3,
+                backgroundAnimation: false
             };
             let currentListToAdd = null;
             let currentEditingTaskId = null;
@@ -1331,7 +1414,8 @@
             const volumeSlider = document.getElementById('volume-slider');
             const resetProgressBtn = document.getElementById('reset-progress-btn');
             const manageBackupsBtn = document.getElementById('manage-backups-btn');
-            
+            const backgroundAnimationToggle = document.getElementById('background-animation-toggle');
+
             const backupModal = document.getElementById('backup-modal');
             const backupList = document.getElementById('backup-list');
             const closeBackupBtn = document.getElementById('close-backup-btn');
@@ -2109,6 +2193,15 @@
                 if (selectedBtn) {
                     selectedBtn.classList.add('selected');
                 }
+
+                // Apply Background Animation
+                backgroundAnimationToggle.checked = settings.backgroundAnimation;
+                const animContainer = document.getElementById('background-animation');
+                if (settings.backgroundAnimation) {
+                    animContainer.classList.add('active');
+                } else {
+                    animContainer.classList.remove('active');
+                }
             };
 
             themeOptionsButtons.addEventListener('click', (e) => {
@@ -2133,6 +2226,14 @@
                 settings.volume = parseFloat(volumeSlider.value);
                 saveState();
             });
+            
+            backgroundAnimationToggle.addEventListener('change', () => {
+                settings.backgroundAnimation = backgroundAnimationToggle.checked;
+                saveState();
+                applySettings();
+                playSound('toggle');
+            });
+
 
             // Play a sound on release to confirm the new volume
             volumeSlider.addEventListener('change', () => {
@@ -2328,6 +2429,99 @@
                 }
             }
 
+            // =========================================================================
+            // BACKGROUND ANIMATION
+            // =========================================================================
+            function startBackgroundAnimation() {
+                const svgNS = "http://www.w3.org/2000/svg";
+                const svg = document.getElementById('background-animation');
+                let width = window.innerWidth;
+                let height = window.innerHeight;
+                svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+                const shapes = [];
+                const numShapes = 20;
+                const accentColors = [
+                    'var(--accent-pink)', 'var(--accent-blue)', 'var(--accent-green)', 
+                    'var(--accent-orange)', 'var(--accent-purple)'
+                ];
+
+                function createShape() {
+                    const type = Math.random() > 0.5 ? 'circle' : 'rect';
+                    const shape = document.createElementNS(svgNS, type);
+                    const size = Math.random() * 80 + 20;
+                    
+                    shape.setAttribute('cx', Math.random() * width);
+                    shape.setAttribute('cy', Math.random() * height);
+                    shape.setAttribute('r', size / 2);
+                    shape.setAttribute('x', Math.random() * width);
+                    shape.setAttribute('y', Math.random() * height);
+                    shape.setAttribute('width', size);
+                    shape.setAttribute('height', size);
+                    shape.setAttribute('fill', 'none');
+                    shape.setAttribute('stroke', accentColors[Math.floor(Math.random() * accentColors.length)]);
+                    shape.setAttribute('stroke-width', '2');
+                    shape.style.opacity = '0.2';
+                    
+                    svg.appendChild(shape);
+
+                    return {
+                        el: shape,
+                        x: parseFloat(shape.getAttribute(type === 'circle' ? 'cx' : 'x')),
+                        y: parseFloat(shape.getAttribute(type === 'circle' ? 'cy' : 'y')),
+                        vx: (Math.random() - 0.5) * 0.2,
+                        vy: (Math.random() - 0.5) * 0.2,
+                        rot: 0,
+                        vRot: (Math.random() - 0.5) * 0.1
+                    };
+                }
+
+                for (let i = 0; i < numShapes; i++) {
+                    shapes.push(createShape());
+                }
+
+                let animationFrameId;
+                function animate() {
+                    if (!settings.backgroundAnimation) {
+                        // We will keep the loop running but do nothing,
+                        // so it can start immediately when toggled on.
+                        animationFrameId = requestAnimationFrame(animate);
+                        return;
+                    }
+                    
+                    shapes.forEach(s => {
+                        s.x += s.vx;
+                        s.y += s.vy;
+                        s.rot += s.vRot;
+
+                        if (s.x > width + 50 || s.x < -50) s.vx *= -1;
+                        if (s.y > height + 50 || s.y < -50) s.vy *= -1;
+                        
+                        const transform = `translate(${s.x}, ${s.y}) rotate(${s.rot})`;
+                        if (s.el.tagName === 'circle') {
+                             s.el.setAttribute('transform', `rotate(${s.rot} ${s.x} ${s.y})`);
+                             s.el.setAttribute('cx', s.x);
+                             s.el.setAttribute('cy', s.y);
+                        } else {
+                             s.el.setAttribute('transform', `rotate(${s.rot} ${s.x + s.el.width.baseVal.value/2} ${s.y + s.el.height.baseVal.value/2})`);
+                             s.el.setAttribute('x', s.x);
+                             s.el.setAttribute('y', s.y);
+                        }
+
+                    });
+
+                    animationFrameId = requestAnimationFrame(animate);
+                }
+                
+                animate();
+
+                window.addEventListener('resize', () => {
+                     width = window.innerWidth;
+                     height = window.innerHeight;
+                     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+                });
+            }
+
 
             // =========================================================================
             // INITIALIZATION
@@ -2365,6 +2559,7 @@
                 updateProgressUI();
                 renderAllLists();
                 resumeTimers();
+                startBackgroundAnimation();
                 setInterval(checkOverdueTasks, 60 * 1000);
             };
 
