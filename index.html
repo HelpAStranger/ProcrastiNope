@@ -1578,6 +1578,22 @@
     </template>
 
     <script type="module">
+        // --- IMPORTANT: FIREBASE SECURITY RULES ---
+        // To make this app work, you MUST update your Firestore Security Rules.
+        // Go to your Firebase project -> Firestore Database -> Rules tab
+        // and replace the default rules with the following:
+        /*
+            rules_version = '2';
+            service cloud.firestore {
+              match /databases/{database}/documents {
+                // Allow users to read and write only their own data
+                match /users/{userId} {
+                  allow read, write: if request.auth != null && request.auth.uid == userId;
+                }
+              }
+            }
+        */
+
         // --- FIREBASE SETUP ---
         const firebaseConfig = {
             apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSM",
@@ -2034,8 +2050,16 @@
          * @returns {string} A friendly error message.
          */
         function getCoolErrorMessage(error) {
-            const defaultMessage = "An unexpected error occurred. Please try again.";
-            if (!error || !error.code) return defaultMessage;
+            const defaultMessage = "An unexpected vortex appeared! Please try again.";
+            if (!error) return defaultMessage;
+
+            // Handle Firestore permission errors specifically
+            if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
+                return "Permission Denied! Your Firestore Security Rules are likely blocking this action.";
+            }
+            if (error.code === 'permission-denied') {
+                 return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
+            }
 
             switch (error.code) {
                 case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
@@ -2048,8 +2072,8 @@
                 case 'auth/popup-closed-by-user': return "Sign-in cancelled. Did you change your mind?";
                 case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
                 default:
-                    console.error("Firebase Auth Error:", error);
-                    return "Google Sign-In failed. Please ensure pop-ups are enabled and try again. Also, check your internet connection.";
+                    console.error("Firebase/App Error:", error);
+                    return "An unexpected error occurred. Check the console for more details.";
             }
         }
 
