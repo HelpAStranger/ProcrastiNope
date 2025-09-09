@@ -1,0 +1,2376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procrasti-Nope | Task Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- SortableJS for Drag and Drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        /*
+        ==========================================================================
+        NEOBRUTALIST THEME & VARIABLES (REVAMPED)
+        ==========================================================================
+        */
+        :root {
+            --font-main: 'Inter', sans-serif;
+
+            /* Light Theme - WARM & PASTEL */
+            --bg-light: #FFF8E7; /* Soft Cream */
+            --text-light: #4E443A; /* Warm Dark Brown */
+            --border-light: #4E443A;
+            --shadow-light: #4E443A;
+            --surface-light: #FFFFFF;
+            --text-on-accent: #4E443A; /* Dark text for light pastels */
+
+            /* Dark Theme - WARM & PASTEL */
+            --bg-dark: #2D261E; /* Dark Warm Brown */
+            --text-dark: #EAE2D6; /* Warm Off-white */
+            --border-dark: #EAE2D6;
+            --shadow-dark: #EAE2D6;
+            --surface-dark: #3E3529; /* Lighter Warm Brown */
+            
+            /* Light Theme Accent Colors */
+            --accent-pink-light: #FFB7C5;
+            --accent-blue-light: #99CCFF;
+            --accent-green-light: #A7D4A8;
+            --accent-orange-light: #FFB347;
+            --accent-purple-light: #C7A2F4;
+            --accent-yellow-light: #FFEE93;
+            --accent-cyan-light: #A4DDED;
+            --accent-red-light: #FF6961;
+            --accent-lime-light: #D4E99E;
+            --accent-indigo-light: #A5ADFF;
+            --accent-teal-light: #87D7C8;
+            --accent-amber-light: #FFCF8B;
+
+            /* Base Accent Colors (default to light) */
+            --accent-pink: var(--accent-pink-light);
+            --accent-blue: var(--accent-blue-light);
+            --accent-green: var(--accent-green-light);
+            --accent-orange: var(--accent-orange-light);
+            --accent-purple: var(--accent-purple-light);
+            --accent-yellow: var(--accent-yellow-light);
+            --accent-cyan: var(--accent-cyan-light);
+            --accent-red: var(--accent-red-light);
+            --accent-lime: var(--accent-lime-light);
+            --accent-indigo: var(--accent-indigo-light);
+            --accent-teal: var(--accent-teal-light);
+            --accent-amber: var(--accent-amber-light);
+
+            /* Default State (Light) */
+            --bg: var(--bg-light);
+            --text: var(--text-light);
+            --border: var(--border-light);
+            --shadow: var(--shadow-light);
+            --surface: var(--surface-light);
+            --accent: var(--accent-red);
+            --shadow-color: var(--shadow);
+            --noise-opacity: 0.05;
+
+
+            /* Universal Settings */
+            --border-width: 3px;
+            --shadow-offset: 6px;
+            --radius: 12px;
+            --transition-speed: 0.2s;
+        }
+
+        .dark-mode {
+            --bg: var(--bg-dark);
+            --text: var(--text-dark);
+            --border: var(--border-dark);
+            --shadow: var(--shadow-dark);
+            --surface: var(--surface-dark);
+            --text-on-accent: var(--text-dark); /* Use light text for pastels in dark mode */
+            --noise-opacity: 0.08;
+            
+            /* Dark Theme Accent Colors (Darker, more pastel) */
+            --accent-pink-dark: #C98B96;
+            --accent-blue-dark: #8A9EC4;
+            --accent-green-dark: #8DAF8E;
+            --accent-orange-dark: #D99A5B;
+            --accent-purple-dark: #A991C4;
+            --accent-yellow-dark: #CEC592;
+            --accent-cyan-dark: #93B2BC;
+            --accent-red-dark: #D97C75;
+            --accent-lime-dark: #B4C290;
+            --accent-indigo-dark: #9A9FDA;
+            --accent-teal-dark: #7DAAA1;
+            --accent-amber-dark: #D9B383;
+
+            /* Remap Base Accent Colors to Dark Versions */
+            --accent-pink: var(--accent-pink-dark);
+            --accent-blue: var(--accent-blue-dark);
+            --accent-green: var(--accent-green-dark);
+            --accent-orange: var(--accent-orange-dark);
+            --accent-purple: var(--accent-purple-dark);
+            --accent-yellow: var(--accent-yellow-dark);
+            --accent-cyan: var(--accent-cyan-dark);
+            --accent-red: var(--accent-red-dark);
+            --accent-lime: var(--accent-lime-dark);
+            --accent-indigo: var(--accent-indigo-dark);
+            --accent-teal: var(--accent-teal-dark);
+            --accent-amber: var(--accent-amber-dark);
+        }
+
+        /*
+        ==========================================================================
+        BASE & LAYOUT
+        ==========================================================================
+        */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body::before {
+            content: '';
+            display: block;
+            height: 10px;
+            background-color: var(--accent);
+            transition: background-color var(--transition-speed) ease;
+        }
+        
+        /* Grainy Texture Overlay */
+        body::after {
+            content: "";
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSkiLz48L3N2Zz4=');
+            background-size: 250px 250px;
+            opacity: var(--noise-opacity);
+            pointer-events: none;
+            z-index: 10000;
+            transition: opacity var(--transition-speed) ease;
+            animation: grain 8s steps(10) infinite;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg);
+            color: var(--text);
+            transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        .quests-layout {
+            display: flex;
+            flex-direction: column; /* Default: stack quests vertically */
+        }
+
+        /* For wider screens, display quests side-by-side */
+        @media (min-width: 1024px) {
+            .container {
+                max-width: 1280px; /* Widen the container */
+            }
+
+            .quests-layout {
+                flex-direction: row; /* Place items in a row */
+                gap: 2rem; /* Add space between the two columns */
+                align-items: flex-start; /* Align columns to the top */
+            }
+
+            .quests-layout > .task-group {
+                flex: 1 1 0px; /* Allow each column to grow and take up equal space */
+                margin-bottom: 0; /* Remove bottom margin as 'gap' handles spacing */
+            }
+
+            /* Hover effects for action buttons on desktop */
+            .task-item .task-actions,
+            .task-item .timer-clock-btn,
+            .main-quest-group-header .group-actions {
+                opacity: 0;
+                transition: opacity var(--transition-speed) ease;
+                pointer-events: none;
+            }
+
+            .task-item:hover .task-actions,
+            .task-item:hover .timer-clock-btn,
+            .main-quest-group-header:hover .group-actions,
+            .task-item.timer-active .timer-clock-btn {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        /*
+        ==========================================================================
+        HEADER & PROGRESS
+        ==========================================================================
+        */
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg);
+            padding: 1.5rem 1rem;
+            z-index: 10;
+            border-bottom: var(--border-width) solid var(--border);
+            box-shadow: 0 var(--shadow-offset) 0 var(--shadow);
+            margin-bottom: 0; /* Adjusted */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header-content {
+            text-align: left;
+        }
+        
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 0.25rem;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            color: var(--accent);
+        }
+        .main-title:hover {
+            transform: rotate(-2deg) scale(1.05);
+        }
+
+
+        .quote {
+            font-size: 1rem;
+            font-weight: 700;
+            font-style: italic;
+            opacity: 0.8;
+        }
+        
+        .player-progress-section {
+            background-color: var(--surface);
+            border-bottom: var(--border-width) solid var(--border);
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .level-display {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+            font-weight: 900;
+            padding: 0.5rem 1rem;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .level-display.level-up {
+            animation: levelUpPulse 0.5s ease-in-out;
+        }
+        
+        .xp-bar-container {
+            flex-grow: 1;
+            background-color: var(--bg);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.25rem;
+            position: relative;
+        }
+        
+        .xp-bar {
+            width: 0%;
+            height: 25px;
+            background-color: var(--accent);
+            border-radius: calc(var(--radius) / 2);
+            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        
+        #xp-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: 700;
+            color: var(--text);
+            mix-blend-mode: difference;
+            filter: invert(1) grayscale(1);
+        }
+        .dark-mode #xp-text {
+            mix-blend-mode: normal; /* Changed from unset */
+            filter: none; /* Changed from unset */
+            color: var(--text-dark); /* Explicitly set color for dark mode */
+        }
+
+
+        /*
+        ==========================================================================
+        TASK LIST & ITEMS
+        ==========================================================================
+        */
+        .task-group {
+            margin-bottom: 3rem;
+        }
+
+        .task-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: var(--border-width) solid var(--border);
+        }
+        
+        .task-group-header .header-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .task-group-header h2 {
+            font-size: 1.8rem;
+            font-weight: 900;
+        }
+
+        .main-quest-group, .task-item {
+            cursor: grab;
+        }
+        
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: var(--accent);
+        }
+        
+        /* Shake animation for all items during drag */
+        body.is-dragging .task-item,
+        body.is-dragging .main-quest-group {
+            animation: shake-light 0.4s cubic-bezier(.36,.07,.19,.97) both infinite;
+        }
+
+
+        .main-quest-group {
+            margin-bottom: 2rem;
+            transition: all var(--transition-speed) ease;
+        }
+        
+        .main-quest-group.removing {
+             animation: slideOut 0.4s ease forwards;
+        }
+
+        .main-quest-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+            position: relative;
+            cursor: pointer;
+        }
+
+        .group-title-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-grow: 1;
+        }
+
+        .expand-icon {
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .main-quest-group.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        /* Emphasis for group headers */
+        .main-quest-group-header::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            bottom: 5px;
+            border: var(--border-width) dashed var(--border);
+            border-radius: calc(var(--radius) * 0.5);
+            opacity: 0.5;
+            pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
+        }
+
+        .main-quest-group-header h3 {
+            font-size: 1.3rem;
+            font-weight: 900;
+        }
+
+        .main-quest-group-header .group-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+
+        #daily-task-list, #standalone-task-list, .main-quest-group ul {
+            list-style: none;
+            min-height: 20px; /* Drop zone */
+        }
+
+        .main-quest-group ul.task-list-group {
+            min-height: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out, margin-top 0.2s ease-out;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        .main-quest-group:hover ul.task-list-group,
+        .main-quest-group.expanded ul.task-list-group {
+            max-height: 600px; /* Arbitrary large value to allow for many tasks */
+            margin-top: 1rem;
+            transition: max-height 0.25s ease-in;
+        }
+        
+        #standalone-task-list {
+            margin-bottom: 2rem;
+        }
+
+
+        .task-item {
+            display: flex;
+            flex-wrap: wrap; 
+            align-items: center;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: all var(--transition-speed) ease, max-height var(--transition-speed) ease;
+            position: relative;
+            overflow: hidden;
+            max-height: 100px; /* Base height for transitions */
+        }
+        
+        /* Standalone quests look like group headers */
+        .task-item.standalone-quest {
+             padding: 1rem;
+        }
+         .task-item.standalone-quest::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            bottom: 5px;
+            border: var(--border-width) dashed var(--border);
+            border-radius: calc(var(--radius) * 0.5);
+            opacity: 0.5;
+            pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
+        }
+         .task-item.standalone-quest .task-text {
+            font-size: 1.3rem;
+            font-weight: 900;
+        }
+
+        .task-item.overdue {
+            animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) infinite both;
+            border-color: var(--accent-red);
+            --shadow-color: var(--accent-red);
+        }
+        
+        .task-item.daily-completed {
+            max-height: 50px;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            opacity: 0.6;
+            filter: grayscale(0.5);
+            cursor: pointer; /* To indicate it's clickable for undo */
+        }
+        .task-item.daily-completed .task-text {
+            text-decoration: line-through;
+        }
+        .task-item.daily-completed .task-controls {
+            display: none;
+        }
+
+
+        /* Add/Remove Animation */
+        .task-item.adding {
+            animation: slideIn 0.4s ease forwards;
+        }
+
+        .task-item.removing {
+            animation: slideOut 0.4s ease forwards;
+        }
+
+        /* Completion Animation */
+        .task-item.completed {
+            animation: celebrate 0.8s ease-in-out forwards;
+        }
+        
+        .task-item .task-text {
+            flex-grow: 1;
+            font-size: 1.1rem;
+            font-weight: 700;
+            outline: none;
+            transition: all var(--transition-speed) ease;
+            margin-right: 1rem;
+            padding-bottom: 5px; 
+        }
+        
+        .task-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-left: auto; /* Push all controls to the right */
+            align-items: center;
+        }
+
+        .task-item .task-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .streak-counter {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-weight: 700;
+            margin-right: 1rem;
+            color: var(--accent-orange);
+        }
+        
+        .streak-counter svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /*
+        ==========================================================================
+        TIMER CLOCK BUTTON
+        ==========================================================================
+        */
+        .timer-clock-btn {
+            position: relative;
+        }
+
+        .timer-clock-btn .progress-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 32px; /* Slightly larger than icon */
+            height: 32px;
+        }
+
+        .timer-clock-btn .progress-ring-circle {
+            transition: stroke-dashoffset 0.5s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            stroke: var(--accent);
+            stroke-width: 3;
+            fill: transparent;
+        }
+        
+        /*
+        ==========================================================================
+        BUTTONS & CONTROLS
+        ==========================================================================
+        */
+        .btn {
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            font-family: var(--font-main);
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: all var(--transition-speed) ease;
+            --shadow-color: var(--accent); /* Buttons get accent colored shadows */
+            box-shadow: 4px 4px 0 var(--shadow-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+        }
+        
+        .btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 var(--shadow-color);
+        }
+
+        .btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--shadow-color);
+        }
+        
+        #settings-btn {
+            background-color: var(--surface);
+             --shadow-color: var(--shadow);
+        }
+
+
+        .btn.icon-btn {
+            padding: 0.5rem;
+            aspect-ratio: 1 / 1;
+        }
+        
+        .btn.icon-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--text);
+            stroke-width: var(--border-width);
+            transition: transform 0.2s ease;
+        }
+        
+        .btn.icon-btn:hover svg:not(.progress-ring) {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .complete-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: var(--border-width) solid var(--border);
+            cursor: pointer;
+            flex-shrink: 0;
+            margin-right: 1rem;
+            transition: all var(--transition-speed) ease;
+            position: relative;
+            background-color: var(--surface);
+        }
+        
+        .complete-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        .complete-btn.checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+        
+        .complete-btn.checked::after {
+            content: '✔';
+            color: var(--text-on-accent);
+            font-weight: 900;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .task-item.daily-completed .complete-btn {
+            pointer-events: none;
+        }
+        
+        /*
+        ==========================================================================
+        MODALS & PANELS (ADD TASK, SETTINGS)
+        ==========================================================================
+        */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity var(--transition-speed) ease, visibility 0s var(--transition-speed);
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+            transition-delay: 0s;
+        }
+        
+        .modal-content {
+            background-color: var(--bg);
+            border: var(--border-width) solid var(--border);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+            border-radius: var(--radius);
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            transform: scale(0.9) rotate(-3deg);
+            transition: transform var(--transition-speed) cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-overlay.visible .modal-content {
+            transform: scale(1) rotate(0deg);
+        }
+        
+        .modal-content h2 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            font-weight: 900;
+        }
+        
+        #new-task-input, #new-group-input {
+            width: 100%;
+            font-family: var(--font-main);
+            font-size: 1.1rem;
+            padding: 1rem;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            background: var(--surface);
+            color: var(--text);
+        }
+        #new-task-input:focus, #new-group-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 var(--border-width) var(--accent);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .modal-submit-btn {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+            --shadow-color: var(--shadow);
+        }
+        
+        .settings-group {
+            margin-bottom: 2rem;
+        }
+        .settings-group h3 {
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        
+        .settings-group .data-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .theme-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .color-options {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            background-color: rgba(0,0,0,0.04);
+            padding: 0.75rem;
+            border-radius: var(--radius);
+            border: var(--border-width) solid var(--border);
+        }
+
+        .dark-mode .color-options {
+            background-color: rgba(255,255,255,0.04);
+        }
+        
+        .theme-btn {
+            gap: 0.5rem;
+            --shadow-color: var(--shadow); /* Use normal shadow color */
+        }
+        .theme-btn svg {
+             width: 20px;
+             height: 20px;
+             stroke-width: var(--border-width);
+        }
+
+        .theme-btn.selected {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+        }
+        .theme-btn.selected svg {
+            stroke: var(--text-on-accent);
+        }
+        
+        .color-swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: var(--border-width) solid var(--border);
+            cursor: pointer;
+            transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+        }
+        
+        .color-swatch:hover {
+            transform: scale(1.1);
+        }
+
+        .color-swatch.selected {
+            box-shadow: 0 0 0 var(--border-width) var(--border);
+            transform: scale(1.1);
+        }
+        
+        /* Volume and Timer Slider Styles */
+        .volume-slider-container, .timer-slider-container {
+            padding-top: 0.5rem;
+        }
+        .timer-slider-container {
+            margin-bottom: 1.5rem;
+        }
+        .timer-slider-container label {
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        #timer-duration-display {
+            background: var(--surface);
+            padding: 0.25rem 0.5rem;
+            border-radius: calc(var(--radius) / 2);
+            border: var(--border-width) solid var(--border);
+        }
+
+        .timer-unit-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .timer-unit-btn {
+            --shadow-color: var(--shadow);
+            font-size: 0.9rem;
+            padding: 0.5rem 0.75rem;
+        }
+        .timer-unit-btn.selected {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: 50%;
+            margin-top: -5px; /* Vertically center thumb for new track height */
+            box-shadow: 4px 4px 0 var(--shadow);
+            transition: all var(--transition-speed) ease;
+        }
+        input[type="range"]::-moz-range-thumb {
+            height: 24px;
+            width: 24px;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            border-radius: 50%;
+            box-shadow: 4px 4px 0 var(--shadow);
+            transition: all var(--transition-speed) ease;
+        }
+        input[type="range"]:active::-webkit-slider-thumb {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--shadow);
+        }
+        input[type="range"]:active::-moz-range-thumb {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--shadow);
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 16px;
+            background: var(--accent);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+        }
+        input[type="range"]::-moz-range-track {
+            width: 100%;
+            height: 16px;
+            background: var(--accent);
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        /* Backup Modal */
+        #backup-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .backup-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            background-color: var(--surface);
+        }
+        
+        .backup-item .btn {
+            --shadow-color: var(--shadow);
+        }
+        
+        /*
+        ==========================================================================
+        CONFETTI & CELEBRATIONS
+        ==========================================================================
+        */
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+            animation: confetti-fall 2s ease-out forwards;
+        }
+        
+        .party-time-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            background: linear-gradient(-45deg, var(--accent-pink), var(--accent-blue), var(--accent-green), var(--accent-purple));
+            background-size: 400% 400%;
+            animation: party-bg 3s ease infinite, fade-out-party 1s 4s forwards;
+            opacity: 0.3;
+        }
+
+        @keyframes party-bg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes fade-out-party {
+            to { opacity: 0; }
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(150px) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        /*
+        ==========================================================================
+        ANIMATIONS
+        ==========================================================================
+        */
+        @keyframes grain {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-5%, -10%); }
+            20% { transform: translate(-15%, 5%); }
+            30% { transform: translate(7%, -25%); }
+            40% { transform: translate(-5%, 25%); }
+            50% { transform: translate(-15%, 10%); }
+            60% { transform: translate(15%, 0%); }
+            70% { transform: translate(0%, 15%); }
+            80% { transform: translate(3%, 35%); }
+            90% { transform: translate(-10%, 10%); }
+        }
+        
+        @keyframes shake { /* Overdue shake */
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+            40%, 60% { transform: translate3d(3px, 0, 0); }
+        }
+        @keyframes shake-light { /* Dragging shake */
+             0% { transform: rotate(0deg); }
+             25% { transform: rotate(0.5deg); }
+             50% { transform: rotate(0eg); }
+             75% { transform: rotate(-0.5deg); }
+             100% { transform: rotate(0deg); }
+        }
+
+        @keyframes levelUpPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2) rotate(-5deg); box-shadow: 0 0 25px var(--accent); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+                max-height: 0;
+                margin-bottom: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+                max-height: 100px; /* Base height */
+                margin-bottom: 1.5rem;
+                padding-top: 1rem;
+                padding-bottom: 1rem;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+                max-height: 100px;
+            }
+            to {
+                opacity: 0;
+                transform: translateX(20px);
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                margin-bottom: 0;
+            }
+        }
+        
+        @keyframes celebrate {
+            0% { transform: scale(1); }
+            20% { transform: scale(1.05) rotate(2deg); background-color: var(--accent); box-shadow: 0 0 20px var(--accent); }
+            40% { transform: scale(0.95) rotate(-2deg); }
+            60% { transform: scale(1.02); }
+            100% {
+                transform: translateX(100px) scale(0.5);
+                opacity: 0;
+                max-height: 0;
+                padding: 0;
+                margin-bottom: 0;
+                border-width: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="sticky-header">
+        <div class="header-content">
+            <h1 class="main-title">Procrasti-Nope</h1>
+            <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
+        </div>
+        <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+    </header>
+
+    <section class="player-progress-section">
+        <div class="level-display">LVL <span id="player-level">1</span></div>
+        <div class="xp-bar-container">
+            <div id="xp-bar" class="xp-bar"></div>
+            <span id="xp-text">0 / 100 XP</span>
+        </div>
+    </section>
+
+    <main class="container">
+        <div class="quests-layout">
+            <section class="task-group">
+                <header class="task-group-header">
+                    <h2>Daily Quests</h2>
+                    <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
+                </header>
+                <ul id="daily-task-list">
+                    <!-- Daily tasks will be dynamically inserted here -->
+                </ul>
+                <div id="no-daily-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
+                    <p>No daily quests yet. Add one to start your day!</p>
+                </div>
+            </section>
+
+            <section class="task-group">
+                <header class="task-group-header">
+                    <h2>Main Quests</h2>
+                    <div class="header-actions">
+                        <button id="add-standalone-task-btn" class="btn" aria-label="Add Quest">Add Quest</button>
+                        <button id="add-group-btn" class="btn" aria-label="Add Group">Add Group</button>
+                    </div>
+                </header>
+                <ul id="standalone-task-list">
+                    <!-- Standalone tasks will be dynamically inserted here -->
+                </ul>
+                <div id="general-task-list-container">
+                    <!-- General task groups will be dynamically inserted here -->
+                </div>
+                <div id="no-general-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
+                    <p>No main quests on your list. Create a group or add a quest to get started!</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Add Task Modal -->
+    <div id="add-task-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="add-task-modal-title">Add New Task</h2>
+            <form id="add-task-form">
+                <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-add-task" class="btn">Cancel</button>
+                    <button type="submit" class="btn modal-submit-btn">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Group Modal -->
+    <div id="add-group-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Create New Group</h2>
+            <form id="add-group-form">
+                <input type="text" id="new-group-input" placeholder="e.g., Project Overlord" required>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-add-group" class="btn">Cancel</button>
+                    <button type="submit" class="btn modal-submit-btn">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Timer Modal -->
+    <div id="timer-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Set Task Timer</h2>
+            <form id="timer-form">
+                <div class="timer-slider-container">
+                    <label for="timer-duration-slider">Duration: <span id="timer-duration-display">25</span></label>
+                    <input type="range" id="timer-duration-slider" min="1" max="100" value="25">
+                </div>
+                <div class="timer-unit-selector">
+                    <button type="button" class="btn timer-unit-btn" data-unit="seconds">Seconds</button>
+                    <button type="button" class="btn timer-unit-btn selected" data-unit="minutes">Minutes</button>
+                    <button type="button" class="btn timer-unit-btn" data-unit="hours">Hours</button>
+                    <button type="button" class="btn timer-unit-btn" data-unit="days">Days</button>
+                    <button type="button" class="btn timer-unit-btn" data-unit="weeks">Weeks</button>
+                    <button type="button" class="btn timer-unit-btn" data-unit="months">Months</button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-timer" class="btn">Cancel</button>
+                    <button type="submit" class="btn modal-submit-btn">Start Timer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="settings-group">
+                <h3>Theme</h3>
+                <div class="theme-options" id="theme-options-buttons">
+                    <button class="btn theme-btn" data-theme="light" aria-label="Light Theme">
+                        <svg class="sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        <span>Light</span>
+                    </button>
+                    <button class="btn theme-btn" data-theme="dark" aria-label="Dark Theme">
+                         <svg class="moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                        <span>Dark</span>
+                    </button>
+                    <button class="btn theme-btn" data-theme="system" aria-label="System Theme">
+                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        <span>System</span>
+                    </button>
+                </div>
+            </div>
+            <div class="settings-group">
+                <h3>Accent Color</h3>
+                <div class="color-options" id="color-options">
+                    <div class="color-swatch" data-color="var(--accent-red)" style="background-color: var(--accent-red);"></div>
+                    <div class="color-swatch" data-color="var(--accent-orange)" style="background-color: var(--accent-orange);"></div>
+                    <div class="color-swatch" data-color="var(--accent-amber)" style="background-color: var(--accent-amber);"></div>
+                    <div class="color-swatch" data-color="var(--accent-yellow)" style="background-color: var(--accent-yellow);"></div>
+                    <div class="color-swatch" data-color="var(--accent-lime)" style="background-color: var(--accent-lime);"></div>
+                    <div class="color-swatch" data-color="var(--accent-green)" style="background-color: var(--accent-green);"></div>
+                    <div class="color-swatch" data-color="var(--accent-teal)" style="background-color: var(--accent-teal);"></div>
+                    <div class="color-swatch" data-color="var(--accent-cyan)" style="background-color: var(--accent-cyan);"></div>
+                    <div class="color-swatch" data-color="var(--accent-blue)" style="background-color: var(--accent-blue);"></div>
+                    <div class="color-swatch" data-color="var(--accent-indigo)" style="background-color: var(--accent-indigo);"></div>
+                    <div class="color-swatch" data-color="var(--accent-purple)" style="background-color: var(--accent-purple);"></div>
+                    <div class="color-swatch" data-color="var(--accent-pink)" style="background-color: var(--accent-pink);"></div>
+                </div>
+            </div>
+            <div class="settings-group">
+                <h3>Sound Volume</h3>
+                <div class="volume-slider-container">
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.01" aria-label="Volume">
+                </div>
+            </div>
+             <div class="settings-group">
+                <h3>Data</h3>
+                <div class="data-actions">
+                    <button id="manage-backups-btn" class="btn">Manage Backups</button>
+                    <button id="reset-progress-btn" class="btn">Reset Progress</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="close-settings-btn" class="btn">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Backup Modal -->
+    <div id="backup-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Backups</h2>
+            <p style="margin-bottom: 1rem; opacity: 0.8;">Backups are saved automatically. You can restore your data to a previous point in time.</p>
+            <ul id="backup-list">
+                <!-- Backup items will be populated here -->
+            </ul>
+             <div class="modal-actions">
+                <button id="close-backup-btn" class="btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-text" style="margin-bottom: 1.5rem;">This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button type="button" id="confirm-cancel-btn" class="btn">Cancel</button>
+                <button type="submit" id="confirm-action-btn" class="btn modal-submit-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // =========================================================================
+            // STATE MANAGEMENT
+            // =========================================================================
+            let dailyTasks = JSON.parse(localStorage.getItem('dailyTasks')) || [];
+            let standaloneMainQuests = JSON.parse(localStorage.getItem('standaloneMainQuests')) || [];
+            let generalTaskGroups = JSON.parse(localStorage.getItem('generalTaskGroups')) || [];
+            let playerData = JSON.parse(localStorage.getItem('playerData')) || { level: 1, xp: 0 };
+            let settings = JSON.parse(localStorage.getItem('settings')) || {
+                theme: 'light',
+                accentColor: 'var(--accent-red)',
+                volume: 0.3
+            };
+            let currentListToAdd = null;
+            let currentEditingTaskId = null;
+            const activeTimers = {};
+
+            // Add default isExpanded property to legacy data
+            generalTaskGroups.forEach(group => {
+                if (typeof group.isExpanded === 'undefined') {
+                    group.isExpanded = false;
+                }
+            });
+            
+            // =========================================================================
+            // DOM ELEMENTS
+            // =========================================================================
+            const dailyTaskListContainer = document.getElementById('daily-task-list');
+            const standaloneTaskListContainer = document.getElementById('standalone-task-list');
+            const generalTaskListContainer = document.getElementById('general-task-list-container');
+            
+            const playerLevelEl = document.getElementById('player-level');
+            const xpBarEl = document.getElementById('xp-bar');
+            const xpTextEl = document.getElementById('xp-text');
+            const levelDisplayEl = document.querySelector('.level-display');
+
+            const addTaskTriggerBtnDaily = document.querySelector('.add-task-trigger-btn[data-list="daily"]');
+            const addStandaloneTaskBtn = document.getElementById('add-standalone-task-btn');
+            const addGroupBtn = document.getElementById('add-group-btn');
+            
+            const addTaskModal = document.getElementById('add-task-modal');
+            const addTaskModalTitle = document.getElementById('add-task-modal-title');
+            const addTaskForm = document.getElementById('add-task-form');
+            const newTaskInput = document.getElementById('new-task-input');
+            const cancelAddTaskBtn = document.getElementById('cancel-add-task');
+            
+            const addGroupModal = document.getElementById('add-group-modal');
+            const addGroupForm = document.getElementById('add-group-form');
+            const newGroupInput = document.getElementById('new-group-input');
+            const cancelAddGroupBtn = document.getElementById('cancel-add-group');
+            
+            const timerModal = document.getElementById('timer-modal');
+            const timerForm = document.getElementById('timer-form');
+            const timerDurationSlider = document.getElementById('timer-duration-slider');
+            const timerDurationDisplay = document.getElementById('timer-duration-display');
+            const timerUnitSelector = document.querySelector('.timer-unit-selector');
+            const cancelTimerBtn = document.getElementById('cancel-timer');
+
+            const settingsBtn = document.getElementById('settings-btn');
+            const settingsModal = document.getElementById('settings-modal');
+            const closeSettingsBtn = document.getElementById('close-settings-btn');
+            const themeOptionsButtons = document.getElementById('theme-options-buttons');
+            const colorOptions = document.getElementById('color-options');
+            const volumeSlider = document.getElementById('volume-slider');
+            const resetProgressBtn = document.getElementById('reset-progress-btn');
+            const manageBackupsBtn = document.getElementById('manage-backups-btn');
+            
+            const backupModal = document.getElementById('backup-modal');
+            const backupList = document.getElementById('backup-list');
+            const closeBackupBtn = document.getElementById('close-backup-btn');
+
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmActionBtn = document.getElementById('confirm-action-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+            const confirmTitle = document.getElementById('confirm-title');
+            const confirmText = document.getElementById('confirm-text');
+            
+            const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
+            const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
+            
+            const quoteEl = document.getElementById('quote-of-the-day');
+            
+            const audioCtx = window.AudioContext ? new AudioContext() : null;
+            let confirmCallback = null;
+            
+            // =========================================================================
+            // GAMEPLAY CONSTANTS & LOGIC
+            // =========================================================================
+            const XP_PER_TASK = 35;
+            const XP_PER_TIMER_MINUTE = 2;
+            const getXpForNextLevel = (level) => 50 + (level * 50);
+
+            const quotes = [
+                "The secret of getting ahead is getting started.",
+                "A year from now you may wish you had started today.",
+                "The future depends on what you do today."
+            ];
+
+            function showRandomQuote() {
+                quoteEl.textContent = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
+            }
+
+            const checkDailyReset = () => {
+                const today = new Date().toDateString();
+                const lastVisit = localStorage.getItem('lastVisitDate');
+
+                if (today !== lastVisit) {
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
+                    
+                    dailyTasks.forEach(task => {
+                        if (task.completedToday && task.lastCompleted === yesterday) {
+                            task.streak = (task.streak || 0) + 1;
+                        } else if (!task.completedToday) {
+                            task.streak = 0;
+                        }
+                        task.completedToday = false;
+                    });
+                    
+                    localStorage.setItem('lastVisitDate', today);
+                    saveState();
+                }
+            };
+
+            function addXp(amount) {
+                playerData.xp += Math.round(amount); // Round the amount being added
+
+                if (playerData.xp < 0) playerData.xp = 0; // Ensure XP doesn't go negative
+
+                const requiredXp = getXpForNextLevel(playerData.level);
+                if (playerData.xp >= requiredXp) {
+                    levelUp(requiredXp);
+                }
+
+                updateProgressUI();
+            }
+
+            function levelUp(requiredXp) {
+                playerData.level++;
+                playerData.xp -= requiredXp;
+                playSound('levelUp');
+                levelDisplayEl.classList.add('level-up');
+                levelDisplayEl.addEventListener('animationend', () => {
+                    levelDisplayEl.classList.remove('level-up');
+                }, { once: true });
+
+                const newRequiredXp = getXpForNextLevel(playerData.level);
+                if (playerData.xp >= newRequiredXp) {
+                    levelUp(newRequiredXp);
+                }
+            }
+
+            function updateProgressUI() {
+                const requiredXp = getXpForNextLevel(playerData.level);
+                const progressPercent = Math.min((playerData.xp / requiredXp) * 100, 100);
+                
+                playerLevelEl.textContent = playerData.level;
+                xpTextEl.textContent = `${Math.floor(playerData.xp)} / ${requiredXp} XP`;
+                xpBarEl.style.width = `${progressPercent}%`;
+            }
+
+            function checkOverdueTasks() {
+                const now = Date.now();
+                const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)];
+
+                allTasks.forEach(task => {
+                    const taskEl = document.querySelector(`.task-item[data-id="${task.id}"]`);
+                    if (!taskEl || task.completedToday) return;
+                    
+                    const isOverdue = (now - task.createdAt) > (24 * 60 * 60 * 1000);
+                    taskEl.classList.toggle('overdue', isOverdue);
+                });
+            }
+            
+            function checkAllTasksCompleted() {
+                const allDailiesDone = dailyTasks.length > 0 && dailyTasks.every(t => t.completedToday);
+                const noStandaloneQuests = standaloneMainQuests.length === 0;
+                const noGroupedQuests = generalTaskGroups.every(g => g.tasks.length === 0);
+                
+                return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
+            }
+
+
+            function playSound(type) {
+                if (!audioCtx || settings.volume === 0) return;
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                let baseVolume = settings.volume;
+                let decay = 0.2;
+
+                switch (type) {
+                    case 'complete':
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+                        break;
+                    case 'levelUp':
+                        oscillator.type = 'sawtooth';
+                        oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4);
+                        decay = 0.4;
+                        baseVolume *= 1.2; // Slightly louder
+                        break;
+                    case 'add': case 'addGroup':
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                        decay = 0.15;
+                        break;
+                    case 'delete':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+                        break;
+                    case 'hover':
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                        baseVolume *= 0.2; // Much quieter
+                        decay = 0.05;
+                        break;
+                    case 'toggle':
+                        oscillator.type = 'sawtooth';
+                        oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                        oscillator.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+                        decay = 0.1;
+                        break;
+                    case 'open':
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.setValueAtTime(250, audioCtx.currentTime);
+                        oscillator.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1);
+                        break;
+                    case 'close':
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.setValueAtTime(500, audioCtx.currentTime);
+                        oscillator.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1);
+                        break;
+                }
+
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(baseVolume, audioCtx.currentTime + 0.01);
+                oscillator.start(audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + decay);
+                oscillator.stop(audioCtx.currentTime + decay);
+            }
+
+            // =========================================================================
+            // RENDER FUNCTIONS
+            // =========================================================================
+            const renderDailyTasks = () => {
+                dailyTaskListContainer.innerHTML = '';
+                noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none';
+                dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily')));
+            };
+
+            const renderStandaloneTasks = () => {
+                standaloneTaskListContainer.innerHTML = '';
+                standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone')));
+            };
+
+            const renderGeneralTasks = () => {
+                generalTaskListContainer.innerHTML = '';
+                generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group)));
+                
+                const noQuests = standaloneMainQuests.length === 0 && generalTaskGroups.length === 0;
+                noGeneralTasksMessage.style.display = noQuests ? 'block' : 'none';
+            };
+
+            const createGroupElement = (group) => {
+                const groupWrapper = document.createElement('div');
+                groupWrapper.className = 'main-quest-group';
+                if (group.isExpanded) {
+                    groupWrapper.classList.add('expanded');
+                }
+                groupWrapper.dataset.groupId = group.id;
+                groupWrapper.innerHTML = `
+                    <header class="main-quest-group-header">
+                        <div class="group-title-container">
+                             <svg class="expand-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10 8L16 12L10 16V8Z" fill="var(--text)" stroke="var(--border)" stroke-width="var(--border-width)" stroke-linejoin="round"/>
+                             </svg>
+                            <h3>${group.name}</h3>
+                        </div>
+                        <div class="group-actions">
+                            <button class="btn icon-btn delete-group-btn" aria-label="Delete group">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                            <button class="btn add-task-to-group-btn" aria-label="Add task to this group">+</button>
+                        </div>
+                    </header>
+                    <ul class="task-list-group" data-group-id="${group.id}"></ul>
+                `;
+                const taskListUl = groupWrapper.querySelector('ul');
+                group.tasks.forEach(task => taskListUl.appendChild(createTaskElement(task, 'group')));
+                return groupWrapper;
+            };
+            
+            const createTaskElement = (task, type) => {
+                const li = document.createElement('li');
+                li.className = 'task-item';
+                li.dataset.id = task.id;
+
+                if (type === 'standalone') {
+                    li.classList.add('standalone-quest');
+                }
+
+                let streakCounterHTML = '';
+                if (type === 'daily' && task.streak > 0) {
+                    streakCounterHTML = `
+                        <div class="streak-counter" title="Current streak: ${task.streak} days">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg>
+                            <span>${task.streak}</span>
+                        </div>
+                    `;
+                }
+
+                li.innerHTML = `
+                    <button class="complete-btn" aria-label="Complete task"></button>
+                    ${streakCounterHTML}
+                    <span class="task-text" contenteditable="false">${task.text}</span>
+                    <div class="task-controls">
+                        <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <svg class="progress-ring" viewBox="0 0 24 24">
+                                <circle class="progress-ring-circle" r="10" cx="12" cy="12"/>
+                            </svg>
+                        </button>
+                        <div class="task-actions">
+                            <button class="btn icon-btn edit-btn" aria-label="Edit task">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            </button>
+                            <button class="btn icon-btn delete-btn" aria-label="Delete task">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
+                        </div>
+                    </div>`;
+
+                if (task.completedToday) {
+                    li.classList.add('daily-completed');
+                    li.querySelector('.complete-btn').classList.add('checked');
+                }
+                
+                // If a timer is active, show the slider and update it
+                if (task.timerStartTime && task.timerRemaining > 0) {
+                    updateTimerUI(task, li);
+                } else {
+                    // Ensure ring is hidden if no timer
+                    const ring = li.querySelector('.progress-ring-circle');
+                    if (ring) {
+                        ring.style.strokeDasharray = `0, 999`;
+                    }
+                }
+
+                return li;
+            };
+
+            // =========================================================================
+            // TASK & GROUP MANIPULATION
+            // =========================================================================
+            const addTask = (text, listTypeOrGroupId) => {
+                let newTask;
+                const commonProps = { id: Date.now().toString(), text, createdAt: Date.now() };
+                
+                if (listTypeOrGroupId === 'daily') {
+                    newTask = { ...commonProps, completedToday: false, lastCompleted: null, streak: 0 };
+                    dailyTasks.push(newTask);
+                } else if (listTypeOrGroupId === 'standalone') {
+                    newTask = { ...commonProps };
+                    standaloneMainQuests.push(newTask);
+                } else {
+                    newTask = { ...commonProps };
+                    const group = generalTaskGroups.find(g => g.id === listTypeOrGroupId);
+                    if (group) {
+                        group.tasks.push(newTask);
+                    }
+                }
+                
+                saveState();
+                renderAllLists();
+                const taskElement = document.querySelector(`.task-item[data-id="${newTask.id}"]`);
+                if(taskElement) taskElement.classList.add('adding');
+                playSound('add');
+            };
+
+            const addGroup = (name) => {
+                const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false };
+                generalTaskGroups.push(newGroup);
+                saveState();
+                renderGeneralTasks();
+                const groupElement = document.querySelector(`.main-quest-group[data-group-id="${newGroup.id}"]`);
+                if(groupElement) groupElement.classList.add('adding');
+                playSound('addGroup');
+            };
+
+            const deleteGroup = (groupId) => {
+                const groupName = generalTaskGroups.find(g => g.id === groupId)?.name || 'this group';
+                showConfirm(
+                    `Delete "${groupName}"?`,
+                    'All tasks within this group will also be permanently deleted.',
+                     () => {
+                        generalTaskGroups = generalTaskGroups.filter(g => g.id !== groupId);
+                        saveState();
+                        renderGeneralTasks();
+                        playSound('delete');
+                     }
+                );
+            };
+
+            const findTaskAndContext = (id) => {
+                let task = dailyTasks.find(t => t && t.id === id);
+                if (task) return { task, list: dailyTasks, type: 'daily' };
+
+                task = standaloneMainQuests.find(t => t && t.id === id);
+                if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
+
+                for (const group of generalTaskGroups) {
+                    if (group && group.tasks) {
+                        const taskIndex = group.tasks.findIndex(t => t && t.id === id);
+                        if (taskIndex !== -1) {
+                            return { task: group.tasks[taskIndex], list: group.tasks, group: group, type: 'group' };
+                        }
+                    }
+                }
+                return { task: null, list: null, type: null };
+            };
+
+            const deleteTask = (id) => {
+                stopTimer(id); // Stop timer if it's running for this task
+                const taskElement = document.querySelector(`.task-item[data-id="${id}"]`);
+                if (taskElement) {
+                    taskElement.classList.add('removing');
+                    taskElement.addEventListener('animationend', () => {
+                        const { list } = findTaskAndContext(id);
+                        if (list) {
+                            const index = list.findIndex(t => t.id === id);
+                            if(index > -1) list.splice(index, 1);
+                        }
+                        saveState();
+                        renderAllLists();
+                    }, { once: true });
+                    playSound('delete');
+                }
+            };
+            
+            const completeTask = (id) => {
+                stopTimer(id);
+                const { task, type, group } = findTaskAndContext(id);
+                if (!task) return;
+
+                const taskElement = document.querySelector(`.task-item[data-id="${id}"]`);
+                if (!taskElement) return;
+                
+                addXp(XP_PER_TASK);
+                playSound('complete');
+                
+                if (type === 'daily') {
+                    if(task.completedToday) return;
+                    task.completedToday = true;
+                    task.lastCompleted = new Date().toDateString();
+                    renderDailyTasks();
+                } else { 
+                    createConfetti(taskElement);
+                    taskElement.classList.add('completed');
+                    taskElement.addEventListener('animationend', () => {
+                        const { list, group: currentGroup } = findTaskAndContext(id); 
+                        if (list) {
+                            const taskIndex = list.findIndex(t => t.id === id);
+                            if (taskIndex > -1) list.splice(taskIndex, 1);
+                        }
+                        
+                        if (currentGroup && currentGroup.tasks.length === 0) {
+                            const groupEl = document.querySelector(`.main-quest-group[data-group-id="${currentGroup.id}"]`);
+                            if (groupEl) {
+                                groupEl.classList.add('removing');
+                                groupEl.addEventListener('animationend', () => {
+                                    const groupIndex = generalTaskGroups.findIndex(g => g.id === currentGroup.id);
+                                    if(groupIndex > -1) generalTaskGroups.splice(groupIndex, 1);
+                                    saveState();
+                                    renderAllLists();
+                                }, { once: true });
+                            }
+                        } else {
+                            saveState();
+                            renderAllLists();
+                        }
+
+                    }, { once: true });
+                }
+                
+                saveState();
+                
+                // Check for celebrations after state is saved and UI is about to update
+                const { allDailiesDone, allTasksDone } = checkAllTasksCompleted();
+                if (allTasksDone) {
+                    createFullScreenConfetti(true);
+                } else if (allDailiesDone) {
+                    createFullScreenConfetti(false);
+                }
+            };
+            
+            const uncompleteDailyTask = (id) => {
+                const task = dailyTasks.find(t => t.id === id);
+                if (task && task.completedToday) {
+                    task.completedToday = false;
+                    addXp(-XP_PER_TASK);
+                    playSound('delete');
+                    saveState();
+                    renderDailyTasks();
+                }
+            };
+
+
+            const editTask = (id, newText) => {
+                const { task } = findTaskAndContext(id);
+                if (task) {
+                    task.text = newText;
+                    saveState();
+                }
+            };
+            
+            // =========================================================================
+            // TIMER FUNCTIONS
+            // =========================================================================
+            function startTimer(taskId, durationMinutes) {
+                const { task } = findTaskAndContext(taskId);
+                if (!task) return;
+
+                stopTimer(taskId); // Clear any existing timer for this task
+
+                task.timerDuration = durationMinutes * 60;
+                task.timerRemaining = task.timerDuration;
+                task.timerStartTime = Date.now();
+                
+                const taskElement = document.querySelector(`.task-item[data-id="${taskId}"]`);
+                if (taskElement) taskElement.classList.add('timer-active');
+                updateTimerUI(task, taskElement);
+
+                activeTimers[taskId] = setInterval(() => {
+                    const elapsed = (Date.now() - task.timerStartTime) / 1000;
+                    task.timerRemaining = Math.max(0, task.timerDuration - elapsed);
+                    
+                    updateTimerUI(task, taskElement);
+
+                    if (task.timerRemaining <= 0) {
+                        playSound('levelUp');
+                        addXp(durationMinutes * XP_PER_TIMER_MINUTE); // Grant XP for completing timer
+                        completeTask(taskId); // This will stop the timer
+                    }
+                    saveState(); // Save progress continuously
+                }, 1000);
+
+                saveState();
+            }
+
+            function stopTimer(taskId) {
+                if (activeTimers[taskId]) {
+                    clearInterval(activeTimers[taskId]);
+                    delete activeTimers[taskId];
+
+                    const { task } = findTaskAndContext(taskId);
+                    if (task) {
+                        delete task.timerDuration;
+                        delete task.timerRemaining;
+                        delete task.timerStartTime;
+                        const taskElement = document.querySelector(`.task-item[data-id="${taskId}"]`);
+                         if (taskElement) {
+                            taskElement.classList.remove('timer-active');
+                            const ring = taskElement.querySelector('.progress-ring-circle');
+                            if (ring) {
+                                ring.style.strokeDasharray = `0, 999`;
+                            }
+                        }
+                        saveState();
+                    }
+                }
+            }
+
+            function updateTimerUI(task, taskElement) {
+                if (!taskElement) return;
+                const ring = taskElement.querySelector('.progress-ring-circle');
+                if (!ring) return;
+                
+                const radius = ring.r.baseVal.value;
+                const circumference = radius * 2 * Math.PI;
+                ring.style.strokeDasharray = `${circumference} ${circumference}`;
+
+                const progress = task.timerRemaining / task.timerDuration;
+                const offset = circumference - progress * circumference;
+                ring.style.strokeDashoffset = offset;
+            }
+
+            function resumeTimers() {
+                 const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)];
+                 allTasks.forEach(task => {
+                    if(task.timerStartTime && task.timerDuration) {
+                        const elapsed = (Date.now() - task.timerStartTime) / 1000;
+                        const remaining = task.timerDuration - elapsed;
+
+                        if (remaining > 0) {
+                            task.timerRemaining = remaining;
+                             // Restart timer logic
+                            startTimer(task.id, task.timerRemaining / 60);
+                        } else {
+                             addXp(task.timerDuration / 60 * XP_PER_TIMER_MINUTE);
+                             stopTimer(task.id);
+                             completeTask(task.id);
+                        }
+                    }
+                 });
+            }
+
+
+            // =========================================================================
+            // EVENT HANDLERS
+            // =========================================================================
+            document.querySelector('.quests-layout').addEventListener('click', (e) => {
+                const target = e.target;
+                const taskItem = target.closest('.task-item');
+                const groupItem = target.closest('.main-quest-group');
+                const groupHeader = target.closest('.main-quest-group-header');
+              
+                // Group actions (expansion and buttons)
+                if (groupHeader) {
+                    if (target.closest('.add-task-to-group-btn')) {
+                        currentListToAdd = groupItem.dataset.groupId;
+                        addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g => g.id === currentListToAdd).name}"`;
+                        openModal(addTaskModal);
+                        newTaskInput.focus();
+                        return;
+                    }
+                    if (target.closest('.delete-group-btn')) {
+                        deleteGroup(groupItem.dataset.groupId);
+                        return;
+                    }
+
+                    const groupId = groupItem.dataset.groupId;
+                    const group = generalTaskGroups.find(g => g.id === groupId);
+                    if (group) {
+                        group.isExpanded = !group.isExpanded;
+                        groupItem.classList.toggle('expanded', group.isExpanded);
+                        saveState();
+                    }
+                    return;
+                }
+
+                // Task item actions
+                if (taskItem) {
+                    const taskId = taskItem.dataset.id;
+                    currentEditingTaskId = taskId;
+                    
+                    if (taskItem.classList.contains('daily-completed')) {
+                        uncompleteDailyTask(taskId);
+                        return;
+                    }
+
+                    if (target.closest('.complete-btn')) completeTask(taskId);
+                    else if (target.closest('.delete-btn')) deleteTask(taskId);
+                    else if (target.closest('.timer-clock-btn')) {
+                        openModal(timerModal);
+                    }
+                    else if (target.closest('.edit-btn')) {
+                        const textSpan = taskItem.querySelector('.task-text');
+                        textSpan.contentEditable = true;
+                        textSpan.style.borderBottom = `2px solid ${settings.accentColor}`;
+                        textSpan.focus();
+                        document.execCommand('selectAll', false, null);
+                    }
+                } 
+            });
+
+            document.querySelector('.quests-layout').addEventListener('focusout', (e) => {
+                if (e.target.classList.contains('task-text') && e.target.isContentEditable) {
+                    const taskItem = e.target.closest('.task-item');
+                    e.target.contentEditable = false;
+                    e.target.style.borderBottom = "none";
+                    editTask(taskItem.dataset.id, e.target.textContent);
+                }
+            });
+            
+            document.querySelector('.quests-layout').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.target.classList.contains('task-text') && e.target.isContentEditable) {
+                    e.preventDefault();
+                    e.target.blur();
+                }
+            });
+            
+            addTaskForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const text = newTaskInput.value.trim();
+                if (text && currentListToAdd) {
+                    addTask(text, currentListToAdd);
+                    newTaskInput.value = '';
+                    closeModal(addTaskModal);
+                }
+            });
+
+            timerForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const durationValue = parseInt(timerDurationSlider.value, 10);
+                const selectedUnit = timerUnitSelector.querySelector('.selected').dataset.unit;
+
+                let durationInMinutes = 0;
+                switch (selectedUnit) {
+                    case 'seconds':
+                        durationInMinutes = durationValue / 60;
+                        break;
+                    case 'minutes':
+                        durationInMinutes = durationValue;
+                        break;
+                    case 'hours':
+                        durationInMinutes = durationValue * 60;
+                        break;
+                    case 'days':
+                        durationInMinutes = durationValue * 60 * 24;
+                        break;
+                    case 'weeks':
+                        durationInMinutes = durationValue * 60 * 24 * 7;
+                        break;
+                    case 'months':
+                        durationInMinutes = durationValue * 60 * 24 * 30; // Approximation
+                        break;
+                }
+
+                if(durationInMinutes > 0 && currentEditingTaskId) {
+                    startTimer(currentEditingTaskId, durationInMinutes);
+                    closeModal(timerModal);
+                    currentEditingTaskId = null;
+                }
+            });
+
+            timerDurationSlider.addEventListener('input', () => {
+                timerDurationDisplay.textContent = timerDurationSlider.value;
+            });
+
+            timerUnitSelector.addEventListener('click', (e) => {
+                const target = e.target.closest('.timer-unit-btn');
+                if (target) {
+                    timerUnitSelector.querySelector('.selected').classList.remove('selected');
+                    target.classList.add('selected');
+                    playSound('toggle');
+                }
+            });
+            
+            addGroupForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = newGroupInput.value.trim();
+                if (name) {
+                    addGroup(name);
+                    newGroupInput.value = '';
+                    closeModal(addGroupModal);
+                }
+            });
+            
+            const openModal = (modal) => {
+                modal.classList.add('visible');
+                playSound('open');
+            }
+            const closeModal = (modal) => {
+                modal.classList.remove('visible');
+                playSound('close');
+            }
+            
+            addTaskTriggerBtnDaily.addEventListener('click', () => {
+                currentListToAdd = 'daily';
+                addTaskModalTitle.textContent = 'Add Daily Quest';
+                openModal(addTaskModal);
+                newTaskInput.focus();
+            });
+            
+            addStandaloneTaskBtn.addEventListener('click', () => {
+                currentListToAdd = 'standalone';
+                addTaskModalTitle.textContent = 'Add Main Quest';
+                openModal(addTaskModal);
+                newTaskInput.focus();
+            });
+
+            addGroupBtn.addEventListener('click', () => {
+                openModal(addGroupModal);
+                newGroupInput.focus();
+            });
+            
+            cancelAddTaskBtn.addEventListener('click', () => closeModal(addTaskModal));
+            cancelAddGroupBtn.addEventListener('click', () => closeModal(addGroupModal));
+            cancelTimerBtn.addEventListener('click', () => closeModal(timerModal));
+            
+            settingsBtn.addEventListener('click', () => openModal(settingsModal));
+            closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+            
+            manageBackupsBtn.addEventListener('click', () => {
+                renderBackups();
+                openModal(backupModal);
+            });
+            closeBackupBtn.addEventListener('click', () => closeModal(backupModal));
+            
+            [addTaskModal, addGroupModal, settingsModal, confirmModal, backupModal, timerModal].forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) closeModal(modal);
+                });
+            });
+            
+            function showConfirm(title, text, callback) {
+                confirmTitle.textContent = title;
+                confirmText.textContent = text;
+                confirmCallback = callback;
+                openModal(confirmModal);
+            }
+            confirmActionBtn.addEventListener('click', () => {
+                if (confirmCallback) confirmCallback();
+                closeModal(confirmModal);
+            });
+            confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
+
+            // =========================================================================
+            // SETTINGS & BACKUPS
+            // =========================================================================
+            const applySettings = () => {
+                // Apply Accent Color
+                document.documentElement.style.setProperty('--accent', settings.accentColor);
+                
+                // Update Color Swatch UI
+                document.querySelectorAll('.color-swatch').forEach(swatch => {
+                    swatch.classList.toggle('selected', swatch.dataset.color === settings.accentColor);
+                });
+
+                // Apply Volume
+                if (typeof settings.volume === 'undefined') {
+                    settings.volume = 0.3; // Backwards compatibility
+                }
+                volumeSlider.value = settings.volume;
+
+                // Apply Theme
+                const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDarkMode = settings.theme === 'dark' || (settings.theme === 'system' && isSystemDark);
+                document.documentElement.classList.toggle('dark-mode', isDarkMode);
+
+                // Update Theme Button UI
+                 document.querySelectorAll('.theme-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+                const selectedBtn = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
+                if (selectedBtn) {
+                    selectedBtn.classList.add('selected');
+                }
+            };
+
+            themeOptionsButtons.addEventListener('click', (e) => {
+                const themeBtn = e.target.closest('.theme-btn');
+                if (themeBtn) {
+                    settings.theme = themeBtn.dataset.theme;
+                    saveState();
+                    applySettings();
+                    playSound('toggle');
+                }
+            });
+
+            colorOptions.addEventListener('click', (e) => {
+                if(e.target.classList.contains('color-swatch')) {
+                    settings.accentColor = e.target.dataset.color;
+                    saveState();
+                    applySettings();
+                }
+            });
+
+            volumeSlider.addEventListener('input', () => {
+                settings.volume = parseFloat(volumeSlider.value);
+                saveState();
+            });
+
+            // Play a sound on release to confirm the new volume
+            volumeSlider.addEventListener('change', () => {
+                 playSound('toggle');
+            });
+            
+            resetProgressBtn.addEventListener('click', () => {
+                 showConfirm('Reset all progress?', 'This will reset your level to 1, XP to 0, and clear all tasks and streaks. This cannot be undone.', () => {
+                    playerData = { level: 1, xp: 0 };
+                    dailyTasks = [];
+                    standaloneMainQuests = [];
+                    generalTaskGroups = [];
+                    saveState();
+                    updateProgressUI();
+                    renderAllLists();
+                    playSound('delete');
+                });
+            });
+            
+            document.body.addEventListener('mouseover', e => {
+                const triggerElement = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title');
+                if (!triggerElement) return;
+
+                // This check prevents the sound from re-triggering when moving between child elements of the button.
+                if (e.relatedTarget && triggerElement.contains(e.relatedTarget)) {
+                    return;
+                }
+                
+                playSound('hover');
+            });
+            
+            function createBackup() {
+                const backups = JSON.parse(localStorage.getItem('backups')) || [];
+                const currentState = {
+                    dailyTasks,
+                    standaloneMainQuests,
+                    generalTaskGroups,
+                    playerData,
+                    timestamp: Date.now()
+                };
+                
+                backups.push(currentState);
+                if (backups.length > 30) {
+                    backups.shift(); // Remove the oldest
+                }
+                
+                localStorage.setItem('backups', JSON.stringify(backups));
+                localStorage.setItem('lastBackupTime', Date.now().toString());
+            }
+
+            function restoreFromBackup(backupIndex) {
+                 const backups = JSON.parse(localStorage.getItem('backups')) || [];
+                 const backup = backups[backupIndex];
+                 if (backup) {
+                    showConfirm('Restore Backup?', `This will overwrite your current progress with the data from ${new Date(backup.timestamp).toLocaleString()}. Are you sure?`, () => {
+                        dailyTasks = backup.dailyTasks || [];
+                        standaloneMainQuests = backup.standaloneMainQuests || [];
+                        generalTaskGroups = backup.generalTaskGroups || [];
+                        playerData = backup.playerData || { level: 1, xp: 0 };
+                        saveState();
+                        init(); // Full re-initialization
+                        closeModal(backupModal);
+                    });
+                 }
+            }
+            
+            function renderBackups() {
+                const backups = JSON.parse(localStorage.getItem('backups')) || [];
+                backupList.innerHTML = '';
+                if (backups.length === 0) {
+                    backupList.innerHTML = '<p>No backups found yet.</p>';
+                    return;
+                }
+                
+                backups.slice().reverse().forEach((backup, index) => {
+                    const originalIndex = backups.length - 1 - index;
+                    const li = document.createElement('li');
+                    li.className = 'backup-item';
+                    const date = new Date(backup.timestamp);
+                    li.innerHTML = `
+                        <span>${date.toLocaleDateString()} - ${date.toLocaleTimeString()}</span>
+                        <button class="btn restore-btn" data-index="${originalIndex}">Restore</button>
+                    `;
+                    backupList.appendChild(li);
+                });
+            }
+
+            backupList.addEventListener('click', e => {
+                if (e.target.classList.contains('restore-btn')) {
+                    const index = parseInt(e.target.dataset.index, 10);
+                    restoreFromBackup(index);
+                }
+            });
+
+
+            // =========================================================================
+            // DRAG & DROP
+            // =========================================================================
+            function initSortable() {
+                 const sortableOptions = {
+                    animation: 150,
+                    group: 'tasks',
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: (evt) => {
+                        document.body.classList.remove('is-dragging');
+                        // General reorder logic is complex due to multiple lists, handle specific cases below
+                    }
+                 };
+
+                 new Sortable(dailyTaskListContainer, { ...sortableOptions, onEnd: (evt) => {
+                    document.body.classList.remove('is-dragging');
+                    reorderList(dailyTasks, evt.oldIndex, evt.newIndex);
+                 }});
+                 new Sortable(standaloneTaskListContainer, { ...sortableOptions, onEnd: (evt) => {
+                    document.body.classList.remove('is-dragging');
+                    reorderList(standaloneMainQuests, evt.oldIndex, evt.newIndex);
+                 }});
+                 
+                 new Sortable(generalTaskListContainer, {
+                    animation: 150,
+                    handle: '.main-quest-group-header',
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: (evt) => {
+                        document.body.classList.remove('is-dragging');
+                        reorderList(generalTaskGroups, evt.oldIndex, evt.newIndex)
+                    }
+                 });
+
+                document.querySelectorAll('.task-list-group').forEach(list => {
+                    new Sortable(list, { ...sortableOptions, onEnd: (evt) => {
+                       document.body.classList.remove('is-dragging');
+                       const groupId = evt.to.dataset.groupId;
+                       const group = generalTaskGroups.find(g => g.id === groupId);
+                       if (group) {
+                            reorderList(group.tasks, evt.oldIndex, evt.newIndex);
+                       }
+                    }});
+                });
+            }
+            
+            function reorderList(list, oldIndex, newIndex) {
+                if (oldIndex === newIndex) return;
+                const [movedItem] = list.splice(oldIndex, 1);
+                list.splice(newIndex, 0, movedItem);
+                saveState();
+            }
+
+            // =========================================================================
+            // CONFETTI & CELEBRATIONS
+            // =========================================================================
+            function createConfetti(element) {
+                const rect = element.getBoundingClientRect();
+                createFullScreenConfetti(false, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+            }
+            
+            function createFullScreenConfetti(isPartyMode, origin = null) {
+                const particleCount = isPartyMode ? 200 : 100;
+                const colors = ['var(--accent-pink)', 'var(--accent-blue)', 'var(--accent-green)', 'var(--accent-orange)', 'var(--accent-purple)'];
+
+                for (let i = 0; i < particleCount; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    
+                    const startX = origin ? origin.x : Math.random() * window.innerWidth;
+                    const startY = origin ? origin.y : -20;
+
+                    confetti.style.left = `${startX}px`;
+                    confetti.style.top = `${startY}px`;
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    
+                    document.body.appendChild(confetti);
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const velocity = 50 + Math.random() * 100;
+                    const endX = Math.cos(angle) * velocity * (Math.random() * 5);
+                    const endY = (Math.sin(angle) * velocity) + (window.innerHeight - startY);
+
+
+                    confetti.animate([
+                        { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+                        { transform: `translate(${endX}px, ${endY}px) rotate(${Math.random() * 720}deg)`, opacity: 0 }
+                    ], {
+                        duration: 3000 + Math.random() * 2000,
+                        easing: 'cubic-bezier(0.1, 0.5, 0.5, 1)'
+                    }).onfinish = () => confetti.remove();
+                }
+
+                if (isPartyMode) {
+                    const overlay = document.createElement('div');
+                    overlay.className = 'party-time-overlay';
+                    document.body.appendChild(overlay);
+                    setTimeout(() => overlay.remove(), 5000);
+                }
+            }
+
+
+            // =========================================================================
+            // INITIALIZATION
+            // =========================================================================
+            const saveState = () => {
+                localStorage.setItem('dailyTasks', JSON.stringify(dailyTasks));
+                localStorage.setItem('standaloneMainQuests', JSON.stringify(standaloneMainQuests));
+                localStorage.setItem('generalTaskGroups', JSON.stringify(generalTaskGroups));
+                localStorage.setItem('playerData', JSON.stringify(playerData));
+                localStorage.setItem('settings', JSON.stringify(settings));
+            };
+
+            const renderAllLists = () => {
+                renderDailyTasks();
+                renderStandaloneTasks();
+                renderGeneralTasks();
+                checkOverdueTasks();
+                initSortable();
+            };
+
+            const init = () => {
+                checkDailyReset();
+                
+                const lastBackupTime = parseInt(localStorage.getItem('lastBackupTime'), 10);
+                if (!lastBackupTime || (Date.now() - lastBackupTime > 30 * 60 * 1000)) {
+                    createBackup();
+                }
+                setInterval(createBackup, 30 * 60 * 1000);
+
+                // Listen for system theme changes
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
+
+                showRandomQuote();
+                applySettings();
+                updateProgressUI();
+                renderAllLists();
+                resumeTimers();
+                setInterval(checkOverdueTasks, 60 * 1000);
+            };
+
+            init();
+        });
+    </script>
+</body>
+</html>
+
