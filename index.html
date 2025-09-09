@@ -2147,6 +2147,7 @@
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
             let confirmCallback = null;
+            let debouncedSave = null;
 
             async function promptForUsernameIfNeeded() {
                 if (!user) return; // Not for guests
@@ -2227,7 +2228,18 @@
                     await window.firebaseSDK.setDoc(userDocRef, { appData: data }, { merge: true });
                 } catch (error) { console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); }
             }
-            
+
+            // Debounce function to limit write operations
+            function debounce(func, delay) {
+                let timeoutId;
+                return function(...args) {
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => {
+                        func.apply(this, args);
+                    }, delay);
+                };
+            }
+
             function loadAndDisplayData(data) {
                 dailyTasks = data.dailyTasks || [];
                 standaloneMainQuests = data.standaloneMainQuests || [];
@@ -2379,7 +2391,7 @@
                 let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
                 let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
                 li.innerHTML = `<button class="complete-btn"></button>
-                    <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
+                    <div class="task-content">${streakHTML}<span class="task-text" contenteditable="true" data-initial-text="${task.text}">${task.text}</span>${goalHTML}</div>
                     <div class="task-buttons-wrapper">
                         <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                         <div class="task-actions">
@@ -2404,7 +2416,70 @@
                 }
                 return li;
             };
-            const saveState = () => { const data = { dailyTasks, standaloneMainQuests, generalTaskGroups, playerData, settings }; saveData(data); };
+            
+            // Centralized save function with batching logic for completion and other updates
+            const saveState = async (update = null) => {
+                const data = { dailyTasks, standaloneMainQuests, generalTaskGroups, playerData, settings };
+                
+                if (!user) {
+                    localStorage.setItem('anonymousUserData', JSON.stringify(data));
+                    return;
+                }
+                
+                try {
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    
+                    if (update) {
+                         const batch = window.firebaseSDK.writeBatch(db);
+                         const userDoc = await window.firebaseSDK.getDoc(userDocRef);
+                         const existingAppData = userDoc.exists() ? userDoc.data().appData : {};
+                         const updatedAppData = { ...existingAppData, ...data };
+                         batch.set(userDocRef, { appData: updatedAppData });
+                         
+                         // Check for completed tasks and delete them from their original lists
+                         if (update.completedTasks && update.completedTasks.length > 0) {
+                            const updatedGeneralTasks = JSON.parse(JSON.stringify(generalTaskGroups));
+                            const updatedStandaloneTasks = JSON.parse(JSON.stringify(standaloneMainQuests));
+                            update.completedTasks.forEach(completedId => {
+                                let found = false;
+                                // Check standalone tasks first
+                                const standaloneIndex = updatedStandaloneTasks.findIndex(t => t.id === completedId);
+                                if (standaloneIndex !== -1) {
+                                    updatedStandaloneTasks.splice(standaloneIndex, 1);
+                                    found = true;
+                                }
+
+                                // If not found, check grouped tasks
+                                if (!found) {
+                                    for (const group of updatedGeneralTasks) {
+                                        const taskIndex = group.tasks.findIndex(t => t.id === completedId);
+                                        if (taskIndex !== -1) {
+                                            group.tasks.splice(taskIndex, 1);
+                                            // If the group is now empty, consider deleting it (optional, but good for quota)
+                                            // For this app, we'll leave the empty group for user to add new tasks
+                                            break;
+                                        }
+                                    }
+                                }
+                            });
+                            // Update the main app data with the removals
+                            updatedAppData.standaloneMainQuests = updatedStandaloneTasks;
+                            updatedAppData.generalTaskGroups = updatedGeneralTasks;
+
+                            batch.set(userDocRef, { appData: updatedAppData });
+                         }
+                         await batch.commit();
+
+                    } else {
+                        await window.firebaseSDK.setDoc(userDocRef, { appData: data }, { merge: true });
+                    }
+
+                } catch (error) { console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); }
+            };
+
+            // Use a debounce function for saves that happen on quick-fire events like text input
+            debouncedSave = debounce(saveState, 500);
+
             const addTask = (text, list, goal) => {
                 const common = { id: Date.now().toString(), text, createdAt: Date.now() };
                 if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()) });
@@ -2439,7 +2514,7 @@
                     const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
                     if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
                 }
-                saveState();
+                saveState({ completedTasks: [id] });
                 renderAllLists();
                 const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
@@ -2633,6 +2708,18 @@
                         }
                     }
                 } 
+            });
+
+            // Use debounce for contenteditable input to reduce writes
+            document.querySelector('.quests-layout').addEventListener('input', (e) => {
+                const taskTextEl = e.target.closest('.task-text');
+                if (!taskTextEl) return;
+                const id = taskTextEl.closest('.task-item').dataset.id;
+                const { task } = findTaskAndContext(id);
+                if (task) {
+                    task.text = taskTextEl.textContent;
+                    debouncedSave();
+                }
             });
 
             addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
@@ -3193,4 +3280,3 @@
     </script>
 </body>
 </html>
-
