@@ -3828,32 +3828,47 @@
                 const errorEl = container.querySelector('.login-error');
                 errorEl.textContent = '';
 
+                let emailToLogin = loginInput; // Initialize with the input value
+
                 try {
-                    let emailToLogin = loginInput;
                     if (!loginInput.includes('@')) {
                         const username = loginInput.trim().toLowerCase();
-                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+                        // Firestore lookup for username to email
+                        try {
+                            const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                            const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
-                        if (!usernameSnap.exists()) {
-                            errorEl.textContent = "User not found.";
-                            return;
+                            if (!usernameSnap.exists()) {
+                                errorEl.textContent = "User not found.";
+                                return;
+                            }
+                            const userId = usernameSnap.data().userId;
+                            const userDocRef = window.firebaseSDK.doc(db, "users", userId);
+                            const userSnap = await window.firebaseSDK.getDoc(userDocRef);
+                            
+                            if (!userSnap.exists() || !userSnap.data().email) {
+                                errorEl.textContent = "Could not find email for this user.";
+                                return;
+                            }
+                            emailToLogin = userSnap.data().email;
+                        } catch (lookupError) {
+                            // Specific error handling for Firestore lookup permission issues during username login
+                            if (lookupError.code === 'permission-denied' || (lookupError.message && lookupError.message.toLowerCase().includes("missing or insufficient permissions"))) {
+                                errorEl.textContent = "Permission Denied! To login with username, Firestore Security Rules must allow public read access for 'usernames' and 'users' collections (specifically the email field).";
+                                return;
+                            }
+                            // Re-throw other lookup errors to be handled by the outer catch
+                            throw lookupError; 
                         }
-                        const userId = usernameSnap.data().userId;
-                        const userDocRef = window.firebaseSDK.doc(db, "users", userId);
-                        const userSnap = await window.firebaseSDK.getDoc(userDocRef);
-                        
-                        if (!userSnap.exists() || !userSnap.data().email) {
-                            errorEl.textContent = "Could not find email for this user.";
-                            return;
-                        }
-                        emailToLogin = userSnap.data().email;
                     }
 
+                    // Attempt Firebase Auth sign-in
                     const userCredential = await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
                     await handleSignInSuccess(userCredential.user);
                     onSuccess();
-                } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
+                } catch (authError) {
+                    errorEl.textContent = getCoolErrorMessage(authError);
+                }
             });
             const googleBtnContainer = container.querySelector('.google-signin-btn-container');
             if (googleBtnContainer) {
