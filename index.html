@@ -279,6 +279,13 @@
                 opacity: 1;
                 pointer-events: auto;
             }
+
+            .task-item.daily-completed {
+                justify-content: center;
+            }
+             .task-item.daily-completed .task-content {
+                flex-grow: 0;
+            }
         }
         
         /*
@@ -1041,7 +1048,7 @@
             overflow-y: auto;
         }
 
-        #account-modal .modal-content {
+        #account-modal .modal-content, #username-modal .modal-content {
             max-width: 400px;
             padding: 1.5rem;
         }
@@ -1056,7 +1063,7 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal, #edit-task-input, #edit-task-weekly-goal {
+        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal, #edit-task-input, #edit-task-weekly-goal, #new-username-input {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
@@ -1071,7 +1078,7 @@
              margin-bottom: 1rem;
         }
 
-        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus, #edit-task-input:focus, #edit-task-weekly-goal:focus {
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus, #edit-task-input:focus, #edit-task-weekly-goal:focus, #new-username-input:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
@@ -1677,6 +1684,20 @@
     <div id="account-modal" class="modal-overlay">
         <div class="modal-content"></div>
     </div>
+
+    <div id="username-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Choose your Username</h2>
+            <p style="margin-bottom: 1.5rem;">This will be your unique name. It cannot be changed later!</p>
+            <form id="username-form">
+                <input type="text" id="new-username-input" placeholder="e.g., QuestMaster" required minlength="3" maxlength="15">
+                <p class="error-message username-error"></p>
+                <div class="modal-actions" style="justify-content: flex-end;">
+                    <button type="submit" class="btn modal-submit-btn">Save Username</button>
+                </div>
+            </form>
+        </div>
+    </div>
     
     <div id="timer-menu-modal" class="modal-overlay">
         <div class="modal-content" style="max-width: 350px;">
@@ -1706,6 +1727,7 @@
             <button class="toggle-btn" data-tab="login">Login</button>
         </div>
         <form class="auth-form" data-form="signup">
+            <div class="form-group"><label for="signup-username">Username</label><input type="text" class="signup-username" required minlength="3" maxlength="15"></div>
             <div class="form-group"><label for="signup-email">Email</label><input type="email" class="signup-email" required></div>
             <div class="form-group"><label for="signup-password">Password</label><input type="password" class="signup-password" required></div>
             <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Create Account</button>
@@ -1775,20 +1797,40 @@
                 
                 currentUser = user;
                 
-                if (user || sessionStorage.getItem('isGuest')) {
-                    if (!appController) {
-                        appController = await initializeAppLogic(user); 
+                if (user) {
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+
+                    if (!docSnap.exists() || !docSnap.data().username) {
+                         if (!appController) {
+                            // Pass a stub to prevent full initialization
+                            appController = await initializeAppLogic({ uid: user.uid, isPartial: true });
+                        }
+                        appController.promptForUsername(docSnap.exists() ? docSnap.data().appData : null);
+                        loaderOverlay.style.display = 'none';
                     } else {
-                        await appController.updateUser(user);
+                        if (!appController || appController.isPartial) {
+                            appController = await initializeAppLogic(user); 
+                        } else {
+                            await appController.updateUser(user);
+                        }
+                        landingPage.style.display = 'none';
+                        appWrapper.style.display = 'block';
+                        loaderOverlay.style.display = 'none';
                     }
-                    landingPage.style.display = 'none';
-                    appWrapper.style.display = 'block';
-                    loaderOverlay.style.display = 'none';
-                } else {
-                    loaderOverlay.style.display = 'none';
-                    landingPage.style.display = 'flex';
-                    appWrapper.style.display = 'none';
-                    appController = null; 
+                } else { // No user / Guest
+                     if (sessionStorage.getItem('isGuest')) {
+                        if (!appController) appController = await initializeAppLogic(null);
+                        landingPage.style.display = 'none';
+                        appWrapper.style.display = 'block';
+                        loaderOverlay.style.display = 'none';
+                    } else {
+                        loaderOverlay.style.display = 'none';
+                        landingPage.style.display = 'flex';
+                        appWrapper.style.display = 'none';
+                        if(appController) appController.shutdown();
+                        appController = null;
+                    }
                 }
             });
         } catch (err) {
@@ -1804,7 +1846,8 @@
 
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
-            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply();
+            // This will trigger the onAuthStateChanged logic for guests
+            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply(null, [null]);
         });
 
         document.getElementById('landing-login-btn').addEventListener('click', () => {
@@ -1833,6 +1876,45 @@
         
         // --- MAIN APPLICATION LOGIC ---
         async function initializeAppLogic(initialUser) {
+            // If this is a partial init just for the username prompt, return a limited interface
+            if (initialUser && initialUser.isPartial) {
+                const usernameModal = document.getElementById('username-modal');
+                const usernameForm = document.getElementById('username-form');
+                const newUsernameInput = document.getElementById('new-username-input');
+                const usernameErrorEl = usernameModal.querySelector('.username-error');
+
+                const promptForUsername = (existingData) => {
+                    openModal(usernameModal);
+                    newUsernameInput.focus();
+
+                    usernameForm.onsubmit = async (e) => {
+                        e.preventDefault();
+                        const username = newUsernameInput.value.trim();
+                        if (!username) return;
+
+                        const userDocRef = window.firebaseSDK.doc(db, "users", initialUser.uid);
+                        try {
+                            // Here you might add a check to see if username is already taken
+                            await window.firebaseSDK.setDoc(userDocRef, { 
+                                username: username, 
+                                appData: existingData || {}
+                            }, { merge: true });
+                            
+                            closeModal(usernameModal);
+                            // Re-trigger auth state change to fully load the app
+                            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply(null, [auth.currentUser]);
+                        } catch (error) {
+                            usernameErrorEl.textContent = getCoolErrorMessage(error);
+                        }
+                    };
+                };
+                 const openModal = (modal) => { modal.classList.add('visible'); };
+                 const closeModal = (modal) => { modal.classList.remove('visible'); };
+
+                return { promptForUsername, isPartial: true };
+            }
+
+
             let user = initialUser;
             
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
@@ -1923,7 +2005,7 @@
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
-                applySettings(); // Apply settings first to avoid visual flash
+                applySettings();
                 renderAllLists();
                 updateProgressUI();
             }
@@ -1940,8 +2022,8 @@
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     let isFirstLoad = true;
                     unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
-                        if (docSnap.exists()) {
-                            loadAndDisplayData(docSnap.data().appData || {});
+                        if (docSnap.exists() && docSnap.data().appData) {
+                            loadAndDisplayData(docSnap.data().appData);
                         } else {
                             loadAndDisplayData({});
                         }
@@ -2087,7 +2169,15 @@
                 if (task.timerStartTime && task.timerDuration) {
                     const elapsed = (Date.now() - task.timerStartTime) / 1000;
                     const remaining = Math.max(0, task.timerDuration - elapsed);
-                    if (remaining > 0) li.classList.add('timer-active');
+                    if (remaining > 0) {
+                        li.classList.add('timer-active');
+                        const ring = li.querySelector('.progress-ring-circle');
+                        if (ring) {
+                            const r = 10;
+                            const c = r * 2 * Math.PI;
+                            ring.style.strokeDasharray = `${c} ${c}`;
+                        }
+                    }
                 }
                 return li;
             };
@@ -2419,7 +2509,7 @@
                 }
                 if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
             }
-            const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); };
+            const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); resumeTimers(); };
             
             settingsLoginBtn.addEventListener('click', () => {
                 const accountModalContent = accountModal.querySelector('.modal-content');
@@ -2454,6 +2544,10 @@
             await loadUserSession();
 
             return {
+                isPartial: false,
+                shutdown: () => {
+                     Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+                },
                 updateUser: async (newUser) => {
                     user = newUser;
                     await loadUserSession();
@@ -2494,7 +2588,6 @@
             if (!guestDataString) return cloudData;
             try {
                 const guestData = JSON.parse(guestDataString);
-                console.log("Merging guest data with cloud data...");
                 const mergedData = JSON.parse(JSON.stringify(cloudData));
                 const mergeTasks = (cloudTasks = [], guestTasks = []) => {
                     const existingTexts = new Set(cloudTasks.map(t => t.text));
@@ -2535,13 +2628,13 @@
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 let finalData = {};
-                if (docSnap.exists()) {
+                if (docSnap.exists() && docSnap.data().appData) {
                     finalData = mergeGuestDataWithCloud(docSnap.data().appData);
                 } else {
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     finalData = guestDataString ? JSON.parse(guestDataString) : {};
                 }
-                await window.firebaseSDK.setDoc(userDocRef, { appData: finalData });
+                await window.firebaseSDK.setDoc(userDocRef, { appData: finalData }, { merge: true });
                 localStorage.removeItem('anonymousUserData');
                 sessionStorage.removeItem('isGuest');
             }
@@ -2563,11 +2656,14 @@
                 e.preventDefault();
                 const email = container.querySelector('.signup-email').value;
                 const password = container.querySelector('.signup-password').value;
+                const username = container.querySelector('.signup-username').value.trim();
                 const errorEl = container.querySelector('.signup-error');
                 errorEl.textContent = '';
                 try {
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
                     await handleSignInSuccess(userCredential.user);
+                    const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
+                    await window.firebaseSDK.setDoc(userDocRef, { username: username }, { merge: true });
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
