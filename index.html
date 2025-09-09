@@ -25,7 +25,7 @@
             reauthenticateWithCredential,
             EmailAuthProvider,
             updatePassword,
-            verifyBeforeUpdateEmail,
+            updateEmail,
             fetchSignInMethodsForEmail
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -38,7 +38,8 @@
             collection,
             query,
             where,
-            getDocs
+            getDocs,
+            updateDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -54,7 +55,7 @@
             reauthenticateWithCredential,
             EmailAuthProvider,
             updatePassword,
-            verifyBeforeUpdateEmail,
+            updateEmail,
             fetchSignInMethodsForEmail,
             getFirestore,
             doc,
@@ -65,7 +66,8 @@
             collection,
             query,
             where,
-            getDocs
+            getDocs,
+            updateDoc
         };
     </script>
     
@@ -1798,11 +1800,16 @@
                 <form id="update-email-form" class="auth-form" style="margin-top: 2rem;">
                      <div class="settings-group">
                         <h3>Change Email</h3>
+                         <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">You will be asked to confirm your current password again.</p>
+                        <div class="form-group">
+                            <label for="update-email-password">Current Password</label>
+                            <input type="password" id="update-email-password" required>
+                        </div>
                         <div class="form-group">
                             <label for="update-email-input">New Email</label>
                             <input type="email" id="update-email-input" required>
                         </div>
-                        <button type="submit" class="btn modal-submit-btn">Send Verification Email</button>
+                        <button type="submit" class="btn modal-submit-btn">Update Email</button>
                         <p class="error-message" id="update-email-error"></p>
                         <p class="success-message" id="update-email-success"></p>
                     </div>
@@ -2094,8 +2101,8 @@
                             }, { merge: true });
                             await batch.commit();
                             
-                            closeModal(usernameModal);
-                            window.location.reload();
+                            // This was causing the loop, onAuthStateChanged will handle the UI transition
+                            // window.location.reload(); 
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
                         }
@@ -2244,11 +2251,12 @@
                 if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    manageAccountBtn.style.display = user.providerData.some(p => p.providerId === 'password') ? 'inline-flex' : 'none';
+                    // Show manage account button for BOTH password and google users
+                    manageAccountBtn.style.display = 'inline-flex';
 
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-                    const username = docSnap.exists() ? docSnap.data().username : user.email;
+                    const username = docSnap.exists() && docSnap.data().username ? docSnap.data().username : user.email;
 
                     userDisplay.textContent = `Logged in as: ${username}`;
                     userDisplay.style.display = 'flex';
@@ -2661,14 +2669,34 @@
             importDataBtn.addEventListener('click', () => importFileInput.click());
             importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
             document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
+            
             manageAccountBtn.addEventListener('click', () => {
-                openModal(manageAccountModal);
+                const reauthContainer = manageAccountModal.querySelector('#reauth-container');
+                const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
+                const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
+
                 // Reset form state every time it's opened
-                manageAccountModal.querySelector('#reauth-container').style.display = 'block';
-                manageAccountModal.querySelector('#manage-forms-container').style.display = 'none';
                 manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
                 manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
+
+                if (isGoogleUser) {
+                    reauthContainer.style.display = 'none';
+                    manageFormsContainer.style.display = 'block';
+                    // Hide options not applicable to Google users
+                    manageAccountModal.querySelector('#update-email-form').style.display = 'none';
+                    manageAccountModal.querySelector('#update-password-form').style.display = 'none';
+                    manageAccountModal.querySelector('#update-username-form').style.display = 'block';
+                } else {
+                    reauthContainer.style.display = 'block';
+                    manageFormsContainer.style.display = 'none';
+                    // Ensure all forms are potentially visible after re-auth
+                    manageAccountModal.querySelector('#update-email-form').style.display = 'block';
+                    manageAccountModal.querySelector('#update-password-form').style.display = 'block';
+                    manageAccountModal.querySelector('#update-username-form').style.display = 'block';
+                }
+                openModal(manageAccountModal);
             });
+
 
             const reauthForm = document.getElementById('reauth-form');
             reauthForm.addEventListener('submit', async(e) => {
@@ -2698,14 +2726,32 @@
             updateEmailForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const newEmail = document.getElementById('update-email-input').value;
+                const password = document.getElementById('update-email-password').value;
                 const errorEl = document.getElementById('update-email-error');
                 const successEl = document.getElementById('update-email-success');
                 errorEl.textContent = '';
                 successEl.textContent = '';
 
+                if (!password) {
+                    errorEl.textContent = 'Please enter your current password.';
+                    return;
+                }
+
                 try {
-                    await window.firebaseSDK.verifyBeforeUpdateEmail(currentUser, newEmail);
-                    successEl.textContent = 'Verification email sent! Please check your new email address.';
+                    // Re-authenticate before sensitive operation
+                    const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
+                    await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
+
+                    // Update email in Firebase Auth
+                    await window.firebaseSDK.updateEmail(currentUser, newEmail);
+                    
+                    // Update email in Firestore
+                    const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
+                    await window.firebaseSDK.updateDoc(userDocRef, { email: newEmail });
+
+                    successEl.textContent = 'Email updated successfully!';
+                    updateEmailForm.reset();
+
                 } catch (error) {
                     errorEl.textContent = getCoolErrorMessage(error);
                 }
@@ -3000,7 +3046,8 @@
                 sessionStorage.removeItem('isGuest');
             }
              isSigningIn = false; // Unset flag
-             window.location.reload(); // Force a full refresh to ensure clean state
+             // FIX: Removing reload to prevent sign-in loop. onAuthStateChanged will handle the state change.
+             // window.location.reload(); 
         }
         
         // Simple modal functions for use before the main app controller is initialized
@@ -3127,3 +3174,4 @@
     </script>
 </body>
 </html>
+
