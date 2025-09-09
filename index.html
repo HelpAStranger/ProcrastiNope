@@ -10,9 +10,9 @@
     <!-- SortableJS for Drag and Drop -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     
-    <!-- Firebase SDKs -->
+    <!-- Firebase SDKs (Updated Version) -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
             onAuthStateChanged, 
@@ -21,14 +21,14 @@
             createUserWithEmailAndPassword, 
             signInWithEmailAndPassword, 
             signOut 
-        } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
             getDoc, 
             setDoc,
             onSnapshot
-        } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
         window.firebaseSDK = {
@@ -1216,6 +1216,8 @@
             text-align: center;
             margin-top: 1rem;
             min-height: 1.2em;
+            padding: 0 0.5rem;
+            line-height: 1.4;
         }
         
         /*
@@ -1577,14 +1579,14 @@
 
     <script type="module">
         // --- FIREBASE SETUP ---
+        // IMPORTANT: Replace with your actual Firebase configuration
         const firebaseConfig = {
-            apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSM",
-            authDomain: "procrastinope.firebaseapp.com",
-            projectId: "procrastinope",
-            storageBucket: "procrastinope.appspot.com",
-            messagingSenderId: "513129540063",
-            appId: "1:513129540063:web:5fa30d80d41aa121bffc6a",
-            measurementId: "G-5PJTMZFS2C"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
 
         let app, auth, db;
@@ -1596,6 +1598,8 @@
         const loaderOverlay = document.getElementById('loader-overlay');
         const landingPage = document.getElementById('landing-page');
         const appWrapper = document.getElementById('app-wrapper');
+        const landingChoices = document.getElementById('landing-choices');
+        const landingAuthContainer = document.getElementById('landing-auth-container');
 
         // --- Initialize Firebase and start the auth flow ---
         try {
@@ -1604,17 +1608,23 @@
             db = window.firebaseSDK.getFirestore(app);
             
             window.firebaseSDK.onAuthStateChanged(auth, user => {
+                // This is the central function that reacts to login/logout
                 if (unsubscribeFromFirestore) {
-                    unsubscribeFromFirestore();
+                    unsubscribeFromFirestore(); // Stop listening to old user's data
+                    unsubscribeFromFirestore = null;
                 }
-                currentUser = user;
                 
+                if (!user) { // User is logged out
+                    appInitialized = false; // Allow re-initialization
+                }
+
+                currentUser = user;
                 loaderOverlay.style.display = 'none';
 
                 if (user || sessionStorage.getItem('isGuest')) {
                     landingPage.style.display = 'none';
                     appWrapper.style.display = 'block';
-                    if (!appInitialized) {
+                    if (!appInitialized) { // Only start the app if it hasn't been initialized for this session
                         startTheApp(user);
                     }
                 } else {
@@ -1625,26 +1635,24 @@
             });
         } catch (err) {
             console.error("Firebase initialization failed:", err);
-            loaderOverlay.innerHTML = '<p style="color: var(--text);">Error: Could not connect to the database.</p>';
+            loaderOverlay.innerHTML = '<p style="color: var(--text);">Error: Could not connect. Please check your Firebase config.</p>';
         }
 
         // --- LANDING PAGE / AUTH FLOW ---
-        const landingChoices = document.getElementById('landing-choices');
-        const landingAuthContainer = document.getElementById('landing-auth-container');
-
         function showLandingPage() {
             landingAuthContainer.style.display = 'none';
             landingChoices.style.display = 'block';
         }
 
         function startTheApp(user) {
-            appInitialized = true;
+            appInitialized = true; // Mark as initialized for this session
             initializeAppLogic(user);
         }
 
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
-            // onAuthStateChanged will fire with a null user, but the guest check will pass
+            // onAuthStateChanged will fire with a null user, but the guest check will pass and start the app
+            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply();
         });
 
         document.getElementById('landing-login-btn').addEventListener('click', () => {
@@ -1654,22 +1662,30 @@
         function showAuthFormsOnLanding(initialTab) {
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
-            setupAuthForms(landingAuthContainer, () => {
-                // On success, onAuthStateChanged will automatically handle showing the app
-            });
+            
+            // This callback is triggered on successful authentication
+            const onAuthSuccess = () => {
+                 // onAuthStateChanged will automatically handle hiding the landing page and showing the app
+            };
+            
+            setupAuthForms(landingAuthContainer, onAuthSuccess);
             
             landingAuthContainer.querySelector(`.toggle-btn[data-tab="${initialTab}"]`).click();
             
-            const backBtn = document.createElement('button');
-            backBtn.id = 'landing-back-btn';
-            backBtn.className = 'btn';
-            backBtn.textContent = 'Back';
-            backBtn.onclick = showLandingPage;
-            landingAuthContainer.appendChild(backBtn);
+            // Add a back button if it doesn't exist
+            if (!landingAuthContainer.querySelector('#landing-back-btn')) {
+                const backBtn = document.createElement('button');
+                backBtn.id = 'landing-back-btn';
+                backBtn.className = 'btn';
+                backBtn.textContent = 'Back';
+                backBtn.onclick = showLandingPage;
+                landingAuthContainer.appendChild(backBtn);
+            }
         }
         
         // --- MAIN APPLICATION LOGIC ---
         function initializeAppLogic(user) {
+            // All app-specific variables and functions go here to keep them scoped
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
             let settings = { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 };
@@ -1727,14 +1743,15 @@
             let confirmCallback = null;
 
             async function saveData(data) {
-                if (!user) {
+                if (!user) { // Guest mode
                     localStorage.setItem('anonymousUserData', JSON.stringify(data));
                     return;
                 }
+                // Logged-in mode
                 try {
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                    await window.firebaseSDK.setDoc(userDocRef, { appData: data });
-                } catch (error) { console.error("Error saving data to Firestore: ", error); }
+                    await window.firebaseSDK.setDoc(userDocRef, { appData: data }, { merge: true });
+                } catch (error) { console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); }
             }
             
             function loadAndDisplayData(data) {
@@ -1752,33 +1769,37 @@
             }
 
             async function initialLoad() {
-                if (!user) {
+                if (!user) { // Guest mode
                     const localData = JSON.parse(localStorage.getItem('anonymousUserData')) || {};
                     loadAndDisplayData(localData);
                     return;
                 }
+
+                // Logged-in mode, setup real-time listener
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         loadAndDisplayData(docSnap.data().appData || {});
                     } else {
+                        // This is a new user, load empty state
                         loadAndDisplayData({});
                     }
-                }, (error) => { console.error("Error listening to Firestore:", error); });
+                }, (error) => { console.error("Error listening to Firestore:", getCoolErrorMessage(error)); });
             }
 
             function updateUserUI() {
                 if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    userDisplay.textContent = `Logged in as: ${user.email}`;
+                    userDisplay.textContent = `Logged in as: ${user.displayName || user.email}`;
                     userDisplay.style.display = 'flex';
                     exportDataBtn.disabled = true;
                     importDataBtn.disabled = true;
-                } else {
+                } else { // Guest mode
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
-                    userDisplay.style.display = 'none';
+                    userDisplay.textContent = 'Playing as Guest';
+                    userDisplay.style.display = 'flex';
                     exportDataBtn.disabled = false;
                     importDataBtn.disabled = false;
                 }
@@ -1842,7 +1863,7 @@
             function checkAllTasksCompleted() {
                 const allDailiesDone = dailyTasks.length > 0 && dailyTasks.every(t => t.completedToday);
                 const noStandaloneQuests = standaloneMainQuests.length === 0;
-                const noGroupedQuests = generalTaskGroups.every(g => g.tasks.length === 0);
+                const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.length === 0);
                 return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
             }
             function playSound(type) {
@@ -1887,16 +1908,23 @@
                 if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()) });
                 else if (list === 'standalone') standaloneMainQuests.push({ ...common });
                 else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common }); } }
-                saveState(); playSound('add');
+                renderAllLists(); // Re-render immediately for snappy UI
+                saveState(); 
+                playSound('add');
             };
-            const addGroup = (name) => { generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); saveState(); playSound('addGroup'); };
-            const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); saveState(); playSound('delete'); }); };
+            const addGroup = (name) => { 
+                generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); 
+                renderAllLists(); // Re-render immediately
+                saveState(); 
+                playSound('addGroup'); 
+            };
+            const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
             const findTaskAndContext = (id) => {
                 let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
                 task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
                 for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } return {};
             };
-            const deleteTask = (id) => { stopTimer(id); const { list } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } saveState(); playSound('delete'); };
+            const deleteTask = (id) => { stopTimer(id); const { list } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
             const completeTask = (id) => {
                 stopTimer(id); const { task, type } = findTaskAndContext(id); if (!task) return;
                 addXp(XP_PER_TASK); playSound('complete');
@@ -1906,19 +1934,20 @@
                 } else {
                     createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
                     const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
-                    if (group && group.tasks.length === 0) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
+                    if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
                 }
-                saveState();
+                saveState(); // Save state first
+                renderAllLists(); // Then re-render to reflect changes
                 const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
-            const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); } };
+            const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
             const editTask = (id, text) => { const { task } = findTaskAndContext(id); if (task) { task.text = text; saveState(); } };
-            function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('levelUp'); addXp(mins * XP_PER_TIMER_MINUTE); completeTask(id); } saveState(); }, 1000); saveState(); }
-            function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); } } }
-            function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { addXp(t.timerDuration / 60 * XP_PER_TIMER_MINUTE); stopTimer(t.id); completeTask(t.id); } } }); }
+            function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('levelUp'); addXp(mins * XP_PER_TIMER_MINUTE); completeTask(id); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
+            function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); renderAllLists(); } } }
+            function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { addXp(t.timerDuration / 60 * XP_PER_TIMER_MINUTE); stopTimer(t.id); completeTask(t.id); } } }); }
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
                 const taskItem = e.target.closest('.task-item'), groupHeader = e.target.closest('.main-quest-group-header');
-                if (groupHeader) { const groupId = e.target.closest('.main-quest-group').dataset.groupId; if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId); else { const g = generalTaskGroups.find(g => g.id === groupId); if (g) g.isExpanded = !g.isExpanded; saveState(); } return; }
+                if (groupHeader) { const groupId = e.target.closest('.main-quest-group').dataset.groupId; if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId); else { const g = generalTaskGroups.find(g => g.id === groupId); if (g) g.isExpanded = !g.isExpanded; saveState(); renderAllLists(); } return; }
                 if (taskItem) { const id = taskItem.dataset.id; currentEditingTaskId = id; if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; } if (e.target.closest('.complete-btn')) completeTask(id); else if (e.target.closest('.delete-btn')) deleteTask(id); else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); } else if (e.target.closest('.edit-btn')) { const t = taskItem.querySelector('.task-text'); t.contentEditable = true; t.style.borderBottom = `2px solid ${settings.accentColor}`; t.focus(); document.execCommand('selectAll', false, null); } } 
             });
             document.querySelector('.quests-layout').addEventListener('focusout', (e) => { if (e.target.classList.contains('task-text') && e.target.isContentEditable) { const id = e.target.closest('.task-item').dataset.id; e.target.contentEditable = false; e.target.style.borderBottom = "none"; editTask(id, e.target.textContent); } });
@@ -1945,14 +1974,14 @@
             colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
             volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
             volumeSlider.addEventListener('change', () => playSound('toggle'));
-            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; saveState(); playSound('delete'); }));
-            exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
+            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
+            exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
             importDataBtn.addEventListener('click', () => importFileInput.click());
             importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
             document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
-            function initSortable() { const o = { animation: 150, group: 'tasks', onStart: () => document.body.classList.add('is-dragging'), onEnd: () => document.body.classList.remove('is-dragging')}; new Sortable(dailyTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(dailyTasks,e.oldIndex,e.newIndex);}}); new Sortable(standaloneTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(standaloneMainQuests,e.oldIndex,e.newIndex);}}); new Sortable(generalTaskListContainer,{animation:150,handle:'.main-quest-group-header',onStart:()=>document.body.classList.add('is-dragging'),onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(generalTaskGroups,e.oldIndex,e.newIndex)}}); document.querySelectorAll('.task-list-group').forEach(l=>{new Sortable(l,{...o,onEnd:(e)=>{document.body.classList.remove('is-dragging');const id=e.to.dataset.groupId,g=generalTaskGroups.find(g=>g.id===id);if(g)reorderList(g.tasks,e.oldIndex,e.newIndex);}});}); }
+            function initSortable() { const o = { animation: 150, group: 'tasks', onStart: () => document.body.classList.add('is-dragging'), onEnd: (e) => { document.body.classList.remove('is-dragging'); if (e.from !== e.to || e.oldIndex !== e.newIndex) { console.log("Reordering list..."); } } }; new Sortable(dailyTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(dailyTasks,e.oldIndex,e.newIndex);}}); new Sortable(standaloneTaskListContainer,{...o, onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(standaloneMainQuests,e.oldIndex,e.newIndex);}}); new Sortable(generalTaskListContainer,{animation:150,handle:'.main-quest-group-header',onStart:()=>document.body.classList.add('is-dragging'),onEnd:(e)=>{document.body.classList.remove('is-dragging');reorderList(generalTaskGroups,e.oldIndex,e.newIndex)}}); document.querySelectorAll('.task-list-group').forEach(l=>{new Sortable(l,{...o,onEnd:(e)=>{document.body.classList.remove('is-dragging');const id=e.to.dataset.groupId,g=generalTaskGroups.find(g=>g.id===id);if(g)reorderList(g.tasks,e.oldIndex,e.newIndex);}});}); }
             function reorderList(list, oldI, newI) { if (oldI === newI) return; const [item] = list.splice(oldI, 1); list.splice(newI, 0, item); saveState(); }
-            function createConfetti(el) { const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
+            function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
             function createFullScreenConfetti(party, o = null) {
                 for (let i = 0; i < (party ? 200 : 100); i++) {
                     const c = document.createElement('div'); c.className = 'confetti';
@@ -1965,8 +1994,7 @@
                 if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
             }
             const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); };
-
-            // --- SETTINGS MENU BUTTONS (FIXED) ---
+            
             settingsLoginBtn.addEventListener('click', () => {
                 const accountModalContent = accountModal.querySelector('.modal-content');
                 setupAuthForms(accountModalContent, () => {
@@ -1978,8 +2006,8 @@
 
             logoutBtn.addEventListener('click', () => {
                 showConfirm("Logout?", "You will be returned to the landing page.", () => {
-                    sessionStorage.removeItem('isGuest'); // Clear guest status on logout
-                    window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", error));
+                    sessionStorage.removeItem('isGuest'); 
+                    window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
 
@@ -1999,9 +2027,129 @@
         // =========================================================================
         // UTILITY/SHARED AUTH FUNCTIONS
         // =========================================================================
+
+        /**
+         * Returns a user-friendly, "cooler" error message from a Firebase error object.
+         * @param {Error} error - The Firebase error object.
+         * @returns {string} A friendly error message.
+         */
+        function getCoolErrorMessage(error) {
+            const defaultMessage = "An unexpected error occurred. Please try again.";
+            if (!error || !error.code) return defaultMessage;
+
+            switch (error.code) {
+                case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
+                case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
+                case 'auth/user-not-found': return "No account found with this email. Time to sign up?";
+                case 'auth/wrong-password': return "Incorrect password. Did you forget? It happens to the best of us!";
+                case 'auth/email-already-in-use': return "An account with this email already exists. Try logging in!";
+                case 'auth/weak-password': return "Password should be at least 6 characters long. Make it strong!";
+                case 'auth/requires-recent-login': return "This is a sensitive action. Please log in again to continue.";
+                case 'auth/popup-closed-by-user': return "Sign-in cancelled. Did you change your mind?";
+                case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
+                default:
+                    console.error("Firebase Auth Error:", error);
+                    return "Google Sign-In failed. Please ensure pop-ups are enabled and try again. Also, check your internet connection.";
+            }
+        }
+
+        /**
+         * Merges guest data from localStorage with existing cloud data.
+         * @param {object} cloudData - The existing data from Firestore.
+         * @returns {object} The merged data object.
+         */
+        function mergeGuestDataWithCloud(cloudData = {}) {
+            const guestDataString = localStorage.getItem('anonymousUserData');
+            if (!guestDataString) return cloudData;
+
+            try {
+                const guestData = JSON.parse(guestDataString);
+                console.log("Merging guest data with cloud data...");
+
+                const mergedData = JSON.parse(JSON.stringify(cloudData)); // Deep copy to avoid mutation
+
+                // Use a Set to avoid duplicates based on task text
+                const mergeTasks = (cloudTasks = [], guestTasks = []) => {
+                    const existingTexts = new Set(cloudTasks.map(t => t.text));
+                    const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
+                    return [...cloudTasks, ...newTasks];
+                };
+                
+                mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
+                mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
+                
+                // For groups, merge tasks within existing groups and add new groups
+                if (guestData.generalTaskGroups) {
+                    if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
+                    guestData.generalTaskGroups.forEach(guestGroup => {
+                        const cloudGroup = mergedData.generalTaskGroups.find(cg => cg.name === guestGroup.name);
+                        if (cloudGroup) {
+                            cloudGroup.tasks = mergeTasks(cloudGroup.tasks, guestGroup.tasks);
+                        } else {
+                            mergedData.generalTaskGroups.push(guestGroup);
+                        }
+                    });
+                }
+                
+                // For player data, combine XP and take the higher level
+                if (guestData.playerData) {
+                    if (!mergedData.playerData) {
+                        mergedData.playerData = guestData.playerData;
+                    } else {
+                        mergedData.playerData.xp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
+                        mergedData.playerData.level = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
+                        // A full XP recalculation would be better here, but this is a simple merge
+                    }
+                }
+                
+                return mergedData;
+
+            } catch (e) {
+                console.error("Failed to parse or merge guest data:", e);
+                return cloudData; // Return original cloud data if merge fails
+            }
+        }
+
+        /**
+         * Handles the logic after a successful sign-in, including merging guest data.
+         * @param {User} user - The user object from Firebase Auth.
+         */
+        async function handleSignInSuccess(user) {
+            const isGuestBeforeSignIn = sessionStorage.getItem('isGuest') === 'true';
+            
+            if (isGuestBeforeSignIn) {
+                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+                let finalData = {};
+                
+                if (docSnap.exists()) {
+                    // User has existing data, merge it with guest data
+                    finalData = mergeGuestDataWithCloud(docSnap.data().appData);
+                } else {
+                    // New user, just use the guest data as their starting data
+                    const guestDataString = localStorage.getItem('anonymousUserData');
+                    finalData = guestDataString ? JSON.parse(guestDataString) : {};
+                }
+
+                await window.firebaseSDK.setDoc(userDocRef, { appData: finalData });
+
+                // Clean up guest state
+                localStorage.removeItem('anonymousUserData');
+                sessionStorage.removeItem('isGuest');
+            }
+        }
+
+
+        /**
+         * Sets up the authentication forms inside a given container element.
+         * @param {HTMLElement} container - The element to populate with auth forms.
+         * @param {Function} onSuccess - A callback function to run on successful login/signup.
+         */
         function setupAuthForms(container, onSuccess) {
             const template = document.getElementById('account-modal-content');
             container.innerHTML = template.innerHTML;
+
+            // Tab switching logic
             container.querySelector('.form-toggle').addEventListener('click', (e) => {
                 if (e.target.matches('.toggle-btn')) {
                     const tab = e.target.dataset.tab;
@@ -2011,6 +2159,8 @@
                     container.querySelectorAll('.error-message').forEach(el => el.textContent = '');
                 }
             });
+
+            // Sign Up form
             container.querySelector('[data-form="signup"]').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = container.querySelector('.signup-email').value;
@@ -2018,10 +2168,13 @@
                 const errorEl = container.querySelector('.signup-error');
                 errorEl.textContent = '';
                 try {
-                    await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
+                    const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
+                    await handleSignInSuccess(userCredential.user);
                     onSuccess();
-                } catch (error) { errorEl.textContent = error.message; }
+                } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
+
+            // Login form
             container.querySelector('[data-form="login"]').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = container.querySelector('.login-email').value;
@@ -2029,11 +2182,13 @@
                 const errorEl = container.querySelector('.login-error');
                 errorEl.textContent = '';
                 try {
-                    await window.firebaseSDK.signInWithEmailAndPassword(auth, email, password);
+                    const userCredential = await window.firebaseSDK.signInWithEmailAndPassword(auth, email, password);
+                    await handleSignInSuccess(userCredential.user);
                     onSuccess();
-                } catch (error) { errorEl.textContent = error.message; }
+                } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
             
+            // Google Sign-In button
             const googleBtnContainer = container.querySelector('.google-signin-btn-container');
             if (googleBtnContainer) {
                 const customBtn = document.createElement('button');
@@ -2044,11 +2199,12 @@
                 customBtn.addEventListener('click', async () => {
                     const provider = new window.firebaseSDK.GoogleAuthProvider();
                     try {
-                        await window.firebaseSDK.signInWithPopup(auth, provider);
+                        const result = await window.firebaseSDK.signInWithPopup(auth, provider);
+                        await handleSignInSuccess(result.user);
                         onSuccess();
                     } catch (error) {
                          const errorEl = container.querySelector('.login-error');
-                         if (errorEl) errorEl.textContent = "Google Sign-In failed. Please try again.";
+                         if (errorEl) errorEl.textContent = getCoolErrorMessage(error);
                     }
                 });
             }
@@ -2056,4 +2212,3 @@
     </script>
 </body>
 </html>
-
