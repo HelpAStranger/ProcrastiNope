@@ -27,7 +27,11 @@
             doc, 
             getDoc, 
             setDoc,
-            onSnapshot
+            onSnapshot,
+            collection,
+            query,
+            where,
+            getDocs
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -44,7 +48,11 @@
             doc,
             getDoc,
             setDoc,
-            onSnapshot
+            onSnapshot,
+            collection,
+            query,
+            where,
+            getDocs
         };
     </script>
     <style>
@@ -285,6 +293,7 @@
             }
              .task-item.daily-completed .task-content {
                 flex-grow: 0;
+                margin-right: 0;
             }
         }
         
@@ -1116,6 +1125,13 @@
         .settings-group h3 {
             margin-bottom: 1rem;
             font-weight: 700;
+            background-color: var(--surface);
+            border: var(--border-width) solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+            display: inline-block;
+            --shadow-color: var(--shadow);
         }
         
         .settings-group .data-actions,
@@ -1734,7 +1750,7 @@
             <p class="error-message signup-error"></p>
         </form>
         <form class="auth-form" data-form="login" style="display: none;">
-             <div class="form-group"><label for="login-email">Email</label><input type="email" class="login-email" required></div>
+             <div class="form-group"><label for="login-email">Email or Username</label><input type="text" class="login-email" required></div>
              <div class="form-group"><label for="login-password">Password</label><input type="password" class="login-password" required></div>
              <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Login</button>
              <p class="error-message login-error"></p>
@@ -1752,9 +1768,12 @@
             rules_version = '2';
             service cloud.firestore {
               match /databases/{database}/documents {
-                // Allow users to read and write only their own data
                 match /users/{userId} {
                   allow read, write: if request.auth != null && request.auth.uid == userId;
+                }
+                match /usernames/{username} {
+                    allow read;
+                    allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
                 }
               }
             }
@@ -1803,7 +1822,6 @@
 
                     if (!docSnap.exists() || !docSnap.data().username) {
                          if (!appController) {
-                            // Pass a stub to prevent full initialization
                             appController = await initializeAppLogic({ uid: user.uid, isPartial: true });
                         }
                         appController.promptForUsername(docSnap.exists() ? docSnap.data().appData : null);
@@ -1846,7 +1864,6 @@
 
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
-            // This will trigger the onAuthStateChanged logic for guests
             window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply(null, [null]);
         });
 
@@ -1858,7 +1875,10 @@
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
             
-            const onAuthSuccess = () => {};
+            const onAuthSuccess = () => {
+                closeModal(document.getElementById('account-modal'));
+                closeModal(document.getElementById('settings-modal'));
+            };
             
             setupAuthForms(landingAuthContainer, onAuthSuccess);
             
@@ -1876,7 +1896,21 @@
         
         // --- MAIN APPLICATION LOGIC ---
         async function initializeAppLogic(initialUser) {
-            // If this is a partial init just for the username prompt, return a limited interface
+            const openModal = (modal) => {
+                if(modal) {
+                    appWrapper.classList.add('blur-background');
+                    modal.classList.add('visible');
+                    playSound('open');
+                }
+            };
+            const closeModal = (modal) => {
+                if(modal) {
+                    appWrapper.classList.remove('blur-background');
+                    modal.classList.remove('visible');
+                    playSound('close');
+                }
+            };
+
             if (initialUser && initialUser.isPartial) {
                 const usernameModal = document.getElementById('username-modal');
                 const usernameForm = document.getElementById('username-form');
@@ -1889,29 +1923,38 @@
 
                     usernameForm.onsubmit = async (e) => {
                         e.preventDefault();
-                        const username = newUsernameInput.value.trim();
-                        if (!username) return;
+                        usernameErrorEl.textContent = '';
+                        const username = newUsernameInput.value.trim().toLowerCase();
+                        if (!username || username.length < 3) {
+                            usernameErrorEl.textContent = 'Username must be at least 3 characters.';
+                            return;
+                        }
+
+                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                        if (usernameSnap.exists()) {
+                            usernameErrorEl.textContent = 'This username is already taken.';
+                            return;
+                        }
 
                         const userDocRef = window.firebaseSDK.doc(db, "users", initialUser.uid);
                         try {
-                            // Here you might add a check to see if username is already taken
+                            await window.firebaseSDK.setDoc(usernamesRef, { userId: initialUser.uid });
                             await window.firebaseSDK.setDoc(userDocRef, { 
                                 username: username, 
+                                email: auth.currentUser.email,
                                 appData: existingData || {}
                             }, { merge: true });
                             
                             closeModal(usernameModal);
-                            // Re-trigger auth state change to fully load the app
-                            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply(null, [auth.currentUser]);
+                            window.location.reload();
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
                         }
                     };
                 };
-                 const openModal = (modal) => { modal.classList.add('visible'); };
-                 const closeModal = (modal) => { modal.classList.remove('visible'); };
-
-                return { promptForUsername, isPartial: true };
+                return { promptForUsername, isPartial: true, shutdown: () => {} };
             }
 
 
@@ -2041,11 +2084,16 @@
                 });
             }
 
-            function updateUserUI() {
+            async function updateUserUI() {
                 if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    userDisplay.textContent = `Logged in as: ${user.displayName || user.email}`;
+                    
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+                    const username = docSnap.exists() ? docSnap.data().username : user.email;
+
+                    userDisplay.textContent = `Logged in as: ${username}`;
                     userDisplay.style.display = 'flex';
                     dataManagementHeading.textContent = "Cloud Data";
                     exportDataBtn.style.display = 'none';
@@ -2251,29 +2299,6 @@
                 task.timerDuration = mins * 60;
                 delete task.timerFinished;
                 
-                activeTimers[id] = setInterval(() => {
-                    const elapsed = (Date.now() - (task.timerStartTime || 0)) / 1000;
-                    const remaining = (task.timerDuration || 0) - elapsed;
-                    
-                    const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
-                    if (!taskEl || !activeTimers[id]) {
-                        clearInterval(activeTimers[id]);
-                        delete activeTimers[id];
-                        return;
-                    }
-
-                    if (remaining > 0) {
-                        const ring = taskEl.querySelector('.progress-ring-circle');
-                        if (ring) {
-                            const r = ring.r.baseVal.value, c = r * 2 * Math.PI;
-                            const p = remaining / task.timerDuration;
-                            ring.style.strokeDashoffset = c - p * c;
-                        }
-                    } else {
-                        finishTimer(id);
-                    }
-                }, 1000);
-
                 saveState();
                 renderAllLists();
             }
@@ -2301,12 +2326,38 @@
                         const remainingSeconds = t.timerDuration - elapsed;
                         
                         if (remainingSeconds > 0) {
-                            startTimer(t.id, remainingSeconds / 60);
+                             activeTimers[t.id] = setInterval(() => {
+                                const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
+                                const currentRemaining = (t.timerDuration || 0) - currentElapsed;
+                                
+                                const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
+                                if (!taskEl || !activeTimers[t.id]) {
+                                    clearInterval(activeTimers[t.id]);
+                                    delete activeTimers[t.id];
+                                    return;
+                                }
+
+                                if (currentRemaining > 0) {
+                                    const ring = taskEl.querySelector('.progress-ring-circle');
+                                    if (ring) {
+                                        const r = ring.r.baseVal.value;
+                                        if (r > 0) {
+                                            const c = r * 2 * Math.PI;
+                                            const p = currentRemaining / t.timerDuration;
+                                            ring.style.strokeDashoffset = c - (p * c);
+                                        }
+                                    }
+                                } else {
+                                    finishTimer(t.id);
+                                }
+                            }, 1000);
                         } else {
-                            t.timerFinished = true;
-                            delete t.timerStartTime;
-                            delete t.timerDuration;
-                            needsSaveAndRender = true;
+                            if (!t.timerFinished) {
+                                t.timerFinished = true;
+                                delete t.timerStartTime;
+                                delete t.timerDuration;
+                                needsSaveAndRender = true;
+                            }
                         }
                     }
                 });
@@ -2407,18 +2458,12 @@
             timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
             addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
             
-            const openModal = (modal) => {
-                if (activeMobileActionsItem) { clearTimeout(actionsTimeoutId); activeMobileActionsItem.classList.remove('actions-visible'); activeMobileActionsItem = null; }
-                appWrapper.classList.add('blur-background'); modal.classList.add('visible'); playSound('open');
-            };
-            const closeModal = (modal) => { appWrapper.classList.remove('blur-background'); modal.classList.remove('visible'); playSound('close'); };
-            
             addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; openModal(addTaskModal); newTaskInput.focus(); });
             addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); newTaskInput.focus(); });
             addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); newGroupInput.focus(); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => closeModal(document.getElementById(btn.dataset.closeModal))));
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal, document.getElementById('username-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
             function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
             confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
             confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
@@ -2522,13 +2567,14 @@
 
             logoutBtn.addEventListener('click', () => {
                 showConfirm("Logout?", "You will be returned to the landing page.", () => {
+                    closeModal(settingsModal);
                     sessionStorage.removeItem('isGuest'); 
                     window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
 
             async function loadUserSession() {
-                updateUserUI();
+                await updateUserUI();
                 await initialLoad();
                 checkDailyReset();
                 resumeTimers();
@@ -2656,25 +2702,64 @@
                 e.preventDefault();
                 const email = container.querySelector('.signup-email').value;
                 const password = container.querySelector('.signup-password').value;
-                const username = container.querySelector('.signup-username').value.trim();
+                const username = container.querySelector('.signup-username').value.trim().toLowerCase();
                 const errorEl = container.querySelector('.signup-error');
                 errorEl.textContent = '';
+
+                if (!username || username.length < 3) {
+                    errorEl.textContent = 'Username must be at least 3 characters.';
+                    return;
+                }
+
+                const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                if (usernameSnap.exists()) {
+                    errorEl.textContent = 'This username is already taken.';
+                    return;
+                }
+
                 try {
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
                     await handleSignInSuccess(userCredential.user);
+                    
                     const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
-                    await window.firebaseSDK.setDoc(userDocRef, { username: username }, { merge: true });
+                    await window.firebaseSDK.setDoc(usernamesRef, { userId: userCredential.user.uid });
+                    await window.firebaseSDK.setDoc(userDocRef, { username: username, email: email }, { merge: true });
+                    
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
             });
             container.querySelector('[data-form="login"]').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const email = container.querySelector('.login-email').value;
+                const loginInput = container.querySelector('.login-email').value;
                 const password = container.querySelector('.login-password').value;
                 const errorEl = container.querySelector('.login-error');
                 errorEl.textContent = '';
+
                 try {
-                    const userCredential = await window.firebaseSDK.signInWithEmailAndPassword(auth, email, password);
+                    let emailToLogin = loginInput;
+                    if (!loginInput.includes('@')) {
+                        const username = loginInput.toLowerCase();
+                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                        if (!usernameSnap.exists()) {
+                            errorEl.textContent = "User not found.";
+                            return;
+                        }
+                        const userId = usernameSnap.data().userId;
+                        const userDocRef = window.firebaseSDK.doc(db, "users", userId);
+                        const userSnap = await window.firebaseSDK.getDoc(userDocRef);
+                        
+                        if (!userSnap.exists() || !userSnap.data().email) {
+                            errorEl.textContent = "Could not find email for this user.";
+                            return;
+                        }
+                        emailToLogin = userSnap.data().email;
+                    }
+
+                    const userCredential = await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
                     await handleSignInSuccess(userCredential.user);
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
