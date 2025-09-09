@@ -25,7 +25,8 @@
             reauthenticateWithCredential,
             EmailAuthProvider,
             updatePassword,
-            verifyBeforeUpdateEmail
+            verifyBeforeUpdateEmail,
+            fetchSignInMethodsForEmail
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -54,6 +55,7 @@
             EmailAuthProvider,
             updatePassword,
             verifyBeforeUpdateEmail,
+            fetchSignInMethodsForEmail,
             getFirestore,
             doc,
             getDoc,
@@ -1779,6 +1781,20 @@
             <div id="manage-forms-container" style="display: none;">
                 <h2>Manage Account</h2>
                 
+                <form id="update-username-form" class="auth-form" style="margin-top: 2rem;">
+                     <div class="settings-group">
+                        <h3>Change Username</h3>
+                        <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">Changing your username will also update how you log in.</p>
+                        <div class="form-group">
+                            <label for="update-username-input">New Username</label>
+                            <input type="text" id="update-username-input" required minlength="3" maxlength="15">
+                        </div>
+                        <button type="submit" class="btn modal-submit-btn">Update Username</button>
+                        <p class="error-message" id="update-username-error"></p>
+                        <p class="success-message" id="update-username-success"></p>
+                    </div>
+                </form>
+
                 <form id="update-email-form" class="auth-form" style="margin-top: 2rem;">
                      <div class="settings-group">
                         <h3>Change Email</h3>
@@ -1899,6 +1915,9 @@
         let unsubscribeFromFirestore = null;
         let appController = null;
         let isSigningIn = false; // Global flag for auth state transitions
+        
+        // FIX: Moved to module scope to prevent temporal dead zone error on partial app initialization
+        let activeMobileActionsItem = null; 
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -2017,8 +2036,6 @@
                     el.focus();
                 }
             };
-
-            let activeMobileActionsItem = null; 
 
             const openModal = (modal) => {
                 if(modal) {
@@ -2711,6 +2728,59 @@
                      errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
+
+            const updateUsernameForm = document.getElementById('update-username-form');
+            updateUsernameForm.addEventListener('submit', async(e) => {
+                e.preventDefault();
+                const newUsername = document.getElementById('update-username-input').value.trim().toLowerCase();
+                const errorEl = document.getElementById('update-username-error');
+                const successEl = document.getElementById('update-username-success');
+                errorEl.textContent = '';
+                successEl.textContent = '';
+
+                if (!currentUser) {
+                    errorEl.textContent = "You must be logged in.";
+                    return;
+                }
+                
+                if (!newUsername || newUsername.length < 3) {
+                    errorEl.textContent = 'Username must be at least 3 characters.';
+                    return;
+                }
+
+                try {
+                    const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
+                    const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
+                    const currentUsername = userDocSnap.data().username;
+
+                    if (newUsername === currentUsername) {
+                        errorEl.textContent = "This is already your username.";
+                        return;
+                    }
+                    
+                    const newUsernameRef = window.firebaseSDK.doc(db, "usernames", newUsername);
+                    const newUsernameSnap = await window.firebaseSDK.getDoc(newUsernameRef);
+                    
+                    if (newUsernameSnap.exists()) {
+                        errorEl.textContent = "This username is already taken.";
+                        return;
+                    }
+
+                    const oldUsernameRef = window.firebaseSDK.doc(db, "usernames", currentUsername);
+
+                    const batch = window.firebaseSDK.writeBatch(db);
+                    batch.delete(oldUsernameRef);
+                    batch.set(newUsernameRef, { userId: currentUser.uid });
+                    batch.update(userDocRef, { username: newUsername });
+                    await batch.commit();
+
+                    successEl.textContent = "Username updated successfully!";
+                    updateUserUI(); // To refresh the display name in settings
+                    updateUsernameForm.reset();
+                } catch (error) {
+                    errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
             
             function initSortable() {
                 function onTaskDrop(evt) {
@@ -2969,6 +3039,13 @@
                 }
                 
                 try {
+                    // FIX: Proactively check for existing email for better UX
+                    const signInMethods = await window.firebaseSDK.fetchSignInMethodsForEmail(auth, email);
+                    if (signInMethods.length > 0) {
+                        errorEl.textContent = 'This email is already in use. Try logging in.';
+                        return;
+                    }
+
                     const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
                     const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
@@ -3050,4 +3127,3 @@
     </script>
 </body>
 </html>
-
