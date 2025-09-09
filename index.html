@@ -1950,27 +1950,17 @@
                 currentUser = user;
                 
                 if (user) {
-                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                    const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-
-                    if (!docSnap.exists() || !docSnap.data().username) {
-                         if (!appController || !appController.isPartial) {
-                            if(appController) appController.shutdown();
-                            appController = await initializeAppLogic({ uid: user.uid, isPartial: true });
-                        }
-                        appController.promptForUsername(user, docSnap.exists() ? docSnap.data().appData : null);
-                        loaderOverlay.style.display = 'none';
+                    // For any authenticated user, initialize or update the full app.
+                    // The app logic will handle prompting for a username if it's missing.
+                    if (!appController) {
+                        if(appController) appController.shutdown();
+                        appController = await initializeAppLogic(user); 
                     } else {
-                        if (!appController || appController.isPartial) {
-                            if(appController) appController.shutdown();
-                            appController = await initializeAppLogic(user); 
-                        } else {
-                            await appController.updateUser(user);
-                        }
-                        landingPage.style.display = 'none';
-                        appWrapper.style.display = 'block';
-                        loaderOverlay.style.display = 'none';
+                        await appController.updateUser(user);
                     }
+                    landingPage.style.display = 'none';
+                    appWrapper.style.display = 'block';
+                    loaderOverlay.style.display = 'none';
                 } else { // No user / Guest
                      if (sessionStorage.getItem('isGuest')) {
                         if (!appController) appController = await initializeAppLogic(null);
@@ -2087,73 +2077,7 @@
                     playSound('close');
                 }
             };
-
-            if (initialUser && initialUser.isPartial) {
-                const usernameModal = document.getElementById('username-modal');
-                const usernameForm = document.getElementById('username-form');
-                const newUsernameInput = document.getElementById('new-username-input');
-                const usernameErrorEl = usernameModal.querySelector('.username-error');
-
-                const promptForUsername = (user, existingData) => {
-                    openModal(usernameModal);
-                    focusOnDesktop(newUsernameInput);
-
-                    usernameForm.onsubmit = async (e) => {
-                        e.preventDefault();
-                        usernameErrorEl.textContent = '';
-                        const username = newUsernameInput.value.trim().toLowerCase();
-                        if (!username || username.length < 3) {
-                            usernameErrorEl.textContent = 'Username must be at least 3 characters.';
-                            return;
-                        }
-
-                        // Add a loader for better UX
-                        const submitButton = usernameForm.querySelector('button[type="submit"]');
-                        submitButton.disabled = true;
-                        submitButton.textContent = 'Saving...';
-                        
-                        try {
-                            const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                            const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-
-                            if (usernameSnap.exists()) {
-                                throw new Error('This username is already taken.');
-                            }
-
-                            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                            const batch = window.firebaseSDK.writeBatch(db);
-                            batch.set(usernamesRef, { userId: user.uid });
-                            batch.set(userDocRef, { 
-                                username: username, 
-                                email: user.email,
-                                appData: existingData || {}
-                            }, { merge: true });
-                            await batch.commit();
-                            
-                            closeModal(usernameModal);
-                            loaderOverlay.style.display = 'flex'; // Show main loader for transition
-
-                            // *** FIX: Manually transition to the full app state ***
-                            if (appController && appController.isPartial) {
-                                appController.shutdown();
-                            }
-                            appController = await initializeAppLogic(user); // Re-initialize with full user
-                            
-                            landingPage.style.display = 'none';
-                            appWrapper.style.display = 'block';
-                            loaderOverlay.style.display = 'none';
-
-                        } catch (error) {
-                            usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
-                            submitButton.disabled = false;
-                            submitButton.textContent = 'Save Username';
-                        }
-                    };
-                };
-                return { promptForUsername, isPartial: true, shutdown: () => {} };
-            }
-
-
+            
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
             let currentListToAdd = null, currentEditingTaskId = null;
@@ -2224,6 +2148,70 @@
             const quoteEl = document.getElementById('quote-of-the-day');
             let confirmCallback = null;
 
+            async function promptForUsernameIfNeeded() {
+                if (!user) return; // Not for guests
+
+                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+                const existingData = docSnap.exists() ? docSnap.data().appData : null;
+
+                if (!docSnap.exists() || !docSnap.data().username) {
+                    const usernameModal = document.getElementById('username-modal');
+                    const usernameForm = document.getElementById('username-form');
+                    const newUsernameInput = document.getElementById('new-username-input');
+                    const usernameErrorEl = usernameModal.querySelector('.username-error');
+                    
+                    usernameModal.setAttribute('data-persistent', 'true'); // Prevent closing by clicking outside
+
+                    openModal(usernameModal);
+                    focusOnDesktop(newUsernameInput);
+
+                    return new Promise((resolve) => {
+                        usernameForm.onsubmit = async (e) => {
+                            e.preventDefault();
+                            usernameErrorEl.textContent = '';
+                            const username = newUsernameInput.value.trim().toLowerCase();
+                            if (!username || username.length < 3) {
+                                usernameErrorEl.textContent = 'Username must be at least 3 characters.';
+                                return;
+                            }
+
+                            const submitButton = usernameForm.querySelector('button[type="submit"]');
+                            submitButton.disabled = true;
+                            submitButton.textContent = 'Saving...';
+                            
+                            try {
+                                const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                                const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                                if (usernameSnap.exists()) {
+                                    throw new Error('This username is already taken.');
+                                }
+
+                                const batch = window.firebaseSDK.writeBatch(db);
+                                batch.set(usernamesRef, { userId: user.uid });
+                                batch.set(userDocRef, { 
+                                    username: username, 
+                                    email: user.email,
+                                    appData: existingData || {}
+                                }, { merge: true });
+                                await batch.commit();
+                                
+                                usernameModal.removeAttribute('data-persistent');
+                                closeModal(usernameModal);
+                                resolve();
+
+                            } catch (error) {
+                                usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
+                            } finally {
+                                submitButton.disabled = false;
+                                submitButton.textContent = 'Save Username';
+                            }
+                        };
+                    });
+                }
+            }
+
             async function saveData(data) {
                 // Also save theme to a simple key for faster pre-load
                 if (data.settings && data.settings.theme) {
@@ -2270,7 +2258,7 @@
                         if (docSnap.exists() && docSnap.data().appData) {
                             loadAndDisplayData(docSnap.data().appData);
                         } else {
-                            loadAndDisplayData({});
+                            loadAndDisplayData({}); // Load empty state for new user
                         }
                         if (isFirstLoad) {
                             isFirstLoad = false;
@@ -2662,9 +2650,17 @@
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', (e) => {
                 const modalId = e.currentTarget.dataset.closeModal;
                 const modal = document.getElementById(modalId);
-                closeModal(modal);
+                if (modal.getAttribute('data-persistent') !== 'true') {
+                    closeModal(modal);
+                }
             }));
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { 
+                if (m) m.addEventListener('click', (e) => { 
+                    if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
+                        closeModal(m); 
+                    }
+                }); 
+            });
             function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
             confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
             confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
@@ -2946,8 +2942,10 @@
             });
 
             async function loadUserSession() {
-                await updateUserUI();
                 await initialLoad();
+                await updateUserUI();
+                await promptForUsernameIfNeeded();
+                await updateUserUI(); // Update UI again in case username changed
                 checkDailyReset();
                 resumeTimers();
             }
@@ -3195,3 +3193,4 @@
     </script>
 </body>
 </html>
+
