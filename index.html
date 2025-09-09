@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- IMPORTANT: Replace with your actual Google Client ID -->
+    <meta name="google-signin-client_id" content="YOUR_CLIENT_ID.apps.googleusercontent.com">
     <title>Procrasti-Nope | Task Manager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- SortableJS for Drag and Drop -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
@@ -164,22 +168,15 @@
             transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
             overflow-x: hidden;
         }
+        
+        #app-wrapper {
+            transition: filter 0.3s ease-in-out;
+        }
 
-        #background-animation {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
+        #app-wrapper.blur-background {
+            filter: blur(5px);
             pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.5s ease;
         }
-        #background-animation.active {
-            opacity: 1;
-        }
-
 
         .container {
             max-width: 800px;
@@ -704,7 +701,9 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
             z-index: 1000;
             display: flex;
             align-items: center;
@@ -730,8 +729,13 @@
             max-width: 500px;
             transform: scale(0.9) rotate(-3deg);
             transition: transform var(--transition-speed) cubic-bezier(0.34, 1.56, 0.64, 1);
-            max-height: 80vh;
+            max-height: 90vh;
             overflow-y: auto;
+        }
+
+        #account-modal .modal-content {
+            max-width: 400px;
+            padding: 1.5rem;
         }
         
         .modal-overlay.visible .modal-content {
@@ -744,18 +748,22 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input {
+        #new-task-input, #new-group-input, .form-group input {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
             padding: 1rem;
             border: var(--border-width) solid var(--border);
             border-radius: var(--radius);
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
             background: var(--surface);
             color: var(--text);
         }
-        #new-task-input:focus, #new-group-input:focus {
+        .form-group {
+             margin-bottom: 1rem;
+        }
+
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
@@ -782,9 +790,11 @@
             font-weight: 700;
         }
         
-        .settings-group .data-actions {
+        .settings-group .data-actions,
+        .settings-group .account-actions {
             display: flex;
             gap: 1rem;
+            flex-wrap: wrap;
         }
 
         .theme-options {
@@ -841,60 +851,6 @@
         .color-swatch.selected {
             box-shadow: 0 0 0 var(--border-width) var(--border);
             transform: scale(1.1);
-        }
-
-        /* Toggle Switch Style */
-        .toggle-switch-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-        }
-
-        .switch input { 
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: var(--surface);
-            border: var(--border-width) solid var(--border);
-            border-radius: 34px;
-            transition: .4s;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 22px;
-            width: 22px;
-            left: 4px;
-            bottom: 4px;
-            background-color: var(--border);
-            border-radius: 50%;
-            transition: .4s;
-        }
-
-        input:checked + .slider {
-            background-color: var(--accent);
-        }
-
-        input:checked + .slider:before {
-            transform: translateX(26px);
-            background-color: var(--text-on-accent);
         }
         
         /* Volume and Timer Slider Styles */
@@ -1002,6 +958,68 @@
         
         .backup-item .btn {
             --shadow-color: var(--shadow);
+        }
+
+        /* Account Modal Specific Styles */
+        .form-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 1rem;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            background-color: var(--surface);
+            border: none;
+            color: var(--text);
+            transition: all var(--transition-speed) ease;
+        }
+        .toggle-btn.active {
+            background-color: var(--accent);
+            color: var(--text-on-accent);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .form-divider {
+            text-align: center;
+            margin: 1.5rem 0;
+            font-weight: 700;
+            color: var(--text);
+            opacity: 0.7;
+        }
+
+        #google-signin-btn-container, .google-btn-placeholder {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 1rem;
+        }
+        
+        .google-btn-placeholder {
+            background-color: #4285F4;
+            color: white;
+            padding: 10px 24px;
+            border-radius: var(--radius);
+            border: var(--border-width) solid var(--border);
+            box-shadow: 4px 4px 0 var(--shadow);
+            cursor: pointer;
+            width: 250px;
+            gap: 10px;
+        }
+        
+        .error-message {
+            color: var(--accent-red-light);
+            font-weight: 700;
+            text-align: center;
+            margin-top: 1rem;
+            min-height: 1.2em;
         }
         
         /*
@@ -1141,62 +1159,64 @@
     </style>
 </head>
 <body>
+    <div id="app-wrapper">
+        <header class="sticky-header">
+            <div class="header-content">
+                <h1 class="main-title">Procrasti-Nope</h1>
+                <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
+            </div>
+            <div class="header-controls">
+                <span id="user-display" style="margin-right: 1rem; font-weight: 700;"></span>
+                <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+            </div>
+        </header>
 
-    <svg id="background-animation"></svg>
+        <section class="player-progress-section">
+            <div class="level-display">LVL <span id="player-level">1</span></div>
+            <div class="xp-bar-container">
+                <div id="xp-bar" class="xp-bar"></div>
+                <span id="xp-text">0 / 100 XP</span>
+            </div>
+        </section>
 
-    <header class="sticky-header">
-        <div class="header-content">
-            <h1 class="main-title">Procrasti-Nope</h1>
-            <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
-        </div>
-        <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        </button>
-    </header>
-
-    <section class="player-progress-section">
-        <div class="level-display">LVL <span id="player-level">1</span></div>
-        <div class="xp-bar-container">
-            <div id="xp-bar" class="xp-bar"></div>
-            <span id="xp-text">0 / 100 XP</span>
-        </div>
-    </section>
-
-    <main class="container">
-        <div class="quests-layout">
-            <section class="task-group">
-                <header class="task-group-header">
-                    <h2>Daily Quests</h2>
-                    <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
-                </header>
-                <ul id="daily-task-list">
-                    <!-- Daily tasks will be dynamically inserted here -->
-                </ul>
-                <div id="no-daily-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
-                    <p>No daily quests yet. Add one to start your day!</p>
-                </div>
-            </section>
-
-            <section class="task-group">
-                <header class="task-group-header">
-                    <h2>Main Quests</h2>
-                    <div class="header-actions">
-                        <button id="add-standalone-task-btn" class="btn" aria-label="Add Quest">Add Quest</button>
-                        <button id="add-group-btn" class="btn" aria-label="Add Group">Add Group</button>
+        <main class="container">
+            <div class="quests-layout">
+                <section class="task-group">
+                    <header class="task-group-header">
+                        <h2>Daily Quests</h2>
+                        <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
+                    </header>
+                    <ul id="daily-task-list">
+                        <!-- Daily tasks will be dynamically inserted here -->
+                    </ul>
+                    <div id="no-daily-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
+                        <p>No daily quests yet. Add one to start your day!</p>
                     </div>
-                </header>
-                <ul id="standalone-task-list">
-                    <!-- Standalone tasks will be dynamically inserted here -->
-                </ul>
-                <div id="general-task-list-container">
-                    <!-- General task groups will be dynamically inserted here -->
-                </div>
-                <div id="no-general-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
-                    <p>No main quests on your list. Create a group or add a quest to get started!</p>
-                </div>
-            </section>
-        </div>
-    </main>
+                </section>
+
+                <section class="task-group">
+                    <header class="task-group-header">
+                        <h2>Main Quests</h2>
+                        <div class="header-actions">
+                            <button id="add-standalone-task-btn" class="btn" aria-label="Add Quest">Add Quest</button>
+                            <button id="add-group-btn" class="btn" aria-label="Add Group">Add Group</button>
+                        </div>
+                    </header>
+                    <ul id="standalone-task-list">
+                        <!-- Standalone tasks will be dynamically inserted here -->
+                    </ul>
+                    <div id="general-task-list-container">
+                        <!-- General task groups will be dynamically inserted here -->
+                    </div>
+                    <div id="no-general-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
+                        <p>No main quests on your list. Create a group or add a quest to get started!</p>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
 
     <!-- Add Task Modal -->
     <div id="add-task-modal" class="modal-overlay">
@@ -1205,7 +1225,7 @@
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
                 <div class="modal-actions">
-                    <button type="button" id="cancel-add-task" class="btn">Cancel</button>
+                    <button type="button" class="btn" data-close-modal="add-task-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Add</button>
                 </div>
             </form>
@@ -1219,7 +1239,7 @@
             <form id="add-group-form">
                 <input type="text" id="new-group-input" placeholder="e.g., Project Overlord" required>
                 <div class="modal-actions">
-                    <button type="button" id="cancel-add-group" class="btn">Cancel</button>
+                    <button type="button" class="btn" data-close-modal="add-group-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Create</button>
                 </div>
             </form>
@@ -1244,7 +1264,7 @@
                     <button type="button" class="btn timer-unit-btn" data-unit="months">Months</button>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" id="cancel-timer" class="btn">Cancel</button>
+                    <button type="button" class="btn" data-close-modal="timer-modal">Cancel</button>
                     <button type="submit" class="btn modal-submit-btn">Start Timer</button>
                 </div>
             </form>
@@ -1255,6 +1275,17 @@
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Settings</h2>
+
+            <!-- Account Section -->
+            <div class="settings-group">
+                <h3>Account</h3>
+                <div class="account-actions">
+                    <button id="create-account-btn" class="btn">Create Account</button>
+                    <button id="login-btn" class="btn">Login</button>
+                    <button id="logout-btn" class="btn" style="display: none;">Logout</button>
+                </div>
+            </div>
+
             <div class="settings-group">
                 <h3>Theme</h3>
                 <div class="theme-options" id="theme-options-buttons">
@@ -1289,16 +1320,6 @@
                     <div class="color-swatch" data-color="var(--accent-pink)" style="background-color: var(--accent-pink);"></div>
                 </div>
             </div>
-             <div class="settings-group">
-                <h3>Visuals</h3>
-                 <div class="toggle-switch-container">
-                    <label for="background-animation-toggle" style="font-weight: 700;">Background Animation</label>
-                    <label class="switch">
-                      <input type="checkbox" id="background-animation-toggle">
-                      <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
             <div class="settings-group">
                 <h3>Sound Volume</h3>
                 <div class="volume-slider-container">
@@ -1313,11 +1334,55 @@
                 </div>
             </div>
             <div class="modal-actions">
-                <button id="close-settings-btn" class="btn">Close</button>
+                <button class="btn" data-close-modal="settings-modal">Close</button>
             </div>
         </div>
     </div>
     
+    <!-- Account Modal -->
+    <div id="account-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="form-toggle">
+                <button id="show-signup-tab" class="toggle-btn active">Sign Up</button>
+                <button id="show-login-tab" class="toggle-btn">Login</button>
+            </div>
+            
+            <!-- Signup Form -->
+            <form id="signup-form">
+                <div class="form-group">
+                    <label for="signup-username">Username</label>
+                    <input type="text" id="signup-username" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-password">Password</label>
+                    <input type="password" id="signup-password" required>
+                </div>
+                <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Create Account</button>
+                <p class="error-message" id="signup-error"></p>
+            </form>
+
+            <!-- Login Form -->
+            <form id="login-form" style="display: none;">
+                 <div class="form-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Login</button>
+                <p class="error-message" id="login-error"></p>
+                <div class="form-divider">OR</div>
+                <div id="google-signin-btn-container"></div>
+            </form>
+            <div class="modal-actions">
+                <button type="button" class="btn" data-close-modal="account-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Backup Modal -->
     <div id="backup-modal" class="modal-overlay">
         <div class="modal-content">
@@ -1327,7 +1392,7 @@
                 <!-- Backup items will be populated here -->
             </ul>
              <div class="modal-actions">
-                <button id="close-backup-btn" class="btn">Close</button>
+                <button class="btn" data-close-modal="backup-modal">Close</button>
             </div>
         </div>
     </div>
@@ -1344,37 +1409,190 @@
         </div>
     </div>
 
-
     <script>
+        // --- DATABASE SIMULATION FUNCTIONS ---
+        
+        /**
+         * A simple (and insecure) hashing function for simulation purposes.
+         */
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = (hash << 5) - hash + char;
+                hash |= 0; 
+            }
+            return hash.toString();
+        }
+
+        /**
+         * Retrieves all user accounts from localStorage.
+         */
+        function getAccounts() {
+            return JSON.parse(localStorage.getItem('userAccounts')) || {};
+        }
+
+        /**
+         * Saves all user accounts to localStorage.
+         */
+        function saveAccounts(accounts) {
+            localStorage.setItem('userAccounts', JSON.stringify(accounts));
+        }
+
+        /**
+         * Signs up or logs in a user from a Google account.
+         */
+        async function signupOrLoginWithGoogle(googleUser) {
+            const accounts = getAccounts();
+            const username = `google_${googleUser.sub}`; // Create a unique username
+            
+            if (!accounts[username]) {
+                // If user doesn't exist, create a new account
+                const newUser = {
+                    id: googleUser.sub,
+                    username: username,
+                    isGoogleUser: true,
+                    displayName: googleUser.name,
+                    data: { 
+                        dailyTasks: [],
+                        standaloneMainQuests: [],
+                        generalTaskGroups: [],
+                        playerData: { level: 1, xp: 0 },
+                        settings: {
+                            theme: 'light',
+                            accentColor: 'var(--accent-red)',
+                            volume: 0.3
+                        }
+                    }
+                };
+                accounts[username] = newUser;
+                saveAccounts(accounts);
+            }
+
+            // Log the user in
+            const userToLogin = accounts[username];
+            sessionStorage.setItem('currentUser', JSON.stringify({ id: userToLogin.id, username: userToLogin.username, displayName: userToLogin.displayName }));
+            return { id: userToLogin.id, username: userToLogin.username, displayName: userToLogin.displayName };
+        }
+
+
+        /**
+         * Signs up a new user.
+         */
+        async function signup(username, password) {
+            const accounts = getAccounts();
+            if (accounts[username]) {
+                throw new Error('Username already exists.');
+            }
+
+            const newUser = {
+                id: `user_${Date.now()}`,
+                username,
+                passwordHash: simpleHash(password),
+                data: { 
+                    dailyTasks: [],
+                    standaloneMainQuests: [],
+                    generalTaskGroups: [],
+                    playerData: { level: 1, xp: 0 },
+                    settings: {
+                        theme: 'light',
+                        accentColor: 'var(--accent-red)',
+                        volume: 0.3
+                    }
+                }
+            };
+
+            accounts[username] = newUser;
+            saveAccounts(accounts);
+            sessionStorage.setItem('currentUser', JSON.stringify({ id: newUser.id, username: newUser.username, displayName: newUser.username }));
+            return { id: newUser.id, username: newUser.username, displayName: newUser.username };
+        }
+
+        /**
+         * Logs in an existing user.
+         */
+        async function login(username, password) {
+            const accounts = getAccounts();
+            const user = accounts[username];
+
+            if (!user || user.isGoogleUser || user.passwordHash !== simpleHash(password)) {
+                throw new Error('Invalid username or password.');
+            }
+            sessionStorage.setItem('currentUser', JSON.stringify({ id: user.id, username: user.username, displayName: user.username }));
+            return { id: user.id, username: user.username, displayName: user.username };
+        }
+
+        /**
+         * Logs out the current user.
+         */
+        function logout() {
+            sessionStorage.removeItem('currentUser');
+            // Also sign out from Google if they were logged in with Google
+            if (typeof google !== 'undefined') {
+                google.accounts.id.disableAutoSelect();
+            }
+        }
+
+        /**
+         * Gets the currently logged-in user from session storage.
+         */
+        function getCurrentUser() {
+            return JSON.parse(sessionStorage.getItem('currentUser'));
+        }
+
+        /**
+         * Saves the application data for the current user.
+         */
+        async function saveData(data) {
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+                const accounts = getAccounts();
+                if (accounts[currentUser.username]) {
+                    accounts[currentUser.username].data = data;
+                    saveAccounts(accounts);
+                }
+            } else {
+                localStorage.setItem('anonymousUserData', JSON.stringify(data));
+            }
+        }
+
+        /**
+         * Loads the application data for the current user.
+         */
+        async function loadData() {
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+                const accounts = getAccounts();
+                return accounts[currentUser.username]?.data || {};
+            } else {
+                return JSON.parse(localStorage.getItem('anonymousUserData')) || {};
+            }
+        }
+
+
+        // --- MAIN APPLICATION LOGIC ---
         document.addEventListener('DOMContentLoaded', () => {
 
             // =========================================================================
             // STATE MANAGEMENT
             // =========================================================================
-            let dailyTasks = JSON.parse(localStorage.getItem('dailyTasks')) || [];
-            let standaloneMainQuests = JSON.parse(localStorage.getItem('standaloneMainQuests')) || [];
-            let generalTaskGroups = JSON.parse(localStorage.getItem('generalTaskGroups')) || [];
-            let playerData = JSON.parse(localStorage.getItem('playerData')) || { level: 1, xp: 0 };
-            let settings = JSON.parse(localStorage.getItem('settings')) || {
+            let dailyTasks = [];
+            let standaloneMainQuests = [];
+            let generalTaskGroups = [];
+            let playerData = { level: 1, xp: 0 };
+            let settings = {
                 theme: 'light',
                 accentColor: 'var(--accent-red)',
-                volume: 0.3,
-                backgroundAnimation: false
+                volume: 0.3
             };
             let currentListToAdd = null;
             let currentEditingTaskId = null;
             const activeTimers = {};
-
-            // Add default isExpanded property to legacy data
-            generalTaskGroups.forEach(group => {
-                if (typeof group.isExpanded === 'undefined') {
-                    group.isExpanded = false;
-                }
-            });
             
             // =========================================================================
             // DOM ELEMENTS
             // =========================================================================
+            const appWrapper = document.getElementById('app-wrapper');
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
             const generalTaskListContainer = document.getElementById('general-task-list-container');
@@ -1383,6 +1601,8 @@
             const xpBarEl = document.getElementById('xp-bar');
             const xpTextEl = document.getElementById('xp-text');
             const levelDisplayEl = document.querySelector('.level-display');
+            const userDisplay = document.getElementById('user-display');
+
 
             const addTaskTriggerBtnDaily = document.querySelector('.add-task-trigger-btn[data-list="daily"]');
             const addStandaloneTaskBtn = document.getElementById('add-standalone-task-btn');
@@ -1392,33 +1612,41 @@
             const addTaskModalTitle = document.getElementById('add-task-modal-title');
             const addTaskForm = document.getElementById('add-task-form');
             const newTaskInput = document.getElementById('new-task-input');
-            const cancelAddTaskBtn = document.getElementById('cancel-add-task');
             
             const addGroupModal = document.getElementById('add-group-modal');
             const addGroupForm = document.getElementById('add-group-form');
             const newGroupInput = document.getElementById('new-group-input');
-            const cancelAddGroupBtn = document.getElementById('cancel-add-group');
             
             const timerModal = document.getElementById('timer-modal');
             const timerForm = document.getElementById('timer-form');
             const timerDurationSlider = document.getElementById('timer-duration-slider');
             const timerDurationDisplay = document.getElementById('timer-duration-display');
             const timerUnitSelector = document.querySelector('.timer-unit-selector');
-            const cancelTimerBtn = document.getElementById('cancel-timer');
 
             const settingsBtn = document.getElementById('settings-btn');
             const settingsModal = document.getElementById('settings-modal');
-            const closeSettingsBtn = document.getElementById('close-settings-btn');
             const themeOptionsButtons = document.getElementById('theme-options-buttons');
             const colorOptions = document.getElementById('color-options');
             const volumeSlider = document.getElementById('volume-slider');
             const resetProgressBtn = document.getElementById('reset-progress-btn');
             const manageBackupsBtn = document.getElementById('manage-backups-btn');
-            const backgroundAnimationToggle = document.getElementById('background-animation-toggle');
 
+            const createAccountBtn = document.getElementById('create-account-btn');
+            const loginBtn = document.getElementById('login-btn');
+            const logoutBtn = document.getElementById('logout-btn');
+
+            // Account Modal elements
+            const accountModal = document.getElementById('account-modal');
+            const signupForm = document.getElementById('signup-form');
+            const loginForm = document.getElementById('login-form');
+            const signupError = document.getElementById('signup-error');
+            const loginError = document.getElementById('login-error');
+            const showSignupTab = document.getElementById('show-signup-tab');
+            const showLoginTab = document.getElementById('show-login-tab');
+
+            
             const backupModal = document.getElementById('backup-modal');
             const backupList = document.getElementById('backup-list');
-            const closeBackupBtn = document.getElementById('close-backup-btn');
 
             const confirmModal = document.getElementById('confirm-modal');
             const confirmActionBtn = document.getElementById('confirm-action-btn');
@@ -1433,6 +1661,178 @@
             
             const audioCtx = window.AudioContext ? new AudioContext() : null;
             let confirmCallback = null;
+
+            // =========================================================================
+            // ACCOUNT & DATA SYNC
+            // =========================================================================
+
+            function updateUserUI() {
+                const user = getCurrentUser();
+                if (user) {
+                    userDisplay.textContent = `Welcome, ${user.displayName}!`;
+                    createAccountBtn.style.display = 'none';
+                    loginBtn.style.display = 'none';
+                    logoutBtn.style.display = 'inline-flex';
+                } else {
+                    userDisplay.textContent = '';
+                    createAccountBtn.style.display = 'inline-flex';
+                    loginBtn.style.display = 'inline-flex';
+                    logoutBtn.style.display = 'none';
+                }
+            }
+            
+            async function loadUserState() {
+                const data = await loadData();
+                dailyTasks = data.dailyTasks || [];
+                standaloneMainQuests = data.standaloneMainQuests || [];
+                generalTaskGroups = data.generalTaskGroups || [];
+                playerData = data.playerData || { level: 1, xp: 0 };
+                settings = data.settings || {
+                    theme: 'light',
+                    accentColor: 'var(--accent-red)',
+                    volume: 0.3
+                };
+                 // Add default isExpanded property to legacy data
+                generalTaskGroups.forEach(group => {
+                    if (typeof group.isExpanded === 'undefined') {
+                        group.isExpanded = false;
+                    }
+                });
+                renderAllLists();
+                updateProgressUI();
+                applySettings();
+            }
+
+            createAccountBtn.addEventListener('click', () => {
+                showSignupTab.classList.add('active');
+                showLoginTab.classList.remove('active');
+                signupForm.style.display = 'block';
+                loginForm.style.display = 'none';
+                openModal(accountModal);
+            });
+            loginBtn.addEventListener('click', () => {
+                showLoginTab.classList.add('active');
+                showSignupTab.classList.remove('active');
+                loginForm.style.display = 'block';
+                signupForm.style.display = 'none';
+                openModal(accountModal);
+            });
+
+            showSignupTab.addEventListener('click', () => {
+                showSignupTab.classList.add('active');
+                showLoginTab.classList.remove('active');
+                signupForm.style.display = 'block';
+                loginForm.style.display = 'none';
+                loginError.textContent = '';
+                signupError.textContent = '';
+            });
+
+             showLoginTab.addEventListener('click', () => {
+                showLoginTab.classList.add('active');
+                showSignupTab.classList.remove('active');
+                loginForm.style.display = 'block';
+                signupForm.style.display = 'none';
+                loginError.textContent = '';
+                signupError.textContent = '';
+            });
+
+
+            logoutBtn.addEventListener('click', () => {
+                logout();
+                updateUserUI();
+                loadUserState(); // Reload with local data
+                closeModal(settingsModal);
+            });
+            
+            // --- Google Sign-In Handler ---
+            function parseJwt (token) {
+                try {
+                    return JSON.parse(atob(token.split('.')[1]));
+                } catch (e) {
+                    return null;
+                }
+            };
+
+            async function handleGoogleSignIn(response) {
+                const googleUser = parseJwt(response.credential);
+                if (googleUser) {
+                    await signupOrLoginWithGoogle(googleUser);
+                    closeModal(accountModal);
+                    closeModal(settingsModal);
+                    updateUserUI();
+                    loadUserState();
+                } else {
+                    loginError.textContent = "Google Sign-In failed. Please try again.";
+                }
+            }
+            
+            // Initialize Google Sign In
+            function initGoogleSignIn() {
+                const clientId = document.querySelector('meta[name="google-signin-client_id"]').content;
+                const googleBtnContainer = document.getElementById('google-signin-btn-container');
+
+                if (!clientId || clientId.startsWith("YOUR_CLIENT_ID")) {
+                    console.warn("Google Client ID is not set. Google Sign-In will not work. Please get a Client ID from Google Cloud Console and add it to the meta tag in the HTML head.");
+                    // Render a placeholder button
+                    const placeholderBtn = document.createElement('button');
+                    placeholderBtn.type = 'button';
+                    placeholderBtn.className = 'google-btn-placeholder btn';
+                    placeholderBtn.innerHTML = `<svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.618-3.22-11.28-7.581l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.015 35.258 44 30.036 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg> <span>Sign in with Google</span>`;
+                    placeholderBtn.onclick = () => {
+                        alert('Please replace "YOUR_CLIENT_ID.apps.googleusercontent.com" in the HTML head with your actual Google Client ID to enable this feature.');
+                    };
+                    googleBtnContainer.innerHTML = '';
+                    googleBtnContainer.appendChild(placeholderBtn);
+                    return;
+                }
+
+                google.accounts.id.initialize({
+                    client_id: clientId,
+                    callback: handleGoogleSignIn
+                });
+                google.accounts.id.renderButton(
+                    googleBtnContainer,
+                    { theme: 'outline', size: 'large', width: '250' } 
+                );
+                google.accounts.id.prompt(); 
+            };
+
+
+            // Signup/Login Modal Logic
+            signupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('signup-username').value;
+                const password = document.getElementById('signup-password').value;
+                signupError.style.display = 'none';
+                try {
+                    await signup(username, password);
+                    closeModal(accountModal);
+                    closeModal(settingsModal);
+                    updateUserUI();
+                    loadUserState();
+                } catch (error) {
+                    signupError.textContent = error.message;
+                    signupError.style.display = 'block';
+                }
+            });
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('login-username').value;
+                const password = document.getElementById('login-password').value;
+                loginError.style.display = 'none';
+                try {
+                    await login(username, password);
+                    closeModal(accountModal);
+                    closeModal(settingsModal);
+                    updateUserUI();
+                    loadUserState();
+                } catch (error) {
+                    loginError.textContent = error.message;
+                    loginError.style.display = 'block';
+                }
+            });
+
             
             // =========================================================================
             // GAMEPLAY CONSTANTS & LOGIC
@@ -1643,7 +2043,9 @@
                     <ul class="task-list-group" data-group-id="${group.id}"></ul>
                 `;
                 const taskListUl = groupWrapper.querySelector('ul');
-                group.tasks.forEach(task => taskListUl.appendChild(createTaskElement(task, 'group')));
+                if (group.tasks) {
+                    group.tasks.forEach(task => taskListUl.appendChild(createTaskElement(task, 'group')));
+                }
                 return groupWrapper;
             };
             
@@ -1723,6 +2125,7 @@
                     newTask = { ...commonProps };
                     const group = generalTaskGroups.find(g => g.id === listTypeOrGroupId);
                     if (group) {
+                        if (!group.tasks) group.tasks = [];
                         group.tasks.push(newTask);
                     }
                 }
@@ -2104,10 +2507,12 @@
             });
             
             const openModal = (modal) => {
+                appWrapper.classList.add('blur-background');
                 modal.classList.add('visible');
                 playSound('open');
             }
             const closeModal = (modal) => {
+                appWrapper.classList.remove('blur-background');
                 modal.classList.remove('visible');
                 playSound('close');
             }
@@ -2131,23 +2536,26 @@
                 newGroupInput.focus();
             });
             
-            cancelAddTaskBtn.addEventListener('click', () => closeModal(addTaskModal));
-            cancelAddGroupBtn.addEventListener('click', () => closeModal(addGroupModal));
-            cancelTimerBtn.addEventListener('click', () => closeModal(timerModal));
-            
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
-            closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+            
+            document.querySelectorAll('[data-close-modal]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const modalId = btn.dataset.closeModal;
+                    closeModal(document.getElementById(modalId));
+                });
+            });
             
             manageBackupsBtn.addEventListener('click', () => {
                 renderBackups();
                 openModal(backupModal);
             });
-            closeBackupBtn.addEventListener('click', () => closeModal(backupModal));
             
-            [addTaskModal, addGroupModal, settingsModal, confirmModal, backupModal, timerModal].forEach(modal => {
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) closeModal(modal);
-                });
+            [addTaskModal, addGroupModal, settingsModal, confirmModal, backupModal, timerModal, accountModal].forEach(modal => {
+                if (modal) {
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) closeModal(modal);
+                    });
+                }
             });
             
             function showConfirm(title, text, callback) {
@@ -2193,15 +2601,6 @@
                 if (selectedBtn) {
                     selectedBtn.classList.add('selected');
                 }
-
-                // Apply Background Animation
-                backgroundAnimationToggle.checked = settings.backgroundAnimation;
-                const animContainer = document.getElementById('background-animation');
-                if (settings.backgroundAnimation) {
-                    animContainer.classList.add('active');
-                } else {
-                    animContainer.classList.remove('active');
-                }
             };
 
             themeOptionsButtons.addEventListener('click', (e) => {
@@ -2226,14 +2625,6 @@
                 settings.volume = parseFloat(volumeSlider.value);
                 saveState();
             });
-            
-            backgroundAnimationToggle.addEventListener('change', () => {
-                settings.backgroundAnimation = backgroundAnimationToggle.checked;
-                saveState();
-                applySettings();
-                playSound('toggle');
-            });
-
 
             // Play a sound on release to confirm the new volume
             volumeSlider.addEventListener('change', () => {
@@ -2429,109 +2820,19 @@
                 }
             }
 
-            // =========================================================================
-            // BACKGROUND ANIMATION
-            // =========================================================================
-            function startBackgroundAnimation() {
-                const svgNS = "http://www.w3.org/2000/svg";
-                const svg = document.getElementById('background-animation');
-                let width = window.innerWidth;
-                let height = window.innerHeight;
-                svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-
-                const shapes = [];
-                const numShapes = 20;
-                const accentColors = [
-                    'var(--accent-pink)', 'var(--accent-blue)', 'var(--accent-green)', 
-                    'var(--accent-orange)', 'var(--accent-purple)'
-                ];
-
-                function createShape() {
-                    const type = Math.random() > 0.5 ? 'circle' : 'rect';
-                    const shape = document.createElementNS(svgNS, type);
-                    const size = Math.random() * 80 + 20;
-                    
-                    shape.setAttribute('cx', Math.random() * width);
-                    shape.setAttribute('cy', Math.random() * height);
-                    shape.setAttribute('r', size / 2);
-                    shape.setAttribute('x', Math.random() * width);
-                    shape.setAttribute('y', Math.random() * height);
-                    shape.setAttribute('width', size);
-                    shape.setAttribute('height', size);
-                    shape.setAttribute('fill', 'none');
-                    shape.setAttribute('stroke', accentColors[Math.floor(Math.random() * accentColors.length)]);
-                    shape.setAttribute('stroke-width', '2');
-                    shape.style.opacity = '0.2';
-                    
-                    svg.appendChild(shape);
-
-                    return {
-                        el: shape,
-                        x: parseFloat(shape.getAttribute(type === 'circle' ? 'cx' : 'x')),
-                        y: parseFloat(shape.getAttribute(type === 'circle' ? 'cy' : 'y')),
-                        vx: (Math.random() - 0.5) * 0.2,
-                        vy: (Math.random() - 0.5) * 0.2,
-                        rot: 0,
-                        vRot: (Math.random() - 0.5) * 0.1
-                    };
-                }
-
-                for (let i = 0; i < numShapes; i++) {
-                    shapes.push(createShape());
-                }
-
-                let animationFrameId;
-                function animate() {
-                    if (!settings.backgroundAnimation) {
-                        // We will keep the loop running but do nothing,
-                        // so it can start immediately when toggled on.
-                        animationFrameId = requestAnimationFrame(animate);
-                        return;
-                    }
-                    
-                    shapes.forEach(s => {
-                        s.x += s.vx;
-                        s.y += s.vy;
-                        s.rot += s.vRot;
-
-                        if (s.x > width + 50 || s.x < -50) s.vx *= -1;
-                        if (s.y > height + 50 || s.y < -50) s.vy *= -1;
-                        
-                        const transform = `translate(${s.x}, ${s.y}) rotate(${s.rot})`;
-                        if (s.el.tagName === 'circle') {
-                             s.el.setAttribute('transform', `rotate(${s.rot} ${s.x} ${s.y})`);
-                             s.el.setAttribute('cx', s.x);
-                             s.el.setAttribute('cy', s.y);
-                        } else {
-                             s.el.setAttribute('transform', `rotate(${s.rot} ${s.x + s.el.width.baseVal.value/2} ${s.y + s.el.height.baseVal.value/2})`);
-                             s.el.setAttribute('x', s.x);
-                             s.el.setAttribute('y', s.y);
-                        }
-
-                    });
-
-                    animationFrameId = requestAnimationFrame(animate);
-                }
-                
-                animate();
-
-                window.addEventListener('resize', () => {
-                     width = window.innerWidth;
-                     height = window.innerHeight;
-                     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-                });
-            }
-
 
             // =========================================================================
             // INITIALIZATION
             // =========================================================================
             const saveState = () => {
-                localStorage.setItem('dailyTasks', JSON.stringify(dailyTasks));
-                localStorage.setItem('standaloneMainQuests', JSON.stringify(standaloneMainQuests));
-                localStorage.setItem('generalTaskGroups', JSON.stringify(generalTaskGroups));
-                localStorage.setItem('playerData', JSON.stringify(playerData));
-                localStorage.setItem('settings', JSON.stringify(settings));
+                const dataToSave = {
+                    dailyTasks,
+                    standaloneMainQuests,
+                    generalTaskGroups,
+                    playerData,
+                    settings
+                };
+                saveData(dataToSave);
             };
 
             const renderAllLists = () => {
@@ -2543,6 +2844,7 @@
             };
 
             const init = () => {
+                initGoogleSignIn();
                 checkDailyReset();
                 
                 const lastBackupTime = parseInt(localStorage.getItem('lastBackupTime'), 10);
@@ -2555,11 +2857,9 @@
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
 
                 showRandomQuote();
-                applySettings();
-                updateProgressUI();
-                renderAllLists();
+                updateUserUI();
+                loadUserState();
                 resumeTimers();
-                startBackgroundAnimation();
                 setInterval(checkOverdueTasks, 60 * 1000);
             };
 
@@ -2568,4 +2868,3 @@
     </script>
 </body>
 </html>
-
