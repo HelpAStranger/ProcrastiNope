@@ -492,6 +492,12 @@
             .quote {
                 display: none; /* Hide quote on small screens to save space */
             }
+            .theme-btn span {
+                display: none;
+            }
+            .theme-btn {
+                padding: 0.75rem; /* Make it a square */
+            }
         }
 
 
@@ -712,6 +718,11 @@
             color: var(--accent);
             opacity: 0.1;
             pointer-events: none;
+        }
+        
+        /* Hide edit/delete when timer is active on any screen size */
+        .task-item.timer-active .task-actions {
+            display: none;
         }
 
         /* Add/Remove Animation */
@@ -957,9 +968,6 @@
                 -webkit-backdrop-filter: none;
                 z-index: auto;
                 margin-left: auto;
-            }
-            .task-item.timer-active .task-actions {
-                display: none;
             }
             
             /* NEW: Group Header Mobile Actions */
@@ -1640,7 +1648,7 @@
                 <div class="theme-options" id="theme-options-buttons">
                     <button class="btn theme-btn" data-theme="light" aria-label="Light Theme"><svg class="sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><span>Light</span></button>
                     <button class="btn theme-btn" data-theme="dark" aria-label="Dark Theme"><svg class="moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg><span>Dark</span></button>
-                    <button class="btn theme-btn" data-theme="system" aria-label="System Theme"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>System</span></button>
+                    <button class="btn theme-btn" data-theme="system" aria-label="System Theme"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg><span>System</span></button>
                 </div>
             </div>
             <div class="settings-group">
@@ -1744,7 +1752,7 @@
         let app, auth, db;
         let currentUser = null;
         let unsubscribeFromFirestore = null;
-        let appController = null; // <- MODIFIED: To control the app instance
+        let appController = null;
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -1759,32 +1767,28 @@
             auth = window.firebaseSDK.getAuth(app);
             db = window.firebaseSDK.getFirestore(app);
             
-            // MODIFIED: Rewritten onAuthStateChanged logic for robust user session handling
-            window.firebaseSDK.onAuthStateChanged(auth, user => {
-                // This is the central function that reacts to login/logout
+            window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
                 if (unsubscribeFromFirestore) {
-                    unsubscribeFromFirestore(); // Stop listening to old user's data
+                    unsubscribeFromFirestore(); 
                     unsubscribeFromFirestore = null;
                 }
                 
                 currentUser = user;
-                loaderOverlay.style.display = 'none';
-
+                
                 if (user || sessionStorage.getItem('isGuest')) {
+                    if (!appController) {
+                        appController = await initializeAppLogic(user); 
+                    } else {
+                        await appController.updateUser(user);
+                    }
                     landingPage.style.display = 'none';
                     appWrapper.style.display = 'block';
-                    if (!appController) {
-                        // If no app instance exists, create one.
-                        appController = initializeAppLogic(user);
-                    } else {
-                        // If an instance exists (e.g., guest -> login), update it with the new user.
-                        appController.updateUser(user);
-                    }
+                    loaderOverlay.style.display = 'none';
                 } else {
-                    // User is logged out and not a guest, show landing page.
+                    loaderOverlay.style.display = 'none';
                     landingPage.style.display = 'flex';
                     appWrapper.style.display = 'none';
-                    appController = null; // Clear the app instance
+                    appController = null; 
                 }
             });
         } catch (err) {
@@ -1800,8 +1804,6 @@
 
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
-            // Manually trigger the auth state observer with a null user.
-            // The check for 'isGuest' will handle showing the app.
             window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply();
         });
 
@@ -1813,9 +1815,7 @@
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
             
-            const onAuthSuccess = () => {
-                 // onAuthStateChanged will automatically handle hiding the landing page and showing the app
-            };
+            const onAuthSuccess = () => {};
             
             setupAuthForms(landingAuthContainer, onAuthSuccess);
             
@@ -1832,7 +1832,7 @@
         }
         
         // --- MAIN APPLICATION LOGIC ---
-        function initializeAppLogic(initialUser) {
+        async function initializeAppLogic(initialUser) {
             let user = initialUser;
             
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
@@ -1841,7 +1841,7 @@
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
             let actionsTimeoutId = null;
-            let activeMobileActionsItem = null; // Can be a task-item or a main-quest-group-header
+            let activeMobileActionsItem = null; 
             
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
@@ -1904,7 +1904,7 @@
             let confirmCallback = null;
 
             async function saveData(data) {
-                if (!user) { // Guest mode
+                if (!user) {
                     localStorage.setItem('anonymousUserData', JSON.stringify(data));
                     return;
                 }
@@ -1923,25 +1923,40 @@
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
+                applySettings(); // Apply settings first to avoid visual flash
                 renderAllLists();
                 updateProgressUI();
-                applySettings();
             }
 
             async function initialLoad() {
-                if (!user) { // Guest mode
-                    const localData = JSON.parse(localStorage.getItem('anonymousUserData')) || {};
-                    loadAndDisplayData(localData);
-                    return;
-                }
-                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        loadAndDisplayData(docSnap.data().appData || {});
-                    } else {
-                        loadAndDisplayData({});
+                return new Promise((resolve) => {
+                    if (!user) {
+                        const localData = JSON.parse(localStorage.getItem('anonymousUserData')) || {};
+                        loadAndDisplayData(localData);
+                        resolve();
+                        return;
                     }
-                }, (error) => { console.error("Error listening to Firestore:", getCoolErrorMessage(error)); });
+
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    let isFirstLoad = true;
+                    unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            loadAndDisplayData(docSnap.data().appData || {});
+                        } else {
+                            loadAndDisplayData({});
+                        }
+                        if (isFirstLoad) {
+                            isFirstLoad = false;
+                            resolve();
+                        }
+                    }, (error) => {
+                        console.error("Error listening to Firestore:", getCoolErrorMessage(error));
+                        if (isFirstLoad) {
+                             isFirstLoad = false;
+                             resolve();
+                        }
+                    });
+                });
             }
 
             function updateUserUI() {
@@ -1954,7 +1969,7 @@
                     exportDataBtn.style.display = 'none';
                     importDataBtn.style.display = 'none';
                     resetProgressBtn.textContent = 'Reset Cloud Data';
-                } else { // Guest mode
+                } else {
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
                     userDisplay.textContent = 'Playing as Guest';
@@ -2069,12 +2084,10 @@
                     </div>`;
                 if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
                 if (task.timerFinished) li.classList.add('timer-finished');
-                if (task.timerStartTime && task.timerRemaining > 0) {
-                    li.classList.add('timer-active');
-                    const ring = li.querySelector('.progress-ring-circle');
-                    if (ring) { const r = ring.r.baseVal.value, c = r * 2 * Math.PI; ring.style.strokeDasharray = `${c} ${c}`; const p = task.timerRemaining / task.timerDuration; ring.style.strokeDashoffset = c - p * c; }
-                } else {
-                    const ring = li.querySelector('.progress-ring-circle'); if (ring) ring.style.strokeDasharray = '0, 999';
+                if (task.timerStartTime && task.timerDuration) {
+                    const elapsed = (Date.now() - task.timerStartTime) / 1000;
+                    const remaining = Math.max(0, task.timerDuration - elapsed);
+                    if (remaining > 0) li.classList.add('timer-active');
                 }
                 return li;
             };
@@ -2100,13 +2113,10 @@
                 task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
                 for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } return {};
             };
-            const deleteTask = (id) => { stopTimer(id); const { list } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
+            const deleteTask = (id) => { stopTimer(id, false); const { list } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
             const completeTask = (id) => {
-                stopTimer(id); const { task, type } = findTaskAndContext(id); if (!task) return;
-                 // If timer had finished, remove the flag
-                if (task.timerFinished) {
-                    delete task.timerFinished;
-                }
+                stopTimer(id, false); const { task, type } = findTaskAndContext(id); if (!task) return;
+                if (task.timerFinished) delete task.timerFinished;
                 addXp(XP_PER_TASK); playSound('complete');
                 if (type === 'daily') {
                     if(task.completedToday) return; task.completedToday = true; task.lastCompleted = new Date().toDateString();
@@ -2121,20 +2131,100 @@
                 const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
             const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
-            const editTask = (id, text, goal) => { // FIX: Added goal parameter
+            const editTask = (id, text, goal) => {
                 const { task, type } = findTaskAndContext(id);
                 if (task) {
                     task.text = text;
-                    if (type === 'daily') {
-                        task.weeklyGoal = goal;
-                    }
+                    if (type === 'daily') task.weeklyGoal = goal;
                     saveState();
                     renderAllLists();
                 }
             };
-            function startTimer(id, mins) { const { task } = findTaskAndContext(id); if (!task) return; stopTimer(id); task.timerDuration = mins * 60; task.timerRemaining = task.timerDuration; task.timerStartTime = Date.now(); activeTimers[id] = setInterval(() => { task.timerRemaining = Math.max(0, task.timerDuration - ((Date.now() - task.timerStartTime) / 1000)); if (task.timerRemaining <= 0) { playSound('timerUp'); stopTimer(id); task.timerFinished = true; const taskEl = document.querySelector(`.task-item[data-id="${id}"]`); if (taskEl) taskEl.classList.add('timer-finished'); } saveState(); renderAllLists(); }, 1000); saveState(); renderAllLists(); }
-            function stopTimer(id) { if (activeTimers[id]) { clearInterval(activeTimers[id]); delete activeTimers[id]; const { task } = findTaskAndContext(id); if (task) { delete task.timerDuration; delete task.timerRemaining; delete task.timerStartTime; saveState(); renderAllLists(); } } }
-            function resumeTimers() { [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(t => { if(t && t.timerStartTime && t.timerDuration) { const r = t.timerDuration - ((Date.now() - t.timerStartTime) / 1000); if (r > 0) { t.timerRemaining = r; startTimer(t.id, t.timerRemaining / 60); } else { stopTimer(t.id); t.timerFinished = true; } } }); }
+            function finishTimer(id) {
+                playSound('timerUp');
+                stopTimer(id, false); // Stop interval without re-rendering
+                const { task } = findTaskAndContext(id);
+                if (task) {
+                    task.timerFinished = true;
+                    delete task.timerStartTime;
+                    delete task.timerDuration;
+                    saveState();
+                    renderAllLists();
+                }
+            }
+            function startTimer(id, mins) {
+                stopTimer(id, false);
+                const { task } = findTaskAndContext(id);
+                if (!task) return;
+
+                task.timerStartTime = Date.now();
+                task.timerDuration = mins * 60;
+                delete task.timerFinished;
+                
+                activeTimers[id] = setInterval(() => {
+                    const elapsed = (Date.now() - (task.timerStartTime || 0)) / 1000;
+                    const remaining = (task.timerDuration || 0) - elapsed;
+                    
+                    const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+                    if (!taskEl || !activeTimers[id]) {
+                        clearInterval(activeTimers[id]);
+                        delete activeTimers[id];
+                        return;
+                    }
+
+                    if (remaining > 0) {
+                        const ring = taskEl.querySelector('.progress-ring-circle');
+                        if (ring) {
+                            const r = ring.r.baseVal.value, c = r * 2 * Math.PI;
+                            const p = remaining / task.timerDuration;
+                            ring.style.strokeDashoffset = c - p * c;
+                        }
+                    } else {
+                        finishTimer(id);
+                    }
+                }, 1000);
+
+                saveState();
+                renderAllLists();
+            }
+            function stopTimer(id, shouldRender = true) {
+                if (activeTimers[id]) {
+                    clearInterval(activeTimers[id]);
+                    delete activeTimers[id];
+                }
+                const { task } = findTaskAndContext(id);
+                if (task) {
+                    delete task.timerStartTime;
+                    delete task.timerDuration;
+                    if (shouldRender) {
+                        saveState();
+                        renderAllLists();
+                    }
+                }
+            }
+            function resumeTimers() {
+                Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+                let needsSaveAndRender = false;
+                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                    if (t && t.timerStartTime && t.timerDuration) {
+                        const elapsed = (Date.now() - t.timerStartTime) / 1000;
+                        const remainingSeconds = t.timerDuration - elapsed;
+                        
+                        if (remainingSeconds > 0) {
+                            startTimer(t.id, remainingSeconds / 60);
+                        } else {
+                            t.timerFinished = true;
+                            delete t.timerStartTime;
+                            delete t.timerDuration;
+                            needsSaveAndRender = true;
+                        }
+                    }
+                });
+                if (needsSaveAndRender) {
+                    saveState();
+                    renderAllLists();
+                }
+            }
             
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
                 const taskItem = e.target.closest('.task-item');
@@ -2172,7 +2262,6 @@
                         if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${generalTaskGroups.find(g=>g.id===groupId).name}"`; openModal(addTaskModal); newTaskInput.focus(); } 
                         else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
                     } else {
-                        // Toggle expansion OR show actions on mobile
                          if (window.innerWidth <= 1023) {
                              handleMobileActions(groupHeader);
                          } else {
@@ -2187,11 +2276,16 @@
                 }
 
                 if (taskItem) {
+                    const id = taskItem.dataset.id;
+                    if (taskItem.classList.contains('daily-completed')) {
+                        uncompleteDailyTask(id);
+                        return;
+                    }
+                    
                     handleMobileActions(taskItem);
+
                     if(e.target.closest('button')) {
-                        const id = taskItem.dataset.id;
                         currentEditingTaskId = id;
-                        if (taskItem.classList.contains('daily-completed')) { uncompleteDailyTask(id); return; }
                         if (e.target.closest('.complete-btn')) completeTask(id);
                         else if (e.target.closest('.delete-btn')) deleteTask(id);
                         else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
@@ -2250,31 +2344,24 @@
             document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
             
             function initSortable() {
-                // This is the new, unified drag/drop handler for tasks
                 function onTaskDrop(evt) {
                     document.body.classList.remove('is-dragging');
                     const taskId = evt.item.dataset.id;
                     if (!taskId) return;
-
-                    // Find the task object and remove it from its original source array
                     const { task, list: sourceListArray } = findTaskAndContext(taskId);
                     if (!task || !sourceListArray) return;
                     const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
-                    if (originalIndex > -1) {
-                        sourceListArray.splice(originalIndex, 1);
-                    } else { return; } // Should not happen
+                    if (originalIndex > -1) sourceListArray.splice(originalIndex, 1);
+                     else return; 
 
-                    // Find the destination array
                     const toListEl = evt.to;
                     const toListId = toListEl.id;
                     const toGroupId = toListEl.dataset.groupId;
                     let destListArray;
 
-                    if (toListId === 'daily-task-list') {
-                        destListArray = dailyTasks;
-                    } else if (toListId === 'standalone-task-list') {
-                        destListArray = standaloneMainQuests;
-                    } else if (toGroupId) {
+                    if (toListId === 'daily-task-list') destListArray = dailyTasks;
+                    else if (toListId === 'standalone-task-list') destListArray = standaloneMainQuests;
+                    else if (toGroupId) {
                         const group = generalTaskGroups.find(g => g.id === toGroupId);
                         if (group) {
                             if (!group.tasks) group.tasks = [];
@@ -2282,8 +2369,8 @@
                         }
                     }
 
-                    if (!destListArray) { // Failsafe
-                        sourceListArray.splice(originalIndex, 0, task); // Put it back
+                    if (!destListArray) {
+                        sourceListArray.splice(originalIndex, 0, task);
                         return;
                     }
                     
@@ -2294,7 +2381,7 @@
 
                 const commonTaskOptions = {
                     animation: 150,
-                    delay: 500, // For mobile hold-to-drag
+                    delay: 500,
                     delayOnTouchOnly: true,
                     onStart: () => document.body.classList.add('is-dragging'),
                     onEnd: onTaskDrop 
@@ -2364,12 +2451,12 @@
             };
 
             initOnce();
-            loadUserSession();
+            await loadUserSession();
 
             return {
-                updateUser: (newUser) => {
+                updateUser: async (newUser) => {
                     user = newUser;
-                    loadUserSession();
+                    await loadUserSession();
                 }
             };
         }
