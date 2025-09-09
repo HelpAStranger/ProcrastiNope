@@ -1608,7 +1608,7 @@
         let app, auth, db;
         let currentUser = null;
         let unsubscribeFromFirestore = null;
-        let appInitialized = false;
+        let appController = null; // <- MODIFIED: To control the app instance
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -1623,6 +1623,7 @@
             auth = window.firebaseSDK.getAuth(app);
             db = window.firebaseSDK.getFirestore(app);
             
+            // MODIFIED: Rewritten onAuthStateChanged logic for robust user session handling
             window.firebaseSDK.onAuthStateChanged(auth, user => {
                 // This is the central function that reacts to login/logout
                 if (unsubscribeFromFirestore) {
@@ -1630,23 +1631,24 @@
                     unsubscribeFromFirestore = null;
                 }
                 
-                if (!user) { // User is logged out
-                    appInitialized = false; // Allow re-initialization
-                }
-
                 currentUser = user;
                 loaderOverlay.style.display = 'none';
 
                 if (user || sessionStorage.getItem('isGuest')) {
                     landingPage.style.display = 'none';
                     appWrapper.style.display = 'block';
-                    if (!appInitialized) { // Only start the app if it hasn't been initialized for this session
-                        startTheApp(user);
+                    if (!appController) {
+                        // If no app instance exists, create one.
+                        appController = initializeAppLogic(user);
+                    } else {
+                        // If an instance exists (e.g., guest -> login), update it with the new user.
+                        appController.updateUser(user);
                     }
                 } else {
+                    // User is logged out and not a guest, show landing page.
                     landingPage.style.display = 'flex';
                     appWrapper.style.display = 'none';
-                    showLandingPage();
+                    appController = null; // Clear the app instance
                 }
             });
         } catch (err) {
@@ -1660,14 +1662,12 @@
             landingChoices.style.display = 'block';
         }
 
-        function startTheApp(user) {
-            appInitialized = true; // Mark as initialized for this session
-            initializeAppLogic(user);
-        }
+        // REMOVED: startTheApp function is no longer needed
 
         document.getElementById('landing-guest-btn').addEventListener('click', () => {
             sessionStorage.setItem('isGuest', 'true');
-            // onAuthStateChanged will fire with a null user, but the guest check will pass and start the app
+            // Manually trigger the auth state observer with a null user.
+            // The check for 'isGuest' will handle showing the app.
             window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply();
         });
 
@@ -1700,7 +1700,10 @@
         }
         
         // --- MAIN APPLICATION LOGIC ---
-        function initializeAppLogic(user) {
+        function initializeAppLogic(initialUser) {
+            // MODIFIED: Use a local, updatable variable for the user.
+            let user = initialUser;
+            
             // All app-specific variables and functions go here to keep them scoped
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
@@ -2027,17 +2030,30 @@
                 });
             });
 
-            const init = async () => {
-                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
-                showRandomQuote();
+            // MODIFIED: Split initialization into one-time and session-based parts
+            async function loadUserSession() {
                 updateUserUI();
                 await initialLoad();
                 checkDailyReset();
                 resumeTimers();
+            }
+            
+            const initOnce = () => {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
+                showRandomQuote();
                 setInterval(checkOverdueTasks, 60 * 1000);
             };
 
-            init();
+            initOnce();
+            loadUserSession(); // Load data for the initial user.
+
+            // MODIFIED: Return an object to control this instance from the outside.
+            return {
+                updateUser: (newUser) => {
+                    user = newUser; // Update the user in the closure
+                    loadUserSession(); // Reload data for the new user
+                }
+            };
         }
 
         // =========================================================================
@@ -2236,4 +2252,3 @@
     </script>
 </body>
 </html>
-
