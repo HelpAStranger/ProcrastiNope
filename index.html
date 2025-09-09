@@ -43,8 +43,7 @@
             updateDoc,
             arrayUnion,
             arrayRemove,
-            deleteDoc,
-            documentId
+            deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -76,8 +75,7 @@
             updateDoc,
             arrayUnion,
             arrayRemove,
-            deleteDoc,
-            documentId
+            deleteDoc
         };
     </script>
     
@@ -2246,9 +2244,6 @@
         
         // FIX: Moved to module scope to prevent temporal dead zone error on partial app initialization
         let activeMobileActionsItem = null; 
-        
-        // FIX: Global reference to AudioContext for resuming
-        let audioCtx;
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -2262,13 +2257,6 @@
             app = window.firebaseSDK.initializeApp(firebaseConfig);
             auth = window.firebaseSDK.getAuth(app);
             db = window.firebaseSDK.getFirestore(app);
-            
-            // FIX: Initialize AudioContext on first user gesture
-            document.addEventListener('click', () => {
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-            }, { once: true });
             
             window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
                 if (isSigningIn) return; // Don't run logic during sign-in process
@@ -2373,9 +2361,9 @@
             // FIX: Define shared variables and functions first to avoid initialization errors.
             let user = initialUser;
             let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+            const audioCtx = window.AudioContext ? new AudioContext() : null;
             
             function playSound(type) {
-                // FIX: Check if audioCtx exists before attempting to play sound
                 if (!audioCtx || settings.volume === 0) return;
                 const o = audioCtx.createOscillator(), g = audioCtx.createGain();
                 o.connect(g); g.connect(audioCtx.destination);
@@ -2509,7 +2497,7 @@
                 // This prevents the username modal from appearing after a successful email sign-up.
                 const isEmailUser = user.providerData.some(p => p.providerId === 'password');
 
-                if ((!docSnap.exists() || !docSnap.data().username) && !isEmailUser) {
+                if (!docSnap.exists() || !docSnap.data().username) {
                     const usernameModal = document.getElementById('username-modal');
                     const usernameForm = document.getElementById('username-form');
                     const newUsernameInput = document.getElementById('new-username-input');
@@ -2816,8 +2804,6 @@
                         if (ring) {
                             const r = 10;
                             const c = r * 2 * Math.PI;
-                            // FIX: Define p before using it in the expression.
-                            const p = remaining / task.timerDuration;
                             ring.style.strokeDashoffset = c - (p * c);
                         }
                     }
@@ -3124,19 +3110,21 @@
                 // Reset form state every time it's opened
                 manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
                 manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
-                
-                // Hide or show reauth form based on auth provider
-                reauthContainer.style.display = isGoogleUser ? 'none' : 'block';
-                manageFormsContainer.style.display = isGoogleUser ? 'block' : 'none';
 
                 if (isGoogleUser) {
+                    reauthContainer.style.display = 'none';
+                    manageFormsContainer.style.display = 'block';
                     // Hide options not applicable to Google users
                     manageAccountModal.querySelector('#update-email-form').style.display = 'none';
                     manageAccountModal.querySelector('#update-password-form').style.display = 'none';
+                    manageAccountModal.querySelector('#update-username-form').style.display = 'block';
                 } else {
+                    reauthContainer.style.display = 'block';
+                    manageFormsContainer.style.display = 'none';
                     // Ensure all forms are potentially visible after re-auth
                     manageAccountModal.querySelector('#update-email-form').style.display = 'block';
                     manageAccountModal.querySelector('#update-password-form').style.display = 'block';
+                    manageAccountModal.querySelector('#update-username-form').style.display = 'block';
                 }
                 openModal(manageAccountModal);
             });
@@ -3664,8 +3652,7 @@
 
         // =========================================================================
         // UTILITY/SHARED AUTH FUNCTIONS
-        ==========================================================================
-        */
+        // =========================================================================
         function getCoolErrorMessage(error) {
             const defaultMessage = "An unexpected vortex appeared! Please try again.";
             if (!error) return defaultMessage;
