@@ -64,12 +64,12 @@
             --surface-light: #FFFFFF;
             --text-on-accent: #4E443A; /* Dark text for light pastels */
 
-            /* Dark Theme - WARM & PASTEL */
-            --bg-dark: #2D261E; /* Dark Warm Brown */
+            /* Dark Theme - DEEPER & WARM (MODIFIED) */
+            --bg-dark: #1A1612; /* Very dark warm brown, almost black */
             --text-dark: #EAE2D6; /* Warm Off-white */
             --border-dark: #EAE2D6;
-            --shadow-dark: #EAE2D6;
-            --surface-dark: #3E3529; /* Lighter Warm Brown */
+            --shadow-dark: #000000; /* Pure black shadow for neobrutalism */
+            --surface-dark: #2D261E; /* A slightly lighter brown for cards */
             
             /* Light Theme Accent Colors */
             --accent-pink-light: #FFB7C5;
@@ -380,6 +380,8 @@
         
         .header-content {
             text-align: left;
+            flex-grow: 1; /* Allow content to take available space */
+            min-width: 0; /* Critical for preventing overflow on flex items */
         }
 
         .header-controls {
@@ -387,6 +389,7 @@
             flex-direction: column;
             align-items: center;
             gap: 0.5rem;
+            flex-shrink: 0; /* Prevent controls from shrinking */
         }
 
         #user-display {
@@ -471,6 +474,21 @@
             mix-blend-mode: normal; /* Changed from unset */
             filter: none; /* Changed from unset */
             color: var(--text-dark); /* Explicitly set color for dark mode */
+        }
+        
+        /* Mobile Responsiveness for Header */
+        @media (max-width: 640px) {
+            .sticky-header {
+                padding: 1rem;
+                gap: 1rem;
+            }
+            .main-title {
+                font-size: 1.8rem;
+                letter-spacing: -1px;
+            }
+            .quote {
+                display: none; /* Hide quote on small screens to save space */
+            }
         }
 
 
@@ -704,6 +722,7 @@
              flex-grow: 1;
              flex-basis: 0; /* Important for flex wrapping */
              margin-right: 1rem;
+             min-width: 0; /* ADDED: Prevents long text from pushing controls */
         }
 
         .task-item .task-text {
@@ -713,6 +732,7 @@
             transition: all var(--transition-speed) ease;
             padding-bottom: 5px; 
             margin-right: 1rem;
+            word-break: break-word; /* Ensure long text wraps */
         }
         
         .task-controls {
@@ -1518,7 +1538,7 @@
                 <div class="volume-slider-container"><input type="range" id="volume-slider" min="0" max="1" step="0.01" aria-label="Volume"></div>
             </div>
              <div class="settings-group">
-                <h3>Data (Local)</h3>
+                <h3 id="data-management-heading">Data (Local)</h3>
                 <div class="data-actions">
                     <button id="export-data-btn" class="btn">Export Guest Data</button>
                     <button id="import-data-btn" class="btn">Import Guest Data</button>
@@ -1746,6 +1766,7 @@
             const exportDataBtn = document.getElementById('export-data-btn');
             const importDataBtn = document.getElementById('import-data-btn');
             const importFileInput = document.getElementById('import-file-input');
+            const dataManagementHeading = document.getElementById('data-management-heading');
             const settingsLoginBtn = document.getElementById('settings-login-btn');
             const logoutBtn = document.getElementById('logout-btn');
             const userDisplay = document.getElementById('user-display');
@@ -1812,15 +1833,22 @@
                     logoutBtn.style.display = 'inline-flex';
                     userDisplay.textContent = `Logged in as: ${user.displayName || user.email}`;
                     userDisplay.style.display = 'flex';
-                    exportDataBtn.disabled = true;
-                    importDataBtn.disabled = true;
+                    // Update data section for logged-in user
+                    dataManagementHeading.textContent = "Cloud Data";
+                    exportDataBtn.style.display = 'none';
+                    importDataBtn.style.display = 'none';
+                    resetProgressBtn.textContent = 'Reset Cloud Data';
+
                 } else { // Guest mode
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
                     userDisplay.textContent = 'Playing as Guest';
                     userDisplay.style.display = 'flex';
-                    exportDataBtn.disabled = false;
-                    importDataBtn.disabled = false;
+                    // Update data section for guest user
+                    dataManagementHeading.textContent = "Guest Data (Local)";
+                    exportDataBtn.style.display = 'inline-flex';
+                    importDataBtn.style.display = 'inline-flex';
+                    resetProgressBtn.textContent = 'Reset Progress';
                 }
             }
             const XP_PER_TASK = 35;
