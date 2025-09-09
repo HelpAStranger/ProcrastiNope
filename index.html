@@ -21,7 +21,11 @@
             signInWithPopup, 
             createUserWithEmailAndPassword, 
             signInWithEmailAndPassword, 
-            signOut 
+            signOut,
+            reauthenticateWithCredential,
+            EmailAuthProvider,
+            updatePassword,
+            verifyBeforeUpdateEmail
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -46,6 +50,10 @@
             createUserWithEmailAndPassword,
             signInWithEmailAndPassword,
             signOut,
+            reauthenticateWithCredential,
+            EmailAuthProvider,
+            updatePassword,
+            verifyBeforeUpdateEmail,
             getFirestore,
             doc,
             getDoc,
@@ -1090,7 +1098,7 @@
             overflow-y: auto;
         }
 
-        #account-modal .modal-content, #username-modal .modal-content {
+        #account-modal .modal-content, #username-modal .modal-content, #manage-account-modal .modal-content {
             max-width: 400px;
             padding: 1.5rem;
         }
@@ -1400,14 +1408,20 @@
             height: 20px;
         }
         
-        .error-message {
-            color: var(--accent-red-light);
+        .error-message, .success-message {
             font-weight: 700;
             text-align: center;
             margin-top: 1rem;
             min-height: 1.2em;
             padding: 0 0.5rem;
             line-height: 1.4;
+        }
+
+        .error-message {
+            color: var(--accent-red-light);
+        }
+        .success-message {
+            color: var(--accent-green-light);
         }
         
         /*
@@ -1708,6 +1722,7 @@
                 <div class="account-actions">
                     <span id="user-display" style="display: none; align-items:center;"></span>
                     <button id="settings-login-btn" class="btn">Login / Sign Up</button>
+                    <button id="manage-account-btn" class="btn" style="display: none;">Manage Account</button>
                     <button id="logout-btn" class="btn" style="display: none;">Logout</button>
                 </div>
             </div>
@@ -1746,7 +1761,56 @@
         <div class="modal-content"></div>
     </div>
     
-    <!-- FIX: Added loader modal for Google Sign-In process -->
+    <div id="manage-account-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div id="reauth-container">
+                <h2>Confirm Password</h2>
+                <p style="margin-bottom: 1.5rem;">For your security, please enter your password to continue.</p>
+                <form id="reauth-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="reauth-password">Current Password</label>
+                        <input type="password" id="reauth-password" required>
+                    </div>
+                    <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Confirm</button>
+                    <p class="error-message" id="reauth-error"></p>
+                </form>
+            </div>
+
+            <div id="manage-forms-container" style="display: none;">
+                <h2>Manage Account</h2>
+                
+                <form id="update-email-form" class="auth-form" style="margin-top: 2rem;">
+                     <div class="settings-group">
+                        <h3>Change Email</h3>
+                        <div class="form-group">
+                            <label for="update-email-input">New Email</label>
+                            <input type="email" id="update-email-input" required>
+                        </div>
+                        <button type="submit" class="btn modal-submit-btn">Send Verification Email</button>
+                        <p class="error-message" id="update-email-error"></p>
+                        <p class="success-message" id="update-email-success"></p>
+                    </div>
+                </form>
+
+                <form id="update-password-form" class="auth-form" style="margin-top: 2rem;">
+                    <div class="settings-group">
+                        <h3>Change Password</h3>
+                        <div class="form-group">
+                            <label for="update-password-input">New Password</label>
+                            <input type="password" id="update-password-input" required>
+                        </div>
+                        <button type="submit" class="btn modal-submit-btn">Update Password</button>
+                        <p class="error-message" id="update-password-error"></p>
+                        <p class="success-message" id="update-password-success"></p>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                 <button type="button" class="btn" data-close-modal="manage-account-modal">Close</button>
+            </div>
+        </div>
+    </div>
+    
     <div id="google-signin-loader-modal" class="modal-overlay">
         <div class="modal-content" style="max-width: 300px; text-align: center;">
             <h2 style="font-size: 1.5rem;">Connecting...</h2>
@@ -1954,6 +2018,8 @@
                 }
             };
 
+            let activeMobileActionsItem = null; 
+
             const openModal = (modal) => {
                 if(modal) {
                     if (activeMobileActionsItem) {
@@ -2030,7 +2096,6 @@
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
             let actionsTimeoutId = null;
-            let activeMobileActionsItem = null; 
             
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
@@ -2081,9 +2146,11 @@
             const importFileInput = document.getElementById('import-file-input');
             const dataManagementHeading = document.getElementById('data-management-heading');
             const settingsLoginBtn = document.getElementById('settings-login-btn');
+            const manageAccountBtn = document.getElementById('manage-account-btn');
             const logoutBtn = document.getElementById('logout-btn');
             const userDisplay = document.getElementById('user-display');
             const accountModal = document.getElementById('account-modal');
+            const manageAccountModal = document.getElementById('manage-account-modal');
             const confirmModal = document.getElementById('confirm-modal');
             const confirmActionBtn = document.getElementById('confirm-action-btn');
             const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
@@ -2160,7 +2227,8 @@
                 if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    
+                    manageAccountBtn.style.display = user.providerData.some(p => p.providerId === 'password') ? 'inline-flex' : 'none';
+
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                     const username = docSnap.exists() ? docSnap.data().username : user.email;
@@ -2174,6 +2242,7 @@
                 } else {
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
+                    manageAccountBtn.style.display = 'none';
                     userDisplay.textContent = 'Playing as Guest';
                     userDisplay.style.display = 'flex';
                     dataManagementHeading.textContent = "Guest Data (Local)";
@@ -2544,8 +2613,12 @@
             addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
             addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
-            document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => closeModal(document.getElementById(btn.dataset.closeModal))));
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
+            document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', (e) => {
+                const modalId = e.currentTarget.dataset.closeModal;
+                const modal = document.getElementById(modalId);
+                closeModal(modal);
+            }));
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
             function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
             confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
             confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
@@ -2571,6 +2644,73 @@
             importDataBtn.addEventListener('click', () => importFileInput.click());
             importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
             document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
+            manageAccountBtn.addEventListener('click', () => {
+                openModal(manageAccountModal);
+                // Reset form state every time it's opened
+                manageAccountModal.querySelector('#reauth-container').style.display = 'block';
+                manageAccountModal.querySelector('#manage-forms-container').style.display = 'none';
+                manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
+                manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
+            });
+
+            const reauthForm = document.getElementById('reauth-form');
+            reauthForm.addEventListener('submit', async(e) => {
+                e.preventDefault();
+                const password = document.getElementById('reauth-password').value;
+                const errorEl = document.getElementById('reauth-error');
+                errorEl.textContent = '';
+
+                if (!currentUser || !currentUser.email) {
+                    errorEl.textContent = 'No user is currently logged in.';
+                    return;
+                }
+
+                const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
+
+                try {
+                    await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
+                    // On success, hide re-auth and show management forms
+                    document.getElementById('reauth-container').style.display = 'none';
+                    document.getElementById('manage-forms-container').style.display = 'block';
+                } catch (error) {
+                    errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
+
+            const updateEmailForm = document.getElementById('update-email-form');
+            updateEmailForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const newEmail = document.getElementById('update-email-input').value;
+                const errorEl = document.getElementById('update-email-error');
+                const successEl = document.getElementById('update-email-success');
+                errorEl.textContent = '';
+                successEl.textContent = '';
+
+                try {
+                    await window.firebaseSDK.verifyBeforeUpdateEmail(currentUser, newEmail);
+                    successEl.textContent = 'Verification email sent! Please check your new email address.';
+                } catch (error) {
+                    errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
+
+            const updatePasswordForm = document.getElementById('update-password-form');
+            updatePasswordForm.addEventListener('submit', async(e) => {
+                e.preventDefault();
+                const newPassword = document.getElementById('update-password-input').value;
+                const errorEl = document.getElementById('update-password-error');
+                const successEl = document.getElementById('update-password-success');
+                errorEl.textContent = '';
+                successEl.textContent = '';
+
+                try {
+                    await window.firebaseSDK.updatePassword(currentUser, newPassword);
+                    successEl.textContent = 'Password updated successfully!';
+                    updatePasswordForm.reset();
+                } catch (error) {
+                     errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
             
             function initSortable() {
                 function onTaskDrop(evt) {
@@ -2711,7 +2851,7 @@
             switch (error.code) {
                 case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
                 case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
-                case 'auth/user-not-found': return "No account found with this email. Time to sign up?";
+                case 'auth/user-not-found': return "No account found with this email or username. Time to sign up?";
                 case 'auth/wrong-password': return "Incorrect password. Did you forget? It happens to the best of us!";
                 case 'auth/email-already-in-use': return "An account with this email already exists. Try logging in!";
                 case 'auth/weak-password': return "Password should be at least 6 characters long. Make it strong!";
@@ -2790,8 +2930,6 @@
                 sessionStorage.removeItem('isGuest');
             }
              isSigningIn = false; // Unset flag
-             // Manually trigger a "reload" of the auth state logic
-             window.firebaseSDK.onAuthStateChanged(auth, () => {});
              window.location.reload(); // Force a full refresh to ensure clean state
         }
         
@@ -2862,7 +3000,7 @@
                 try {
                     let emailToLogin = loginInput;
                     if (!loginInput.includes('@')) {
-                        const username = loginInput.toLowerCase();
+                        const username = loginInput.trim().toLowerCase();
                         const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
                         const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
