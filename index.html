@@ -26,7 +26,8 @@
             EmailAuthProvider,
             updatePassword,
             updateEmail,
-            fetchSignInMethodsForEmail
+            fetchSignInMethodsForEmail,
+            deleteUser
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -41,7 +42,8 @@
             getDocs,
             updateDoc,
             arrayUnion,
-            arrayRemove
+            arrayRemove,
+            deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -59,6 +61,7 @@
             updatePassword,
             updateEmail,
             fetchSignInMethodsForEmail,
+            deleteUser,
             getFirestore,
             doc,
             getDoc,
@@ -71,7 +74,8 @@
             getDocs,
             updateDoc,
             arrayUnion,
-            arrayRemove
+            arrayRemove,
+            deleteDoc
         };
     </script>
     
@@ -1682,7 +1686,8 @@
             border-radius: 50%;
             pointer-events: none;
             opacity: 0;
-            animation: confetti-fall 2s ease-out forwards;
+            /* FIX: Use an animation that fades out instead of coming from the top */
+            /* animation: confetti-fall 2s ease-out forwards; */
         }
         
         .party-time-overlay {
@@ -2133,6 +2138,12 @@
                         <p class="success-message" id="update-password-success"></p>
                     </div>
                 </form>
+                
+                <div class="settings-group">
+                    <h3>Delete Account</h3>
+                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">This is permanent and cannot be undone. All your data will be erased.</p>
+                    <button type="button" id="delete-account-btn" class="btn" style="width: 100%; background-color: var(--accent-red); color: var(--text-on-accent); --shadow-color: var(--shadow-dark);">Delete My Account</button>
+                </div>
             </div>
             <div class="modal-actions">
                  <button type="button" class="btn" data-close-modal="manage-account-modal">Close</button>
@@ -2472,6 +2483,7 @@
             const friendRequestCountBadge = document.getElementById('friend-request-count');
             const friendsListContainer = friendsModal.querySelector('.friends-list-container');
             const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
+            const deleteAccountBtn = document.getElementById('delete-account-btn');
 
 
             async function promptForUsernameIfNeeded() {
@@ -3310,6 +3322,7 @@
 
             function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
             function createFullScreenConfetti(party, o = null) {
+                // FIX: Ensure confetti elements are properly removed from the DOM.
                 for (let i = 0; i < (party ? 200 : 100); i++) {
                     const c = document.createElement('div'); c.className = 'confetti';
                     const sx = o ? o.x : Math.random()*window.innerWidth, sy = o ? o.y : -20;
@@ -3559,6 +3572,48 @@
                 playSound('toggle');
             });
 
+            // Account Deletion Logic
+            deleteAccountBtn.addEventListener('click', () => {
+                showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data.', async () => {
+                    try {
+                        // Re-authenticate user before deleting, if they are not a Google user
+                        const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
+                        if (!isGoogleUser) {
+                           const password = document.getElementById('reauth-password').value;
+                           const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
+                           await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
+                        }
+
+                        // Get the username before deleting the user document
+                        const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
+                        const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
+                        const username = userDocSnap.exists() ? userDocSnap.data().username : null;
+
+                        // Delete user-related data in a batch write
+                        const batch = window.firebaseSDK.writeBatch(db);
+                        batch.delete(userDocRef);
+                        if (username) {
+                            const usernameDocRef = window.firebaseSDK.doc(db, "usernames", username);
+                            batch.delete(usernameDocRef);
+                        }
+
+                        // Delete user from Firebase Authentication
+                        await window.firebaseSDK.deleteUser(currentUser);
+                        
+                        await batch.commit();
+
+                        closeModal(manageAccountModal);
+                        // Sign out and reload page to reflect changes
+                        window.firebaseSDK.signOut(auth);
+                        window.location.reload(); 
+                    } catch (error) {
+                        console.error("Error deleting account:", error);
+                        const errorEl = document.getElementById('update-password-error');
+                        errorEl.textContent = getCoolErrorMessage(error);
+                    }
+                });
+            });
+
 
             async function loadUserSession() {
                 await initialLoad();
@@ -3613,6 +3668,8 @@
                 case 'auth/requires-recent-login': return "This is a sensitive action. Please log in again to continue.";
                 case 'auth/popup-closed-by-user': return "Sign-in cancelled. Did you change your mind?";
                 case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
+                case 'auth/too-many-requests': return "You have made too many sign-in attempts. Please wait a bit before trying again.";
+                case 'auth/invalid-credential': return "Invalid login credentials. Please check your username and password.";
                 default:
                     console.error("Firebase/App Error:", error);
                     return "An unexpected error occurred. Check the console for more details.";
