@@ -2107,16 +2107,20 @@
                             return;
                         }
 
-                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-
-                        if (usernameSnap.exists()) {
-                            usernameErrorEl.textContent = 'This username is already taken.';
-                            return;
-                        }
-
-                        const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                        // Add a loader for better UX
+                        const submitButton = usernameForm.querySelector('button[type="submit"]');
+                        submitButton.disabled = true;
+                        submitButton.textContent = 'Saving...';
+                        
                         try {
+                            const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                            const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                            if (usernameSnap.exists()) {
+                                throw new Error('This username is already taken.');
+                            }
+
+                            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                             const batch = window.firebaseSDK.writeBatch(db);
                             batch.set(usernamesRef, { userId: user.uid });
                             batch.set(userDocRef, { 
@@ -2126,11 +2130,23 @@
                             }, { merge: true });
                             await batch.commit();
                             
-                             closeModal(usernameModal);
-                            // This was causing the loop, onAuthStateChanged will handle the UI transition
-                            // window.location.reload(); 
+                            closeModal(usernameModal);
+                            loaderOverlay.style.display = 'flex'; // Show main loader for transition
+
+                            // *** FIX: Manually transition to the full app state ***
+                            if (appController && appController.isPartial) {
+                                appController.shutdown();
+                            }
+                            appController = await initializeAppLogic(user); // Re-initialize with full user
+                            
+                            landingPage.style.display = 'none';
+                            appWrapper.style.display = 'block';
+                            loaderOverlay.style.display = 'none';
+
                         } catch (error) {
-                            usernameErrorEl.textContent = getCoolErrorMessage(error);
+                            usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
+                            submitButton.disabled = false;
+                            submitButton.textContent = 'Save Username';
                         }
                     };
                 };
@@ -3179,4 +3195,3 @@
     </script>
 </body>
 </html>
-
