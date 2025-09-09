@@ -651,7 +651,11 @@
 
         #daily-task-list, #standalone-task-list, .main-quest-group ul {
             list-style: none;
-            min-height: 20px; /* Drop zone */
+        }
+        
+        /* FIX: Remove space from empty standalone quest list */
+        #standalone-task-list:empty {
+            display: none;
         }
 
         .main-quest-group ul.task-list-group {
@@ -668,10 +672,6 @@
             max-height: 1000px; /* Increased max-height for very long lists */
             margin-top: 1rem;
             transition: max-height 0.25s ease-in;
-        }
-        
-        #standalone-task-list {
-            /* FIX: Removed margin-bottom to fix spacing */
         }
 
 
@@ -1624,11 +1624,10 @@
             <h2 id="add-task-modal-title">Add New Quest</h2>
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
-                <!-- FIX: Replaced number input with a neobrutalist slider -->
                 <div id="weekly-goal-container" style="display: none;">
                     <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">3</span> days</label>
                     <div class="weekly-goal-slider-container">
-                         <input type="range" id="new-task-weekly-goal-slider" min="1" max="7" value="3">
+                         <input type="range" id="new-task-weekly-goal-slider" min="0" max="7" value="3">
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -1645,11 +1644,10 @@
             <form id="edit-task-form">
                 <input type="hidden" id="edit-task-id">
                 <input type="text" id="edit-task-input" required>
-                <!-- FIX: Replaced number input with a neobrutalist slider for editing -->
                 <div id="edit-weekly-goal-container" style="display: none;">
                     <label for="edit-task-weekly-goal-slider">Weekly Goal: <span id="edit-task-weekly-goal-display">3</span> days</label>
                     <div class="weekly-goal-slider-container">
-                        <input type="range" id="edit-task-weekly-goal-slider" min="1" max="7" value="3">
+                        <input type="range" id="edit-task-weekly-goal-slider" min="0" max="7" value="3">
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -1872,13 +1870,15 @@
                     const docSnap = await window.firebaseSDK.getDoc(userDocRef);
 
                     if (!docSnap.exists() || !docSnap.data().username) {
-                         if (!appController) {
+                         if (!appController || !appController.isPartial) {
+                            if(appController) appController.shutdown();
                             appController = await initializeAppLogic({ uid: user.uid, isPartial: true });
                         }
-                        appController.promptForUsername(docSnap.exists() ? docSnap.data().appData : null);
+                        appController.promptForUsername(user, docSnap.exists() ? docSnap.data().appData : null);
                         loaderOverlay.style.display = 'none';
                     } else {
                         if (!appController || appController.isPartial) {
+                            if(appController) appController.shutdown();
                             appController = await initializeAppLogic(user); 
                         } else {
                             await appController.updateUser(user);
@@ -1913,7 +1913,6 @@
             landingChoices.style.display = 'block';
         }
         
-        // FIX: Guest login logic is now more direct and reliable
         document.getElementById('landing-guest-btn').addEventListener('click', async () => {
             sessionStorage.setItem('isGuest', 'true');
             loaderOverlay.style.display = 'flex';
@@ -1978,7 +1977,7 @@
                 const newUsernameInput = document.getElementById('new-username-input');
                 const usernameErrorEl = usernameModal.querySelector('.username-error');
 
-                const promptForUsername = (existingData) => {
+                const promptForUsername = (user, existingData) => {
                     openModal(usernameModal);
                     newUsernameInput.focus();
 
@@ -1999,17 +1998,17 @@
                             return;
                         }
 
-                        const userDocRef = window.firebaseSDK.doc(db, "users", initialUser.uid);
+                        const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                         try {
-                            await window.firebaseSDK.setDoc(usernamesRef, { userId: initialUser.uid });
+                            await window.firebaseSDK.setDoc(usernamesRef, { userId: user.uid });
                             await window.firebaseSDK.setDoc(userDocRef, { 
                                 username: username, 
-                                email: auth.currentUser.email,
+                                email: user.email,
                                 appData: existingData || {}
                             }, { merge: true });
                             
                             closeModal(usernameModal);
-                            // No reload needed, onAuthStateChanged will refire with the now-complete user data.
+                            // No reload needed, onAuthStateChanged will refire with the now-complete user data and load the full app.
                         } catch (error) {
                             usernameErrorEl.textContent = getCoolErrorMessage(error);
                         }
@@ -2514,9 +2513,9 @@
                                 editTaskInput.value = task.text;
                                 editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
                                 if (type === 'daily') {
-                                    const goal = task.weeklyGoal || 1;
+                                    const goal = task.weeklyGoal || 0;
                                     editWeeklyGoalSlider.value = goal;
-                                    editWeeklyGoalDisplay.textContent = `${goal}`;
+                                    editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
                                     editWeeklyGoalContainer.style.display = 'block';
                                 } else {
                                     editWeeklyGoalContainer.style.display = 'none';
@@ -2529,7 +2528,7 @@
                 } 
             });
 
-            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 3; weeklyGoalDisplay.textContent = '3'; closeModal(addTaskModal); } });
+            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 3; weeklyGoalDisplay.textContent = '3 days'; closeModal(addTaskModal); } });
             editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
             timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
             timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
@@ -2552,9 +2551,16 @@
             volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
             volumeSlider.addEventListener('change', () => playSound('toggle'));
             
-            // Weekly goal slider event listeners
-            weeklyGoalSlider.addEventListener('input', () => weeklyGoalDisplay.textContent = weeklyGoalSlider.value);
-            editWeeklyGoalSlider.addEventListener('input', () => editWeeklyGoalDisplay.textContent = editWeeklyGoalSlider.value);
+            function updateGoalDisplay(slider, display) {
+                const value = slider.value;
+                if (value === '0') {
+                    display.textContent = 'None';
+                } else {
+                    display.textContent = `${value} day${value > 1 ? 's' : ''}`;
+                }
+            }
+            weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
+            editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
             
             resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
             exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
@@ -2765,7 +2771,8 @@
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     finalData = guestDataString ? JSON.parse(guestDataString) : {};
                 }
-                await window.firebaseSDK.setDoc(userDocRef, { appData: finalData }, { merge: true });
+                // Also store the user's email from the auth provider
+                await window.firebaseSDK.setDoc(userDocRef, { email: user.email, appData: finalData }, { merge: true });
                 localStorage.removeItem('anonymousUserData');
                 sessionStorage.removeItem('isGuest');
             }
@@ -2816,11 +2823,13 @@
 
                 try {
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
-                    await handleSignInSuccess(userCredential.user);
                     
+                    // FIX: Create user documents immediately to prevent race condition
                     const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
                     await window.firebaseSDK.setDoc(usernamesRef, { userId: userCredential.user.uid });
-                    await window.firebaseSDK.setDoc(userDocRef, { username: username, email: email }, { merge: true });
+                    await window.firebaseSDK.setDoc(userDocRef, { username: username, email: email });
+                    
+                    await handleSignInSuccess(userCredential.user);
                     
                     onSuccess();
                 } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
@@ -2885,3 +2894,4 @@
     </script>
 </body>
 </html>
+
