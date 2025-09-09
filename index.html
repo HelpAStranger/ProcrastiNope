@@ -56,6 +56,29 @@
             getDocs
         };
     </script>
+    
+    <!-- FIX: Pre-emptive theme application to prevent flash of wrong theme -->
+    <script>
+        (function() {
+            try {
+                // Check local storage first (for guests)
+                const guestData = localStorage.getItem('anonymousUserData');
+                const storedSettings = guestData ? JSON.parse(guestData).settings : null;
+                
+                // If no guest data, check for a simpler theme setting (for logged-in users)
+                const themeSetting = storedSettings ? storedSettings.theme : localStorage.getItem('userTheme');
+                
+                if (themeSetting) {
+                    const isDark = themeSetting === 'dark' || (themeSetting === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                    if (isDark) {
+                        document.documentElement.classList.add('dark-mode');
+                    }
+                }
+            } catch (e) {
+                console.error('Error applying initial theme:', e);
+            }
+        })();
+    </script>
     <style>
         /*
         ==========================================================================
@@ -289,11 +312,9 @@
                 pointer-events: auto;
             }
 
-            .task-item.daily-completed {
-                justify-content: center;
-            }
-             .task-item.daily-completed .task-content {
-                flex-grow: 0;
+            /* FIX: Allow completed quest text to wrap correctly on wide screens */
+            .task-item.daily-completed .task-content {
+                flex-grow: 1; /* Let the content area grow to fill space */
                 margin-right: 0;
             }
         }
@@ -958,6 +979,8 @@
                 -webkit-backdrop-filter: blur(4px);
                 z-index: 5;
                 transition: opacity var(--transition-speed) ease;
+                /* FIX: Add border radius to match parent container */
+                border-radius: calc(var(--radius) - var(--border-width));
             }
 
             /* When a task is tapped, show the action buttons */
@@ -986,6 +1009,7 @@
                 -webkit-backdrop-filter: none;
                 z-index: auto;
                 margin-left: auto;
+                border-radius: 0; /* Reset radius for this case */
             }
             
             /* NEW: Group Header Mobile Actions */
@@ -1004,6 +1028,8 @@
                 -webkit-backdrop-filter: blur(4px);
                 z-index: 5;
                 transition: opacity var(--transition-speed) ease;
+                /* FIX: Add border radius to match parent container */
+                border-radius: calc(var(--radius) - var(--border-width));
             }
             .main-quest-group-header.actions-visible .group-actions {
                 opacity: 1;
@@ -1074,7 +1100,7 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input, .form-group input, #new-task-weekly-goal, #edit-task-input, #edit-task-weekly-goal, #new-username-input {
+        #new-task-input, #new-group-input, .form-group input, #edit-task-input, #new-username-input {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
@@ -1089,7 +1115,7 @@
              margin-bottom: 1rem;
         }
 
-        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #new-task-weekly-goal:focus, #edit-task-input:focus, #edit-task-weekly-goal:focus, #new-username-input:focus {
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #edit-task-input:focus, #new-username-input:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
@@ -1103,7 +1129,7 @@
         
         #weekly-goal-container label, #edit-weekly-goal-container label {
             font-weight: 700;
-            margin-bottom: 0.5rem;
+            margin-bottom: 1rem; /* Increased space for slider */
             display: block;
         }
 
@@ -1198,7 +1224,7 @@
         }
         
         /* Volume and Timer Slider Styles */
-        .volume-slider-container, .timer-slider-container {
+        .volume-slider-container, .timer-slider-container, .weekly-goal-slider-container {
             padding-top: 0.5rem;
         }
         .timer-slider-container {
@@ -1307,6 +1333,17 @@
             background-color: var(--accent);
             color: var(--text-on-accent);
             box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        /* FIX: Neobrutalism for Auth forms */
+        .auth-form .form-group {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+        .auth-form .form-group label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
         }
 
         .form-divider {
@@ -1587,9 +1624,12 @@
             <h2 id="add-task-modal-title">Add New Quest</h2>
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required>
+                <!-- FIX: Replaced number input with a neobrutalist slider -->
                 <div id="weekly-goal-container" style="display: none;">
-                    <label for="new-task-weekly-goal">Set a Weekly Goal (Optional)</label>
-                    <input type="number" id="new-task-weekly-goal" placeholder="e.g., 5 times a week" min="1">
+                    <label for="new-task-weekly-goal-slider">Weekly Goal: <span id="new-task-weekly-goal-display">3</span> days</label>
+                    <div class="weekly-goal-slider-container">
+                         <input type="range" id="new-task-weekly-goal-slider" min="1" max="7" value="3">
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn" data-close-modal="add-task-modal">Cancel</button>
@@ -1605,10 +1645,12 @@
             <form id="edit-task-form">
                 <input type="hidden" id="edit-task-id">
                 <input type="text" id="edit-task-input" required>
-                <!-- FIX: Added weekly goal editor for daily quests -->
+                <!-- FIX: Replaced number input with a neobrutalist slider for editing -->
                 <div id="edit-weekly-goal-container" style="display: none;">
-                    <label for="edit-task-weekly-goal">Set a Weekly Goal (Optional)</label>
-                    <input type="number" id="edit-task-weekly-goal" placeholder="e.g., 5 times a week" min="1">
+                    <label for="edit-task-weekly-goal-slider">Weekly Goal: <span id="edit-task-weekly-goal-display">3</span> days</label>
+                    <div class="weekly-goal-slider-container">
+                        <input type="range" id="edit-task-weekly-goal-slider" min="1" max="7" value="3">
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn" data-close-modal="edit-task-modal">Cancel</button>
@@ -1699,6 +1741,15 @@
     
     <div id="account-modal" class="modal-overlay">
         <div class="modal-content"></div>
+    </div>
+    
+    <!-- FIX: Added loader modal for Google Sign-In process -->
+    <div id="google-signin-loader-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 300px; text-align: center;">
+            <h2 style="font-size: 1.5rem;">Connecting...</h2>
+            <div class="loader-box" style="margin: 2rem auto;"></div>
+            <p>Please complete the sign-in in the popup window.</p>
+        </div>
     </div>
 
     <div id="username-modal" class="modal-overlay">
@@ -1861,10 +1912,17 @@
             landingAuthContainer.style.display = 'none';
             landingChoices.style.display = 'block';
         }
-
-        document.getElementById('landing-guest-btn').addEventListener('click', () => {
+        
+        // FIX: Guest login logic is now more direct and reliable
+        document.getElementById('landing-guest-btn').addEventListener('click', async () => {
             sessionStorage.setItem('isGuest', 'true');
-            window.firebaseSDK.onAuthStateChanged(auth, u => {}).apply(null, [null]);
+            loaderOverlay.style.display = 'flex';
+            if (!appController) {
+                appController = await initializeAppLogic(null);
+            }
+            landingPage.style.display = 'none';
+            appWrapper.style.display = 'block';
+            loaderOverlay.style.display = 'none';
         });
 
         document.getElementById('landing-login-btn').addEventListener('click', () => {
@@ -1965,7 +2023,7 @@
             
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
-            let settings = { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 };
+            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
             let actionsTimeoutId = null;
@@ -1992,10 +2050,13 @@
             const editTaskInput = document.getElementById('edit-task-input');
             const editTaskIdInput = document.getElementById('edit-task-id');
             const editWeeklyGoalContainer = document.getElementById('edit-weekly-goal-container');
-            const editWeeklyGoalInput = document.getElementById('edit-task-weekly-goal');
 
             const weeklyGoalContainer = document.getElementById('weekly-goal-container');
-            const weeklyGoalInput = document.getElementById('new-task-weekly-goal');
+            const weeklyGoalSlider = document.getElementById('new-task-weekly-goal-slider');
+            const weeklyGoalDisplay = document.getElementById('new-task-weekly-goal-display');
+            const editWeeklyGoalSlider = document.getElementById('edit-task-weekly-goal-slider');
+            const editWeeklyGoalDisplay = document.getElementById('edit-task-weekly-goal-display');
+
             const addGroupModal = document.getElementById('add-group-modal');
             const addGroupForm = document.getElementById('add-group-form');
             const newGroupInput = document.getElementById('new-group-input');
@@ -2032,6 +2093,11 @@
             let confirmCallback = null;
 
             async function saveData(data) {
+                // Also save theme to a simple key for faster pre-load
+                if (data.settings && data.settings.theme) {
+                    localStorage.setItem('userTheme', data.settings.theme);
+                }
+
                 if (!user) {
                     localStorage.setItem('anonymousUserData', JSON.stringify(data));
                     return;
@@ -2047,7 +2113,7 @@
                 standaloneMainQuests = data.standaloneMainQuests || [];
                 generalTaskGroups = data.generalTaskGroups || [];
                 playerData = data.playerData || { level: 1, xp: 0 };
-                settings = data.settings || { theme: 'light', accentColor: 'var(--accent-red)', volume: 0.3 };
+                settings = data.settings || { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
@@ -2448,7 +2514,9 @@
                                 editTaskInput.value = task.text;
                                 editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
                                 if (type === 'daily') {
-                                    editWeeklyGoalInput.value = task.weeklyGoal || '';
+                                    const goal = task.weeklyGoal || 1;
+                                    editWeeklyGoalSlider.value = goal;
+                                    editWeeklyGoalDisplay.textContent = `${goal}`;
                                     editWeeklyGoalContainer.style.display = 'block';
                                 } else {
                                     editWeeklyGoalContainer.style.display = 'none';
@@ -2461,8 +2529,8 @@
                 } 
             });
 
-            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { addTask(t, currentListToAdd, parseInt(weeklyGoalInput.value, 10) || 0); newTaskInput.value = ''; weeklyGoalInput.value = ''; closeModal(addTaskModal); } });
-            editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalInput.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
+            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 3; weeklyGoalDisplay.textContent = '3'; closeModal(addTaskModal); } });
+            editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
             timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
             timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
             timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
@@ -2474,7 +2542,7 @@
             addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); newGroupInput.focus(); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => closeModal(document.getElementById(btn.dataset.closeModal))));
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal, document.getElementById('username-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, timerMenuModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); });
             function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
             confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
             confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
@@ -2483,6 +2551,11 @@
             colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
             volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
             volumeSlider.addEventListener('change', () => playSound('toggle'));
+            
+            // Weekly goal slider event listeners
+            weeklyGoalSlider.addEventListener('input', () => weeklyGoalDisplay.textContent = weeklyGoalSlider.value);
+            editWeeklyGoalSlider.addEventListener('input', () => editWeeklyGoalDisplay.textContent = editWeeklyGoalSlider.value);
+            
             resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
             exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
             importDataBtn.addEventListener('click', () => importFileInput.click());
@@ -2580,6 +2653,7 @@
                 showConfirm("Logout?", "You will be returned to the landing page.", () => {
                     closeModal(settingsModal);
                     sessionStorage.removeItem('isGuest'); 
+                    localStorage.removeItem('userTheme');
                     window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
@@ -2696,6 +2770,16 @@
                 sessionStorage.removeItem('isGuest');
             }
         }
+        
+        // Simple modal functions for use before the main app controller is initialized
+        function showGlobalModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(modal) modal.classList.add('visible');
+        }
+        function hideGlobalModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(modal) modal.classList.remove('visible');
+        }
 
         function setupAuthForms(container, onSuccess) {
             const template = document.getElementById('account-modal-content');
@@ -2783,6 +2867,7 @@
                 customBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.618-3.22-11.28-7.581l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.015 35.258 44 30.036 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg> <span>Sign in with Google</span>`;
                 googleBtnContainer.appendChild(customBtn);
                 customBtn.addEventListener('click', async () => {
+                    showGlobalModal('google-signin-loader-modal');
                     const provider = new window.firebaseSDK.GoogleAuthProvider();
                     try {
                         const result = await window.firebaseSDK.signInWithPopup(auth, provider);
@@ -2791,6 +2876,8 @@
                     } catch (error) {
                          const errorEl = container.querySelector('.login-error');
                          if (errorEl) errorEl.textContent = getCoolErrorMessage(error);
+                    } finally {
+                        hideGlobalModal('google-signin-loader-modal');
                     }
                 });
             }
@@ -2798,4 +2885,3 @@
     </script>
 </body>
 </html>
-
