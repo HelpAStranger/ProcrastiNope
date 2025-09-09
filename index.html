@@ -1866,25 +1866,25 @@
                 </section>
             </div>
         </main>
-        
-        <!-- IMPORT: Mobile Navigation Bar -->
-        <nav id="mobile-nav">
-            <div class="mobile-nav-content">
-                <button class="mobile-nav-btn active" data-section="daily" aria-label="Daily Quests">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"></path></svg>
-                    <span>Daily</span>
-                </button>
-                <button class="mobile-nav-btn" data-section="main" aria-label="Main Quests">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-                    <span>Main</span>
-                </button>
-                <button class="mobile-nav-btn" data-section="friends" aria-label="Friends">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span>Friends</span>
-                </button>
-            </div>
-        </nav>
     </div>
+    
+    <!-- IMPORT: Mobile Navigation Bar (Moved outside app-wrapper) -->
+    <nav id="mobile-nav">
+        <div class="mobile-nav-content">
+            <button class="mobile-nav-btn active" data-section="daily" aria-label="Daily Quests">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"></path></svg>
+                <span>Daily</span>
+            </button>
+            <button class="mobile-nav-btn" data-section="main" aria-label="Main Quests">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                <span>Main</span>
+            </button>
+            <button class="mobile-nav-btn" data-section="friends" aria-label="Friends">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <span>Friends</span>
+            </button>
+        </div>
+    </nav>
 
     <!-- Modals -->
     <div id="add-task-modal" class="modal-overlay">
