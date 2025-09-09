@@ -39,7 +39,9 @@
             query,
             where,
             getDocs,
-            updateDoc
+            updateDoc,
+            arrayUnion,
+            arrayRemove
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -67,7 +69,9 @@
             query,
             where,
             getDocs,
-            updateDoc
+            updateDoc,
+            arrayUnion,
+            arrayRemove
         };
     </script>
     
@@ -288,10 +292,26 @@
             margin: 0 auto;
             padding: 1rem; /* FIX: Reduced padding to minimize gap */
         }
+        
+        /* IMPORT: Added padding for the bottom nav bar on mobile */
+        main.container {
+            padding-bottom: 100px;
+        }
+
 
         .quests-layout {
             display: flex;
             flex-direction: column; /* Default: stack quests vertically */
+        }
+        
+        /* On mobile, quest sections are toggled, not side-by-side */
+        @media (max-width: 1023px) {
+            .task-group {
+                display: none; /* Hide all sections by default */
+            }
+            .task-group.mobile-visible {
+                display: block; /* Show only the active one */
+            }
         }
 
         /* For wider screens, display quests side-by-side */
@@ -440,7 +460,6 @@
 
         .header-controls {
             display: flex;
-            flex-direction: column;
             align-items: center;
             gap: 0.5rem;
             flex-shrink: 0; /* Prevent controls from shrinking */
@@ -550,6 +569,148 @@
             .theme-btn {
                 padding: 0.75rem; /* Make it a square */
             }
+        }
+        
+        /*
+        ==========================================================================
+        FRIENDS FEATURE & MOBILE NAV
+        ==========================================================================
+        */
+        /* IMPORT: Desktop friends button */
+        #friends-btn-desktop {
+            display: none; /* Hidden on mobile by default */
+        }
+        @media (min-width: 1024px) {
+            #friends-btn-desktop {
+                display: flex; /* Visible on desktop */
+                gap: 0.5rem;
+                --shadow-color: var(--shadow);
+            }
+            #friends-btn-desktop svg {
+                width: 20px;
+                height: 20px;
+            }
+        }
+        
+        /* IMPORT: Mobile bottom navigation bar */
+        #mobile-nav {
+            display: none; /* Hidden on desktop */
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background-color: var(--surface);
+            border-top: var(--border-width) solid var(--border);
+            box-shadow: 0px -4px 0 var(--shadow);
+            z-index: 500;
+        }
+        .mobile-nav-content {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            height: 100%;
+            padding: 0 1rem;
+        }
+        .mobile-nav-btn {
+            background: none;
+            border: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--font-main);
+            font-weight: 700;
+            color: var(--text);
+            opacity: 0.6;
+            transition: all var(--transition-speed) ease;
+        }
+        .mobile-nav-btn.active {
+            opacity: 1;
+            transform: translateY(-5px);
+            color: var(--accent);
+        }
+        .mobile-nav-btn svg {
+            width: 28px;
+            height: 28px;
+            stroke: currentColor;
+            stroke-width: var(--border-width);
+        }
+        @media (max-width: 1023px) {
+            #mobile-nav {
+                display: block; /* Show on mobile */
+            }
+        }
+        
+        /* IMPORT: Friends Modal */
+        #friends-modal .modal-content {
+            position: relative;
+            overflow: hidden; /* To contain the animated background */
+        }
+
+        #friends-modal-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.1;
+            overflow: hidden;
+        }
+        
+        #friends-modal-bg svg {
+            width: 200%;
+            height: 200%;
+            animation: bg-pan 40s linear infinite;
+        }
+        
+        @keyframes bg-pan {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-20%, 10%); }
+            50% { transform: translate(0, -20%); }
+            75% { transform: translate(10%, 10%); }
+            100% { transform: translate(0, 0); }
+        }
+        
+        .friends-list-container, .friend-requests-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: var(--border-width) solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.5rem;
+            background-color: var(--surface);
+        }
+        
+        .friend-item, .friend-request-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            border-radius: calc(var(--radius) / 2);
+        }
+
+        .friend-item:not(:last-child), .friend-request-item:not(:last-child) {
+            border-bottom: var(--border-width) dashed var(--border);
+        }
+
+        .friend-item-actions, .friend-request-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        #add-friend-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        #search-username-input { flex-grow: 1; }
+        
+        .friend-status-message {
+            margin-top: 1rem;
+            font-weight: 700;
+            text-align: center;
+            min-height: 1.2em;
         }
 
 
@@ -1117,7 +1278,7 @@
             font-weight: 900;
         }
         
-        #new-task-input, #new-group-input, .form-group input, #edit-task-input, #new-username-input {
+        #new-task-input, #new-group-input, .form-group input, #edit-task-input, #new-username-input, #search-username-input {
             width: 100%;
             font-family: var(--font-main);
             font-size: 1.1rem;
@@ -1132,7 +1293,7 @@
              margin-bottom: 1rem;
         }
 
-        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #edit-task-input:focus, #new-username-input:focus {
+        #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #edit-task-input:focus, #new-username-input:focus, #search-username-input:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 var(--border-width) var(--accent);
@@ -1361,6 +1522,14 @@
             display: block;
             font-weight: 700;
             margin-bottom: 0.5rem;
+        }
+        
+        /* IMPORT: Hide tab content that is not active */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
 
         .form-divider {
@@ -1596,6 +1765,11 @@
                 <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
             </div>
             <div class="header-controls">
+                <!-- IMPORT: Friends button for desktop -->
+                <button id="friends-btn-desktop" class="btn" aria-label="Open Friends Menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>Friends</span>
+                </button>
                 <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
@@ -1612,7 +1786,8 @@
 
         <main class="container">
             <div class="quests-layout">
-                <section class="task-group">
+                <!-- IMPORT: Added data-section attribute and mobile-visible class -->
+                <section class="task-group mobile-visible" data-section="daily">
                     <header class="task-group-header">
                         <h2>Daily Quests</h2>
                         <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
@@ -1622,8 +1797,8 @@
                         <p>No daily quests yet. Add one to start your day!</p>
                     </div>
                 </section>
-
-                <section class="task-group">
+                <!-- IMPORT: Added data-section attribute -->
+                <section class="task-group" data-section="main">
                     <header class="task-group-header">
                         <h2>Main Quests</h2>
                         <div class="header-actions">
@@ -1639,6 +1814,24 @@
                 </section>
             </div>
         </main>
+        
+        <!-- IMPORT: Mobile Navigation Bar -->
+        <nav id="mobile-nav">
+            <div class="mobile-nav-content">
+                <button class="mobile-nav-btn active" data-section="daily" aria-label="Daily Quests">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"></path></svg>
+                    <span>Daily</span>
+                </button>
+                <button class="mobile-nav-btn" data-section="main" aria-label="Main Quests">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M15 5.372A6.5 6.5 0 0 1 12 12a6.5 6.5 0 0 1-3-11.628M15 18.628A6.5 6.5 0 0 1 12 12a6.5 6.5 0 0 1-3 6.628M19.628 9A6.5 6.5 0 0 1 12 12a6.5 6.5 0 0 1 7.628-3M4.372 9A6.5 6.5 0 0 1 12 12a6.5 6.5 0 0 1-7.628-3"></path></svg>
+                    <span>Main</span>
+                </button>
+                <button class="mobile-nav-btn" data-section="friends" aria-label="Friends">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>Friends</span>
+                </button>
+            </div>
+        </nav>
     </div>
 
     <!-- Modals -->
@@ -1718,6 +1911,46 @@
         </div>
     </div>
     
+    <!-- IMPORT: Friends Modal -->
+    <div id="friends-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div id="friends-modal-bg">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><defs><filter id="f" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="40"></feGaussianBlur></filter></defs><g filter="url(#f)"><circle cx="400" cy="400" r="150" fill="var(--accent-blue)"></circle><circle cx="100" cy="200" r="100" fill="var(--accent-green)"></circle><circle cx="600" cy="150" r="120" fill="var(--accent-red)"></circle><circle cx="700" cy="650" r="180" fill="var(--accent-yellow)"></circle><circle cx="200" cy="700" r="90" fill="var(--accent-purple)"></circle></g></svg>
+            </div>
+            <div class="form-toggle">
+                <button class="toggle-btn active" data-tab="my-friends">Friends</button>
+                <button class="toggle-btn" data-tab="requests">Requests <span id="friend-request-count"></span></button>
+                <button class="toggle-btn" data-tab="add-friend">Add</button>
+            </div>
+            
+            <div id="my-friends-tab" class="tab-content active">
+                <h3>My Friends</h3>
+                <div class="friends-list-container">
+                    <!-- Friend items will be injected here -->
+                </div>
+            </div>
+            
+            <div id="requests-tab" class="tab-content">
+                <h3>Friend Requests</h3>
+                <div class="friend-requests-container">
+                    <!-- Friend request items will be injected here -->
+                </div>
+            </div>
+
+            <div id="add-friend-tab" class="tab-content">
+                 <h3>Add Friend by Username</h3>
+                 <form id="add-friend-form">
+                    <input type="text" id="search-username-input" placeholder="Enter username..." required>
+                    <button type="submit" class="btn icon-btn" aria-label="Search"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
+                 </form>
+                 <p class="friend-status-message"></p>
+            </div>
+            
+            <div class="modal-actions"><button class="btn" data-close-modal="friends-modal">Close</button></div>
+        </div>
+    </div>
+
+
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Settings</h2>
@@ -1920,6 +2153,8 @@
         let app, auth, db;
         let currentUser = null;
         let unsubscribeFromFirestore = null;
+        // IMPORT: Listener for friend requests
+        let unsubscribeFromFriends = null;
         let appController = null;
         let isSigningIn = false; // Global flag for auth state transitions
         
@@ -1945,6 +2180,11 @@
                 if (unsubscribeFromFirestore) {
                     unsubscribeFromFirestore(); 
                     unsubscribeFromFirestore = null;
+                }
+                // IMPORT: Unsubscribe from friends listener on auth state change
+                if (unsubscribeFromFriends) {
+                    unsubscribeFromFriends();
+                    unsubscribeFromFriends = null;
                 }
                 
                 currentUser = user;
@@ -2147,6 +2387,18 @@
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
             let confirmCallback = null;
+            
+            // IMPORT: Friends feature DOM elements
+            const friendsBtnDesktop = document.getElementById('friends-btn-desktop');
+            const friendsModal = document.getElementById('friends-modal');
+            const mobileNav = document.getElementById('mobile-nav');
+            const addFriendForm = document.getElementById('add-friend-form');
+            const searchUsernameInput = document.getElementById('search-username-input');
+            const friendStatusMessage = friendsModal.querySelector('.friend-status-message');
+            const friendRequestCountBadge = document.getElementById('friend-request-count');
+            const friendsListContainer = friendsModal.querySelector('.friends-list-container');
+            const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
+
 
             async function promptForUsernameIfNeeded() {
                 if (!user) return; // Not for guests
@@ -2193,7 +2445,9 @@
                                 batch.set(userDocRef, { 
                                     username: username, 
                                     email: user.email,
-                                    appData: existingData || {}
+                                    appData: existingData || {},
+                                    friends: [], // IMPORT: Initialize friends list for new user
+                                    friendRequests: [] // IMPORT: Initialize friend requests list
                                 }, { merge: true });
                                 await batch.commit();
                                 
@@ -2300,6 +2554,9 @@
                         resolve();
                         return;
                     }
+                    
+                    // IMPORT: Listen for friend requests in real-time
+                    listenForFriendRequests();
 
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     let isFirstLoad = true;
@@ -2340,6 +2597,12 @@
                     exportDataBtn.style.display = 'none';
                     importDataBtn.style.display = 'none';
                     resetProgressBtn.textContent = 'Reset Cloud Data';
+                    
+                    // IMPORT: Show friends buttons for logged-in users
+                    friendsBtnDesktop.style.display = 'flex';
+                    mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
+
+
                 } else {
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
@@ -2350,6 +2613,10 @@
                     exportDataBtn.style.display = 'inline-flex';
                     importDataBtn.style.display = 'inline-flex';
                     resetProgressBtn.textContent = 'Reset Progress';
+                    
+                    // IMPORT: Hide friends buttons for guests
+                    friendsBtnDesktop.style.display = 'none';
+                    mobileNav.querySelector('[data-section="friends"]').style.display = 'none';
                 }
             }
             const XP_PER_TASK = 35;
@@ -2703,7 +2970,7 @@
                     closeModal(modal);
                 }
             }));
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal')].forEach(m => { 
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal].forEach(m => { 
                 if (m) m.addEventListener('click', (e) => { 
                     if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                         closeModal(m); 
@@ -2989,6 +3256,220 @@
                     window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
+            
+            
+            // =========================================================================
+            // IMPORT: FRIENDS FEATURE LOGIC
+            // =========================================================================
+
+            /**
+             * Sets up a real-time listener for the current user's friend requests.
+             * This is efficient because it only listens to one document.
+             * It updates the UI with a notification badge.
+             */
+            function listenForFriendRequests() {
+                if (!user) return;
+                // Unsubscribe from any previous listener to prevent duplicates.
+                if (unsubscribeFromFriends) unsubscribeFromFriends();
+                
+                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                unsubscribeFromFriends = window.firebaseSDK.onSnapshot(userDocRef, (doc) => {
+                    if (doc.exists()) {
+                        const requests = doc.data().friendRequests || [];
+                        if (requests.length > 0) {
+                            friendRequestCountBadge.textContent = requests.length;
+                            friendRequestCountBadge.style.display = 'inline';
+                        } else {
+                            friendRequestCountBadge.style.display = 'none';
+                        }
+                    }
+                }, (error) => {
+                    console.error("Error listening to friend requests: ", getCoolErrorMessage(error));
+                });
+            }
+
+            /**
+             * Fetches and renders the current user's friends list and pending requests
+             * when the friends modal is opened. This is done on-demand to save reads.
+             */
+            async function renderFriendsAndRequests() {
+                if (!user) return;
+                
+                const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                const userDoc = await window.firebaseSDK.getDoc(userDocRef);
+                if (!userDoc.exists()) return;
+
+                const userData = userDoc.data();
+                const friendUIDs = userData.friends || [];
+                const requestUIDs = userData.friendRequests || [];
+                
+                // Render Friends List
+                if (friendUIDs.length === 0) {
+                    friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
+                } else {
+                    friendsListContainer.innerHTML = '';
+                    // Efficiently fetch multiple user profiles with a 'in' query
+                    const friendsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.doc(db, 'users').id, 'in', friendUIDs));
+                    const friendDocs = await window.firebaseSDK.getDocs(friendsQuery);
+                    friendDocs.forEach(doc => {
+                         const friend = doc.data();
+                         const friendEl = document.createElement('div');
+                         friendEl.className = 'friend-item';
+                         friendEl.innerHTML = `<span>${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
+                         friendsListContainer.appendChild(friendEl);
+                    });
+                }
+
+                // Render Requests List
+                if (requestUIDs.length === 0) {
+                    friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
+                } else {
+                    friendRequestsContainer.innerHTML = '';
+                    const requestsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.doc(db, 'users').id, 'in', requestUIDs));
+                    const requestDocs = await window.firebaseSDK.getDocs(requestsQuery);
+                    requestDocs.forEach(doc => {
+                        const requestUser = doc.data();
+                        const requestEl = document.createElement('div');
+                        requestEl.className = 'friend-request-item';
+                        requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
+                        friendRequestsContainer.appendChild(requestEl);
+                    });
+                }
+            }
+            
+            async function handleAddFriend(e) {
+                e.preventDefault();
+                const usernameToFind = searchUsernameInput.value.trim().toLowerCase();
+                friendStatusMessage.textContent = '';
+                
+                if (!user || !usernameToFind) return;
+
+                const currentUserDoc = await window.firebaseSDK.getDoc(window.firebaseSDK.doc(db, "users", user.uid));
+                if (usernameToFind === currentUserDoc.data().username) {
+                    friendStatusMessage.textContent = "You can't add yourself!";
+                    friendStatusMessage.style.color = 'var(--accent-red-light)';
+                    return;
+                }
+                
+                // Efficiently check if username exists. One read.
+                const usernamesRef = window.firebaseSDK.doc(db, "usernames", usernameToFind);
+                const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+
+                if (!usernameSnap.exists()) {
+                    friendStatusMessage.textContent = "User not found.";
+                    friendStatusMessage.style.color = 'var(--accent-red-light)';
+                    return;
+                }
+                
+                const targetUserId = usernameSnap.data().userId;
+                const targetUserDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
+                
+                // Use a transaction to safely update both users' documents.
+                try {
+                    await window.firebaseSDK.updateDoc(targetUserDocRef, {
+                        friendRequests: window.firebaseSDK.arrayUnion(user.uid)
+                    });
+                    friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
+                    friendStatusMessage.style.color = 'var(--accent-green-light)';
+                    searchUsernameInput.value = '';
+                } catch (error) {
+                    friendStatusMessage.textContent = "Could not send request.";
+                    friendStatusMessage.style.color = 'var(--accent-red-light)';
+                    console.error("Error sending friend request:", getCoolErrorMessage(error));
+                }
+            }
+            
+            async function handleRequestAction(e, action) {
+                const button = e.target.closest('button');
+                if (!button) return;
+
+                const senderUid = button.dataset.uid;
+                const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
+                
+                const batch = window.firebaseSDK.writeBatch(db);
+                // Always remove the request from the current user's list.
+                batch.update(currentUserRef, { friendRequests: window.firebaseSDK.arrayRemove(senderUid) });
+
+                if (action === 'accept') {
+                    const senderUserRef = window.firebaseSDK.doc(db, "users", senderUid);
+                    // Add each other to the friends list.
+                    batch.update(currentUserRef, { friends: window.firebaseSDK.arrayUnion(senderUid) });
+                    batch.update(senderUserRef, { friends: window.firebaseSDK.arrayUnion(user.uid) });
+                }
+                
+                await batch.commit();
+                renderFriendsAndRequests(); // Re-render the lists
+            }
+            
+            async function removeFriend(e) {
+                const button = e.target.closest('button');
+                if (!button) return;
+                const friendUidToRemove = button.dataset.uid;
+                
+                showConfirm("Remove Friend?", "Are you sure you want to remove this friend?", async () => {
+                    const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    const friendUserRef = window.firebaseSDK.doc(db, "users", friendUidToRemove);
+                    
+                    const batch = window.firebaseSDK.writeBatch(db);
+                    // Remove each other from friends lists
+                    batch.update(currentUserRef, { friends: window.firebaseSDK.arrayRemove(friendUidToRemove) });
+                    batch.update(friendUserRef, { friends: window.firebaseSDK.arrayRemove(user.uid) });
+                    
+                    await batch.commit();
+                    renderFriendsAndRequests();
+                });
+            }
+
+
+            // Event Listeners for Friends Modal
+            friendsBtnDesktop.addEventListener('click', () => {
+                openModal(friendsModal);
+                renderFriendsAndRequests();
+            });
+            
+            addFriendForm.addEventListener('submit', handleAddFriend);
+            
+            friendRequestsContainer.addEventListener('click', e => {
+                 if (e.target.closest('.accept-request-btn')) handleRequestAction(e, 'accept');
+                 if (e.target.closest('.decline-request-btn')) handleRequestAction(e, 'decline');
+            });
+            
+            friendsListContainer.addEventListener('click', e => {
+                if (e.target.closest('.remove-friend-btn')) removeFriend(e);
+            });
+            
+            friendsModal.querySelector('.form-toggle').addEventListener('click', (e) => {
+                if (e.target.matches('.toggle-btn')) {
+                    const tab = e.target.dataset.tab;
+                    friendsModal.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    friendsModal.querySelectorAll('.tab-content').forEach(form => form.classList.toggle('active', form.id === `${tab}-tab`));
+                }
+            });
+
+            // =========================================================================
+            // IMPORT: MOBILE NAVIGATION LOGIC
+            // =========================================================================
+            mobileNav.addEventListener('click', (e) => {
+                const button = e.target.closest('.mobile-nav-btn');
+                if (!button) return;
+
+                const section = button.dataset.section;
+                
+                mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                if (section === 'friends') {
+                    openModal(friendsModal);
+                    renderFriendsAndRequests();
+                } else {
+                    document.querySelectorAll('.task-group').forEach(group => {
+                        group.classList.toggle('mobile-visible', group.dataset.section === section);
+                    });
+                }
+                playSound('toggle');
+            });
+
 
             async function loadUserSession() {
                 await initialLoad();
@@ -3012,6 +3493,7 @@
                 isPartial: false,
                 shutdown: () => {
                      Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+                     if (unsubscribeFromFriends) unsubscribeFromFriends(); // Cleanup listener
                 },
                 updateUser: async (newUser) => {
                     user = newUser;
@@ -3174,7 +3656,13 @@
                     const batch = window.firebaseSDK.writeBatch(db);
                     const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
                     batch.set(usernamesRef, { userId: userCredential.user.uid });
-                    batch.set(userDocRef, { username: username, email: email });
+                    // IMPORT: Initialize friends and friendRequests fields
+                    batch.set(userDocRef, { 
+                        username: username, 
+                        email: email,
+                        friends: [],
+                        friendRequests: []
+                    });
                     await batch.commit();
                     
                     await handleSignInSuccess(userCredential.user, true);
