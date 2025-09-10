@@ -371,6 +371,7 @@ async function initializeAppLogic(initialUser) {
         const docSnap = await getDoc(userDocRef);
         const existingData = docSnap.exists() ? docSnap.data().appData : null;
         
+        // Check if username is missing or if the user document itself doesn't exist
         if (!docSnap.exists() || !docSnap.data()?.username) {
             const usernameModal = document.getElementById('username-modal');
             const usernameForm = document.getElementById('username-form');
@@ -1578,7 +1579,7 @@ async function initializeAppLogic(initialUser) {
         await initialLoad();
         await updateUserUI();
         await promptForUsernameIfNeeded();
-        await updateUserUI();
+        await updateUserUI(); // Update UI again in case username was just set
         checkDailyReset();
         resumeTimers();
     }
@@ -1859,21 +1860,19 @@ function setupAuthForms(container, onAuthSuccess) {
         errorEl.textContent = '';
 
         try {
+            // Check if username is already taken (read is allowed by rules)
             const usernamesRef = doc(db, "usernames", username);
             const usernameSnap = await getDoc(usernamesRef);
             if (usernameSnap.exists()) {
                 throw new Error('This username is already taken.');
             }
 
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+            // Create the Firebase Auth user. This will trigger onAuthStateChanged.
+            await createUserWithEmailAndPassword(auth, email, password);
 
-            const batch = writeBatch(db);
-            batch.set(usernamesRef, { userId: user.uid });
-            const userDocRef = doc(db, "users", user.uid);
-            batch.set(userDocRef, { username, email, friends: [], friendRequests: [] });
-            await batch.commit();
-
+            // The actual Firestore document creation (for 'users' and 'usernames')
+            // will now be handled by the onAuthStateChanged listener and
+            // promptForUsernameIfNeeded, ensuring request.auth is available.
             onAuthSuccess();
         } catch (error) {
             errorEl.textContent = error.message || getCoolErrorMessage(error);
