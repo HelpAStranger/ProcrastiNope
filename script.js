@@ -94,8 +94,6 @@ let unsubscribeFromFriends = null;
 let unsubscribeFromSharedQuests = null; 
 let appController = null;
 
-let activeMobileActionsItem = null; 
-
 // --- DOM ELEMENTS FOR STARTUP ---
 const loaderOverlay = document.getElementById('loader-overlay');
 const landingPage = document.getElementById('landing-page');
@@ -132,10 +130,16 @@ function playSound(type) {
 
 const openModal = (modal) => {
     if(modal) {
-        if (activeMobileActionsItem) {
-            activeMobileActionsItem.classList.remove('actions-visible');
-            activeMobileActionsItem = null;
+        // Close any active task/group actions when a modal opens
+        document.querySelectorAll('.task-item.actions-visible, .main-quest-group-header.actions-visible').forEach(activeElement => {
+            activeElement.classList.remove('actions-visible');
+        });
+        // Clear mobile specific state if any actions were closed
+        if (appController) { // Ensure appController exists before accessing its properties
+            appController.activeMobileActionsItem = null;
+            clearTimeout(appController.actionsTimeoutId);
         }
+
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
         playSound('open');
@@ -279,7 +283,8 @@ async function initializeAppLogic(initialUser) {
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
-    let actionsTimeoutId = null;
+    let activeMobileActionsItem = null; // State for mobile auto-hide actions
+    let actionsTimeoutId = null; // Timeout ID for mobile auto-hide actions
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
@@ -335,7 +340,7 @@ async function initializeAppLogic(initialUser) {
     const logoutBtn = document.getElementById('logout-btn');
     const userDisplay = document.getElementById('user-display');
     const accountModal = document.getElementById('account-modal');
-    const manageAccountModal = document.getElementById('manage-account-modal');
+    const manageAccountModal = document('manage-account-modal');
     const confirmModal = document.getElementById('confirm-modal');
     const confirmActionBtn = document.getElementById('confirm-action-btn');
     const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
@@ -910,36 +915,51 @@ async function initializeAppLogic(initialUser) {
             renderAllLists();
         }
     }
+
+    /**
+     * Toggles the 'actions-visible' class on an element, managing mobile auto-hide logic
+     * and preventing interaction during drag operations.
+     * @param {HTMLElement} element The task item or group header element.
+     * @param {Event} event The click event object.
+     */
+    const toggleActionsVisible = (element, event) => {
+        // If a drag is in progress, do nothing
+        if (document.body.classList.contains('is-dragging')) return;
+
+        // If the click was on a button, let the button handler take over
+        if (event.target.closest('button')) {
+            return;
+        }
+
+        // For mobile, use the auto-hide logic
+        if (window.innerWidth <= 1023) {
+            clearTimeout(actionsTimeoutId);
+            if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+                activeMobileActionsItem.classList.remove('actions-visible');
+            }
+            const wasVisible = element.classList.contains('actions-visible');
+            element.classList.toggle('actions-visible');
+            if (!wasVisible) {
+                activeMobileActionsItem = element;
+                actionsTimeoutId = setTimeout(() => {
+                    if(element.classList.contains('actions-visible')) {
+                        element.classList.remove('actions-visible');
+                        activeMobileActionsItem = null;
+                    }
+                }, 3000);
+            } else {
+                activeMobileActionsItem = null;
+            }
+        } else { // Desktop: simple toggle on click
+            element.classList.toggle('actions-visible');
+        }
+    };
     
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
-        function handleMobileActions(element) {
-             if (window.innerWidth > 1023) return;
-             if (e.target.closest('button')) { 
-                 clearTimeout(actionsTimeoutId);
-                 return;
-             }
-             clearTimeout(actionsTimeoutId);
-             if (activeMobileActionsItem && activeMobileActionsItem !== element) {
-                 activeMobileActionsItem.classList.remove('actions-visible');
-             }
-             const wasVisible = element.classList.contains('actions-visible');
-             element.classList.toggle('actions-visible');
-             if (!wasVisible) {
-                 activeMobileActionsItem = element;
-                 actionsTimeoutId = setTimeout(() => {
-                     if(element.classList.contains('actions-visible')) {
-                         element.classList.remove('actions-visible');
-                         activeMobileActionsItem = null;
-                     }
-                 }, 3000);
-             } else {
-                 activeMobileActionsItem = null;
-             }
-        }
-        
+        // Handle group header clicks
         if (groupHeader) { 
             const groupId = groupHeader.parentElement.dataset.groupId;
             const g = generalTaskGroups.find(g => g.id === groupId);
@@ -947,17 +967,20 @@ async function initializeAppLogic(initialUser) {
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
+            const isEditClick = e.target.closest('.edit-group-btn');
             
-            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
+            // If it's an expand click or a click on the title area on desktop, toggle expansion
+            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick && !isEditClick && !e.target.closest('.group-actions'));
 
             if (shouldExpand) {
                 if (g) {
                     g.isExpanded = !g.isExpanded; 
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
                 }
-                return;
+                return; // Handled expansion, don't proceed to action toggling
             }
 
+            // Handle specific button clicks within the group header
             if (isAddClick) {
                 currentListToAdd = groupId; 
                 weeklyGoalContainer.style.display = 'none'; 
@@ -970,13 +993,18 @@ async function initializeAppLogic(initialUser) {
                 deleteGroup(groupId);
                 return;
             }
-            
-            if (window.innerWidth <= 1023) {
-                handleMobileActions(groupHeader);
+            if (isEditClick) {
+                // TODO: Implement edit group name modal/logic
+                console.log('Edit group clicked for:', groupId);
+                return;
             }
+            
+            // If no specific action was taken, toggle the actions-visible overlay
+            toggleActionsVisible(groupHeader, e);
             return; 
         }
 
+        // Handle task item clicks
         if (taskItem) {
             const id = taskItem.dataset.id;
             const { task, type } = findTaskAndContext(id);
@@ -989,39 +1017,63 @@ async function initializeAppLogic(initialUser) {
                 return isOwner ? task.ownerCompleted : task.friendCompleted;
             }
             
-            if (isMyPartCompleted()) {
-                uncompleteDailyTask(id);
+            // Handle specific button clicks within the task item
+            if (e.target.closest('.complete-btn')) {
+                if (isMyPartCompleted()) {
+                    uncompleteDailyTask(id);
+                } else {
+                    completeTask(id);
+                }
+                return; // Action handled, don't proceed to toggle actions-visible
+            }
+            if (e.target.closest('.delete-btn')) { deleteTask(id); return; }
+            if (e.target.closest('.share-btn')) { openShareModal(id); return; }
+            if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); return; }
+            if (e.target.closest('.edit-btn')) {
+                if (task) {
+                    currentEditingTaskId = id; // Set this for timer modal too
+                    editTaskIdInput.value = task.id;
+                    editTaskInput.value = task.text;
+                    editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
+                    if (type === 'daily') {
+                        const goal = task.weeklyGoal || 0;
+                        editWeeklyGoalSlider.value = goal;
+                        editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
+                        editWeeklyGoalContainer.style.display = 'block';
+                    } else {
+                        editWeeklyGoalContainer.style.display = 'none';
+                    }
+                    openModal(editTaskModal);
+                    focusOnDesktop(editTaskInput);
+                }
                 return;
             }
-            
-            handleMobileActions(taskItem);
 
-            if(e.target.closest('button')) {
-                currentEditingTaskId = id;
-                if (e.target.closest('.complete-btn')) completeTask(id);
-                else if (e.target.closest('.delete-btn')) deleteTask(id);
-                else if (e.target.closest('.share-btn')) openShareModal(id);
-                else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
-                else if (e.target.closest('.edit-btn')) {
-                    if (task) {
-                        editTaskIdInput.value = task.id;
-                        editTaskInput.value = task.text;
-                        editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
-                        if (type === 'daily') {
-                            const goal = task.weeklyGoal || 0;
-                            editWeeklyGoalSlider.value = goal;
-                            editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
-                            editWeeklyGoalContainer.style.display = 'block';
-                        } else {
-                            editWeeklyGoalContainer.style.display = 'none';
-                        }
-                        openModal(editTaskModal);
-                        focusOnDesktop(editTaskInput);
-                    }
-                }
-            }
+            // If no specific button was clicked, toggle the actions-visible state
+            toggleActionsVisible(taskItem, e);
         } 
     });
+
+    // Global click handler to close active action overlays when clicking outside
+    document.addEventListener('click', (e) => {
+        // If a modal is open, don't interfere with its clicks
+        if (document.querySelector('.modal-overlay.visible')) {
+            return;
+        }
+
+        // Check if the click target is inside any currently active task item or group header
+        const clickedInsideActiveElement = e.target.closest('.task-item.actions-visible, .main-quest-group-header.actions-visible');
+
+        // If the click was NOT inside an active element, close all active elements
+        if (!clickedInsideActiveElement) {
+            document.querySelectorAll('.task-item.actions-visible, .main-quest-group-header.actions-visible').forEach(activeElement => {
+                activeElement.classList.remove('actions-visible');
+            });
+            // Also reset mobile-specific auto-hide state
+            activeMobileActionsItem = null;
+            clearTimeout(actionsTimeoutId);
+        }
+    }, true); // Use capture phase to ensure this runs before other click handlers on elements inside
 
     addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
     editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
@@ -1793,7 +1845,10 @@ async function initializeAppLogic(initialUser) {
         updateUser: async (newUser) => {
             user = newUser;
             await loadUserSession();
-        }
+        },
+        // Expose for global click listener cleanup
+        activeMobileActionsItem,
+        actionsTimeoutId
     };
 }
 

@@ -1303,8 +1303,9 @@ TASK INTERACTIONS (REFACTORED)
 
 
 /* --- Desktop-Only Layout Adjustments --- */
+/* REMOVED: This media query block to allow group actions to use the overlay behavior on desktop too */
+/*
 @media (min-width: 1024px) {
-    /* On desktop, change group actions to be inline instead of a full overlay */
     .main-quest-group-header .group-actions {
         position: static;
         width: auto;
@@ -1313,9 +1314,9 @@ TASK INTERACTIONS (REFACTORED)
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         z-index: auto;
-        /* The opacity is controlled by the global .actions-visible class */
     }
 }
+*/
 
 
 /*
