@@ -654,14 +654,12 @@ async function initializeAppLogic(initialUser) {
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    // MODIFIED: renderSharedQuests to group by sharedGroupName and add "No shared quests" message back
+    // MODIFIED: renderSharedQuests to group by sharedGroupName and remove "No shared quests" message
     const renderSharedQuests = () => {
         sharedQuestsContainer.innerHTML = '';
         
-        if (sharedQuests.length === 0) {
-            sharedQuestsContainer.innerHTML = `<div style="text-align: center; padding: 2rem; opacity: 0.7;"><p>No shared quests yet. Share one with a friend!</p></div>`;
-            return;
-        }
+        // Removed the "No shared quests yet" message as per user request.
+        // The container will simply be empty if there are no shared quests.
 
         // Group shared quests by sharedGroupName
         const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
@@ -722,10 +720,10 @@ async function initializeAppLogic(initialUser) {
             const ownerCompleted = task.ownerCompleted;
             const friendCompleted = task.friendCompleted;
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
-            const allCompleted = ownerCompleted && friendCompleted; // NEW: Check if both parts are completed
+            const allCompleted = ownerCompleted && friendCompleted;
 
             li.classList.add('shared-quest');
-            if (allCompleted) { // NEW: Add class if all parts are completed
+            if (allCompleted) {
                 li.classList.add('all-completed');
             }
             li.dataset.id = task.questId;
@@ -746,8 +744,10 @@ async function initializeAppLogic(initialUser) {
 
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
             if(myPartCompleted) {
-                 li.querySelector('.complete-btn').classList.add('checked');
-                 li.classList.add('daily-completed');
+                 const completeBtn = li.querySelector('.complete-btn');
+                 completeBtn.classList.add('checked');
+                 completeBtn.disabled = true; // Explicitly disable the button if my part is completed
+                 li.classList.add('my-part-completed'); // New class for my part completion
             }
             return li;
         }
@@ -847,7 +847,7 @@ async function initializeAppLogic(initialUser) {
 
         // NEW: If the task is marked as shared in its original list, do not complete it here.
         // Its completion is managed via the sharedQuests mechanism.
-        if (task.isShared) {
+        if (task.isShared && type !== 'shared') { // Only prevent if it's a local task marked as shared
             console.log(`Task ${id} is shared, completion handled in shared quests.`);
             return;
         }
@@ -895,7 +895,7 @@ async function initializeAppLogic(initialUser) {
         if (!task) return;
 
         // NEW: If the task is marked as shared in its original list, do not uncomplete it here.
-        if (task.isShared) {
+        if (task.isShared && type !== 'shared') { // Only prevent if it's a local task marked as shared
             console.log(`Task ${id} is shared, uncompletion handled in shared quests.`);
             return;
         }
