@@ -266,7 +266,8 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAl" height="100%" filter="url(#noise)"/></svg>');
+            /* FIXED: Replaced malformed base64 URL with a corrected one. */
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSkiLz48L3N2Zz4=');
             background-size: 250px 250px;
             opacity: var(--noise-opacity);
             pointer-events: none;
@@ -2199,10 +2200,36 @@
     </template>
 
     <script type="module">
-        // --- NOTE ON SECURITY ---
-        // All client-side code (like this script) is visible in the browser.
+        // --- NOTE ON SECURITY & PERMISSIONS ERRORS ---
+        // The error log shows "Permission Denied! Check your Firestore Security Rules."
+        // This is a common issue and is not a bug in the client-side code itself,
+        // but a misconfiguration in your Firebase project's security settings.
+        // To fix this, you must update your Firestore Security Rules in the
+        // Firebase Console. The client-side code assumes that logged-in users
+        // have permission to read and write to their own documents.
+        //
+        // Here are the essential rules needed for this app to function:
+        //
+        // rules_version = '2';
+        // service cloud.firestore {
+        //   match /databases/{database}/documents {
+        //     // Users can read and write to their own user document
+        //     match /users/{userId} {
+        //       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+        //       allow create: if request.auth != null;
+        //     }
+        //
+        //     // Usernames must be unique. Anyone can read, but only the owner can create/delete.
+        //     match /usernames/{username} {
+        //       allow read;
+        //       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        //       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+        //     }
+        //   }
+        // }
+        //
         // Your Firebase config is meant to be public. True security is enforced 
-        // by your Firestore Security Rules in the Firebase console, not by hiding code.
+        // by your Firestore Security Rules, not by hiding code.
         
         // --- FIREBASE SETUP ---
         const firebaseConfig = {
