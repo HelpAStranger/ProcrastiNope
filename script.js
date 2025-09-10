@@ -700,20 +700,42 @@ async function initializeAppLogic(initialUser) {
     };
     const deleteTask = (id) => { stopTimer(id, false); const {list} = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
     const completeTask = (id) => {
-        stopTimer(id, false); const { task, type } = findTaskAndContext(id); if (!task) return;
-        if (task.timerFinished) delete task.timerFinished;
-        addXp(XP_PER_TASK); playSound('complete');
+        stopTimer(id, false); // This now handles removing the timerFinished flag
+        const { task, type } = findTaskAndContext(id);
+        if (!task) return;
+
+        addXp(XP_PER_TASK);
+        playSound('complete');
         if (type === 'daily') {
-            if(task.completedToday) return; task.completedToday = true; task.lastCompleted = new Date().toDateString();
-            if (task.weeklyGoal > 0) { const now = new Date(); if (task.weekStartDate < getStartOfWeek(now)) { task.weekStartDate = getStartOfWeek(now); task.weeklyCompletions = 1; } else { task.weeklyCompletions = (task.weeklyCompletions || 0) + 1; } }
+            if (task.completedToday) return;
+            task.completedToday = true;
+            task.lastCompleted = new Date().toDateString();
+            if (task.weeklyGoal > 0) {
+                const now = new Date();
+                if (task.weekStartDate < getStartOfWeek(now)) {
+                    task.weekStartDate = getStartOfWeek(now);
+                    task.weeklyCompletions = 1;
+                } else {
+                    task.weeklyCompletions = (task.weeklyCompletions || 0) + 1;
+                }
+            }
         } else {
             createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
-            const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
-            if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
+            const { list, group } = findTaskAndContext(id);
+            if (list) {
+                const i = list.findIndex(t => t.id === id);
+                if (i > -1) list.splice(i, 1);
+            }
+            if (group && (!group.tasks || group.tasks.length === 0)) {
+                const i = generalTaskGroups.findIndex(g => g.id === group.id);
+                if (i > -1) generalTaskGroups.splice(i, 1);
+            }
         }
         saveState();
         renderAllLists();
-        const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
+        const { allDailiesDone, allTasksDone } = checkAllTasksCompleted();
+        if (allTasksDone) createFullScreenConfetti(true);
+        else if (allDailiesDone) createFullScreenConfetti(false);
     };
     const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
     const editTask = (id, text, goal) => {
@@ -728,10 +750,6 @@ async function initializeAppLogic(initialUser) {
     function finishTimer(id) {
         playSound('timerUp');
         
-        // --- BUG FIX ---
-        // Refactored to handle state directly instead of calling stopTimer.
-        // This is cleaner and prevents potential bugs if stopTimer's logic changes,
-        // as stopTimer is meant for user cancellation, not natural completion.
         if (activeTimers[id]) {
             clearInterval(activeTimers[id]);
             delete activeTimers[id];
@@ -767,6 +785,7 @@ async function initializeAppLogic(initialUser) {
         if (task) {
             delete task.timerStartTime;
             delete task.timerDuration;
+            delete task.timerFinished; // Also remove the finished flag
             if (shouldRender) {
                 saveState();
                 renderAllLists();
