@@ -914,7 +914,12 @@ async function initializeAppLogic(initialUser) {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
+<<<<<<< HEAD
         function handleActionsVisibility(element) {
+=======
+        function handleMobileActions(element) {
+             if (window.innerWidth > 1023) return;
+>>>>>>> parent of fc4798b (Update script.js)
              if (e.target.closest('button')) { 
                  clearTimeout(actionsTimeoutId);
                  return;
@@ -969,7 +974,13 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
+<<<<<<< HEAD
             handleActionsVisibility(groupHeader);
+=======
+            if (window.innerWidth <= 1023) {
+                handleMobileActions(groupHeader);
+            }
+>>>>>>> parent of fc4798b (Update script.js)
             return; 
         }
 
@@ -990,7 +1001,11 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
+<<<<<<< HEAD
             handleActionsVisibility(taskItem);
+=======
+            handleMobileActions(taskItem);
+>>>>>>> parent of fc4798b (Update script.js)
 
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
@@ -1963,6 +1978,7 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         console.error("Failed to merge guest data:", error);
         return cloudData;
     }
+<<<<<<< HEAD
 }
 ```
 --- START OF FILE style.css ---
@@ -3818,4 +3834,6 @@ ANIMATIONS
     0% { transform: scale(1) rotate(0); opacity: 1; }
     30% { transform: scale(1.1) rotate(-5deg); }
     100% { transform: scale(0) rotate(180deg); opacity: 0; max-height: 0; padding: 0; margin: 0; }
+=======
+>>>>>>> parent of fc4798b (Update script.js)
 }
