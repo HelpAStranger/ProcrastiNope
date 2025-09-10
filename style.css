@@ -1006,6 +1006,22 @@ SHARED QUESTS
     margin-bottom: 1rem;
 }
 
+/* NEW: Styles for shared quest groups */
+.shared-quest-group {
+    margin-bottom: 2rem;
+}
+.shared-group-title {
+    font-size: 1.3rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: var(--border-width) solid var(--border);
+}
+.shared-quest-list {
+    list-style: none;
+    padding: 0;
+}
+
 .task-item.shared-quest {
     border-style: double;
     border-width: 4px;

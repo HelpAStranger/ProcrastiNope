@@ -363,6 +363,12 @@ async function initializeAppLogic(initialUser) {
     const shareQuestFriendList = document.getElementById('share-quest-friend-list');
     const shareQuestIdInput = document.getElementById('share-quest-id-input');
 
+    // NEW: DOM elements for Share Group feature
+    const shareGroupModal = document.getElementById('share-group-modal');
+    const shareGroupNameDisplay = document.getElementById('share-group-name-display');
+    const shareGroupIdInput = document.getElementById('share-group-id-input');
+    const shareGroupFriendList = document.getElementById('share-group-friend-list');
+
 
     async function promptForUsernameIfNeeded() {
         if (!user) return;
@@ -644,13 +650,44 @@ async function initializeAppLogic(initialUser) {
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    const renderSharedQuests = () => { sharedQuestsContainer.innerHTML = ''; sharedQuests.forEach(task => sharedQuestsContainer.appendChild(createTaskElement(task, 'shared'))); };
+    // MODIFIED: renderSharedQuests to group by sharedGroupName
+    const renderSharedQuests = () => {
+        sharedQuestsContainer.innerHTML = '';
+        if (sharedQuests.length === 0) {
+            sharedQuestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem; opacity: 0.7;">No shared quests yet. Share one with a friend!</p>`;
+            return;
+        }
+
+        // Group shared quests by sharedGroupName
+        const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
+            const groupName = quest.sharedGroupName || 'Individual Shared Quests';
+            if (!acc[groupName]) {
+                acc[groupName] = [];
+            }
+            acc[groupName].push(quest);
+            return acc;
+        }, {});
+
+        for (const groupName in groupedSharedQuests) {
+            const groupEl = document.createElement('div');
+            groupEl.className = 'shared-quest-group';
+            if (groupName !== 'Individual Shared Quests') {
+                groupEl.innerHTML = `<h3 class="shared-group-title">${groupName}</h3>`;
+            }
+            const ul = document.createElement('ul');
+            ul.className = 'shared-quest-list';
+            groupedSharedQuests[groupName].forEach(task => ul.appendChild(createTaskElement(task, 'shared')));
+            groupEl.appendChild(ul);
+            sharedQuestsContainer.appendChild(groupEl);
+        }
+    };
     const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
     const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
     const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        // MODIFIED: Added share-group-btn to group actions
+        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); if (group.tasks) group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); return el;
     };
     const createTaskElement = (task, type) => {
@@ -959,7 +996,9 @@ async function initializeAppLogic(initialUser) {
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
-            const isEditClick = e.target.closest('.edit-group-btn'); // Added for consistency
+            const isEditClick = e.target.closest('.edit-group-btn');
+            // NEW: Share Group button click
+            const isShareClick = e.target.closest('.share-group-btn');
 
             if (isExpandClick) {
                 if (g) {
@@ -996,8 +1035,20 @@ async function initializeAppLogic(initialUser) {
                 // If there's an edit group modal, open it here.
                 // For now, just let the click fall through to toggleTaskActions.
             }
+            // NEW: Handle Share Group click
+            if (isShareClick) {
+                if (!user) {
+                    showConfirm("Login Required", "You must be logged in to share groups.", () => {
+                        closeModal(shareGroupModal); // Close the share modal if it was open
+                        openModal(accountModal); // Open login modal
+                    });
+                    return;
+                }
+                openShareGroupModal(groupId);
+                return;
+            }
             
-            // If the click was not on any specific button (expand, add, delete, edit),
+            // If the click was not on any specific button (expand, add, delete, edit, share),
             // toggle the actions overlay.
             if (!e.target.closest('button')) {
                 toggleTaskActions(groupHeader);
@@ -1088,7 +1139,8 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal].forEach(m => { 
+    // MODIFIED: Added shareGroupModal to the list of modals that close on overlay click
+    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal].forEach(m => { 
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                 closeModal(m); 
@@ -1799,6 +1851,114 @@ async function initializeAppLogic(initialUser) {
             // If the element isn't visible for some reason, just delete the doc immediately.
             await deleteDoc(doc(db, "sharedQuests", questData.id));
         }
+    }
+
+    // NEW: Function to open the Share Group modal
+    async function openShareGroupModal(groupId) {
+        if (!user) return; // Should be caught by event listener, but good to double check
+
+        const group = generalTaskGroups.find(g => g.id === groupId);
+        if (!group || !group.tasks || group.tasks.length === 0) {
+            showConfirm("Cannot Share Empty Group", "This group has no tasks to share.", () => {});
+            return;
+        }
+
+        shareGroupNameDisplay.textContent = group.name;
+        shareGroupIdInput.value = groupId;
+        shareGroupFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
+        openModal(shareGroupModal);
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const friendUIDs = userDoc.data().friends || [];
+        
+        if (friendUIDs.length === 0) {
+            shareGroupFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share groups with!</p>';
+            return;
+        }
+
+        shareGroupFriendList.innerHTML = '';
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        const friendDocs = await getDocs(friendsQuery);
+
+        friendDocs.forEach(friendDoc => {
+            const friendData = friendDoc.data();
+            const friendEl = document.createElement('div');
+            friendEl.className = 'share-friend-item';
+            friendEl.innerHTML = `
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+                <span class="friend-name">${friendData.username}</span>
+                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+            `;
+            shareGroupFriendList.appendChild(friendEl);
+        });
+    }
+
+    // NEW: Event listener for the Share Group friend list
+    shareGroupFriendList.addEventListener('click', async (e) => {
+        const button = e.target.closest('.share-btn-action');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Sharing...';
+            const groupId = shareGroupIdInput.value;
+            const friendUid = button.dataset.uid;
+            const friendUsername = button.dataset.username;
+
+            try {
+                await shareGroup(groupId, friendUid, friendUsername);
+            } catch (error) {
+                console.error("Failed to share group:", error);
+                button.disabled = false;
+                button.textContent = 'Share';
+            } finally {
+                closeModal(shareGroupModal);
+            }
+        }
+    });
+
+    // NEW: Function to handle sharing a group
+    async function shareGroup(groupId, friendUid, friendUsername) {
+        if (!user) return;
+
+        const groupIndex = generalTaskGroups.findIndex(g => g.id === groupId);
+        if (groupIndex === -1) return;
+
+        const groupToShare = generalTaskGroups[groupIndex];
+        if (!groupToShare.tasks || groupToShare.tasks.length === 0) {
+            console.warn("Attempted to share an empty group.");
+            return;
+        }
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const ownerUsername = userDoc.data().username;
+
+        const batch = writeBatch(db);
+
+        for (const task of groupToShare.tasks) {
+            const sharedQuestRef = doc(collection(db, "sharedQuests"));
+            const sharedQuestData = {
+                text: task.text,
+                ownerUid: user.uid,
+                ownerUsername: ownerUsername,
+                friendUid: friendUid,
+                friendUsername: friendUsername,
+                ownerCompleted: false,
+                friendCompleted: false,
+                createdAt: Date.now(),
+                participants: [user.uid, friendUid],
+                sharedGroupId: groupId, // Link to the original group ID
+                sharedGroupName: groupToShare.name // Store group name for display
+            };
+            batch.set(sharedQuestRef, sharedQuestData);
+        }
+
+        // Remove the original group from the owner's generalTaskGroups
+        generalTaskGroups.splice(groupIndex, 1);
+        
+        await batch.commit();
+
+        playSound('share');
+        saveState();
+        renderAllLists();
     }
 
 
