@@ -650,13 +650,11 @@ async function initializeAppLogic(initialUser) {
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    // MODIFIED: renderSharedQuests to group by sharedGroupName
+    // MODIFIED: renderSharedQuests to group by sharedGroupName and remove "No shared quests" message
     const renderSharedQuests = () => {
         sharedQuestsContainer.innerHTML = '';
-        if (sharedQuests.length === 0) {
-            sharedQuestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem; opacity: 0.7;">No shared quests yet. Share one with a friend!</p>`;
-            return;
-        }
+        // Removed: "No shared quests yet. Share one with a friend!" message
+        // The container will simply be empty if there are no shared quests.
 
         // Group shared quests by sharedGroupName
         const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
@@ -683,7 +681,13 @@ async function initializeAppLogic(initialUser) {
     };
     const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
     const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
-    const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
+    const renderGeneralTasks = () => { 
+        generalTaskListContainer.innerHTML = ''; 
+        generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); 
+        // MODIFIED: Updated condition for no-general-tasks-message
+        const hasAnyMainQuests = standaloneMainQuests.length > 0 || generalTaskGroups.some(g => g.tasks && g.tasks.length > 0);
+        noGeneralTasksMessage.style.display = hasAnyMainQuests ? 'none' : 'block'; 
+    };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         // MODIFIED: Added share-group-btn to group actions
@@ -695,14 +699,18 @@ async function initializeAppLogic(initialUser) {
         
         // Shared Quest specific rendering
         if(type === 'shared') {
-            li.classList.add('shared-quest');
-            li.dataset.id = task.questId;
-            
             const isOwner = user && task.ownerUid === user.uid;
             const ownerCompleted = task.ownerCompleted;
             const friendCompleted = task.friendCompleted;
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
+            const allCompleted = ownerCompleted && friendCompleted; // NEW: Check if both parts are completed
 
+            li.classList.add('shared-quest');
+            if (allCompleted) { // NEW: Add class if all parts are completed
+                li.classList.add('all-completed');
+            }
+            li.dataset.id = task.questId;
+            
             const selfIdentifier = isOwner ? 'You' : otherPlayerUsername;
             const otherIdentifier = isOwner ? otherPlayerUsername : 'Owner';
             
@@ -1294,7 +1302,7 @@ async function initializeAppLogic(initialUser) {
         try {
             const userDocRef = doc(db, "users", currentUser.uid);
             const userDocSnap = await getDoc(userDocRef);
-            const currentUsername = userDocSnap.data().username;
+            const currentUsername = userDocSnap.exists() ? userDocSnap.data().username : null;
 
             if (newUsername === currentUsername) {
                 errorEl.textContent = "This is already your username.";
@@ -1951,8 +1959,9 @@ async function initializeAppLogic(initialUser) {
             batch.set(sharedQuestRef, sharedQuestData);
         }
 
-        // Remove the original group from the owner's generalTaskGroups
-        generalTaskGroups.splice(groupIndex, 1);
+        // FIX: Instead of removing the entire group, clear its tasks.
+        // This keeps the group structure for the owner, but its tasks are now shared.
+        groupToShare.tasks = [];
         
         await batch.commit();
 

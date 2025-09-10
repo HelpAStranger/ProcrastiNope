@@ -1029,6 +1029,21 @@ SHARED QUESTS
     max-height: 120px; /* Allow more height */
 }
 
+/* NEW: Style for fully completed shared quests */
+.task-item.shared-quest.all-completed {
+    background-color: var(--accent-green-light); /* A light green tint */
+    border-color: var(--accent-green);
+    --shadow-color: var(--accent-green);
+    opacity: 0.9; /* Slightly less opaque than active, but more than completed daily */
+}
+
+.dark-mode .task-item.shared-quest.all-completed {
+    background-color: var(--accent-green-dark);
+    border-color: var(--accent-green-dark);
+    --shadow-color: var(--accent-green-dark);
+}
+
+
 .shared-quest-info {
     width: 100%;
     display: flex;
