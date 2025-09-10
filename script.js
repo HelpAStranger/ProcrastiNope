@@ -914,8 +914,7 @@ async function initializeAppLogic(initialUser) {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
-        function handleMobileActions(element) {
-             if (window.innerWidth > 1023) return;
+        function handleActionsToggle(element) {
              if (e.target.closest('button')) { 
                  clearTimeout(actionsTimeoutId);
                  return;
@@ -970,9 +969,7 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            if (window.innerWidth <= 1023) {
-                handleMobileActions(groupHeader);
-            }
+            handleActionsToggle(groupHeader);
             return; 
         }
 
@@ -993,7 +990,7 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            handleMobileActions(taskItem);
+            handleActionsToggle(taskItem);
 
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
@@ -1966,4 +1963,1859 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         console.error("Failed to merge guest data:", error);
         return cloudData;
     }
+}
+```
+
+### `style.css`
+I've refactored the CSS to remove the problematic hover behavior on desktops and unified the click-based interaction for all screen sizes. This ensures the "complete" button is always clickable.
+
+```css
+/*
+==========================================================================
+NEOBRUTALIST THEME & VARIABLES (REVAMPED)
+==========================================================================
+*/
+:root {
+    --font-main: 'Inter', sans-serif;
+
+    /* Light Theme - WARM & PASTEL */
+    --bg-light: #FFF8E7; /* Soft Cream */
+    --text-light: #4E443A; /* Warm Dark Brown */
+    --border-light: #4E443A;
+    --shadow-light: #4E443A;
+    --surface-light: #FFFFFF;
+    --text-on-accent: #4E443A; /* Dark text for light pastels */
+    --surface-light-rgb: 255, 255, 255;
+
+    /* Dark Theme - DEEPER & WARM (MODIFIED) */
+    --bg-dark: #211B14; /* Warmer, less dark background */
+    --text-dark: #EAE2D6; /* Warm Off-white */
+    --border-dark: #EAE2D6;
+    --shadow-dark: #655e5e;
+    --surface-dark: #352D25; /* Warmer, lighter surface */
+    --surface-dark-rgb: 53, 45, 37;
+    
+    /* Light Theme Accent Colors */
+    --accent-pink-light: #FFB7C5;
+    --accent-blue-light: #99CCFF;
+    --accent-green-light: #A7D4A8;
+    --accent-orange-light: #FFB347;
+    --accent-purple-light: #C7A2F4;
+    --accent-yellow-light: #FFEE93;
+    --accent-cyan-light: #A4DDED;
+    --accent-red-light: #FF6961;
+    --accent-lime-light: #D4E99E;
+    --accent-indigo-light: #A5ADFF;
+    --accent-teal-light: #87D7C8;
+    --accent-amber-light: #FFCF8B;
+
+    /* Base Accent Colors (default to light) */
+    --accent-pink: var(--accent-pink-light);
+    --accent-blue: var(--accent-blue-light);
+    --accent-green: var(--accent-green-light);
+    --accent-orange: var(--accent-orange-light);
+    --accent-purple: var(--accent-purple-light);
+    --accent-yellow: var(--accent-yellow-light);
+    --accent-cyan: var(--accent-cyan-light);
+    --accent-red: var(--accent-red-light);
+    --accent-lime: var(--accent-lime-light);
+    --accent-indigo: var(--accent-indigo-light);
+    --accent-teal: var(--accent-teal-light);
+    --accent-amber: var(--accent-amber-light);
+
+    /* Default State (Light) */
+    --bg: var(--bg-light);
+    --text: var(--text-light);
+    --border: var(--border-light);
+    --shadow: var(--shadow-light);
+    --surface: var(--surface-light);
+    --accent: var(--accent-red);
+    --shadow-color: var(--shadow);
+    --noise-opacity: 0.05;
+    --surface-rgb: var(--surface-light-rgb);
+
+
+    /* Universal Settings */
+    --border-width: 3px;
+    --shadow-offset: 6px;
+    --radius: 12px;
+    --transition-speed: 0.2s;
+}
+
+.dark-mode {
+    --bg: var(--bg-dark);
+    --text: var(--text-dark);
+    --border: var(--border-dark);
+    --shadow: var(--shadow-dark);
+    --surface: var(--surface-dark);
+    --text-on-accent: var(--text-dark); /* Use light text for pastels in dark mode */
+    --noise-opacity: 0.08;
+    --surface-rgb: var(--surface-dark-rgb);
+    
+    /* Dark Theme Accent Colors (Darker, more pastel) */
+    --accent-pink-dark: #C98B96;
+    --accent-blue-dark: #8A9EC4;
+    --accent-green-dark: #8DAF8E;
+    --accent-orange-dark: #D99A5B;
+    --accent-purple-dark: #A991C4;
+    --accent-yellow-dark: #CEC592;
+    --accent-cyan-dark: #93B2BC;
+    --accent-red-dark: #D97C75;
+    --accent-lime-dark: #B4C290;
+    --accent-indigo-dark: #9A9FDA;
+    --accent-teal-dark: #7DAAA1;
+    --accent-amber-dark: #D9B383;
+
+    /* Remap Base Accent Colors to Dark Versions */
+    --accent-pink: var(--accent-pink-dark);
+    --accent-blue: var(--accent-blue-dark);
+    --accent-green: var(--accent-green-dark);
+    --accent-orange: var(--accent-orange-dark);
+    --accent-purple: var(--accent-purple-dark);
+    --accent-yellow: var(--accent-yellow-dark);
+    --accent-cyan: var(--accent-cyan-dark);
+    --accent-red: var(--accent-red-dark);
+    --accent-lime: var(--accent-lime-dark);
+    --accent-indigo: var(--accent-indigo-dark);
+    --accent-teal: var(--accent-teal-dark);
+    --accent-amber: var(--accent-amber-dark);
+}
+
+/*
+==========================================================================
+BASE & LAYOUT
+==========================================================================
+*/
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    /* Custom Scrollbar Styles */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) var(--surface);
+    /* FIX: Prevent layout shift when modals open/close */
+    scrollbar-gutter: stable;
+}
+
+body {
+    min-height: 100vh; /* FIX: Allow body to grow with content */
+}
+
+body::-webkit-scrollbar {
+    width: 14px;
+}
+
+body::-webkit-scrollbar-track {
+    background: var(--surface);
+    border-left: var(--border-width) solid var(--border);
+}
+
+body::-webkit-scrollbar-thumb {
+    background-color: var(--accent);
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+}
+
+body::before {
+    content: '';
+    display: block;
+    height: 10px;
+    background-color: var(--accent);
+    transition: background-color var(--transition-speed) ease;
+}
+
+/* Grainy Texture Overlay */
+body::after {
+    content: "";
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    /* FIXED: Replaced malformed base64 URL with a corrected one. */
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSIvPjwvc3ZnPg==');
+    background-size: 250px 250px;
+    opacity: var(--noise-opacity);
+    pointer-events: none;
+    z-index: 10000;
+    transition: opacity var(--transition-speed) ease;
+    animation: grain 8s steps(10) infinite;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: var(--bg);
+    color: var(--text);
+    transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+    overflow-x: hidden;
+}
+
+#app-wrapper {
+    transition: filter 0.3s ease-in-out;
+}
+
+#app-wrapper.blur-background {
+    filter: blur(5px);
+    pointer-events: none;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1rem; /* FIX: Reduced padding to minimize gap */
+}
+
+/* IMPORT: Added padding for the bottom nav bar on mobile */
+main.container {
+    padding-bottom: 100px;
+}
+
+
+.quests-layout {
+    display: flex;
+    flex-direction: column; /* Default: stack quests vertically */
+}
+
+/* On mobile, quest sections are toggled, not side-by-side */
+@media (max-width: 1023px) {
+    .task-group {
+        display: none; /* Hide all sections by default */
+    }
+    .task-group.mobile-visible {
+        display: block; /* Show only the active one */
+    }
+}
+
+/* For wider screens, display quests side-by-side */
+@media (min-width: 1024px) {
+    .container {
+        max-width: 1280px; /* Widen the container */
+    }
+
+    .quests-layout {
+        flex-direction: row; /* Place items in a row */
+        gap: 2rem; /* Add space between the two columns */
+        align-items: flex-start; /* Align columns to the top */
+    }
+
+    .quests-layout > .task-group {
+        flex: 1 1 0px; /* Allow each column to grow and take up equal space */
+        margin-bottom: 0; /* Remove bottom margin as 'gap' handles spacing */
+    }
+
+    /* FIX: Allow completed quest text to wrap correctly on wide screens */
+    .task-item.daily-completed .task-content {
+        flex-grow: 1; /* Let the content area grow to fill space */
+        margin-right: 0;
+    }
+
+    /* Add hover-to-expand behavior only for desktop */
+    .main-quest-group:hover ul.task-list-group {
+        max-height: 1000px;
+        margin-top: 1rem;
+        transition: max-height 0.25s ease-in;
+        padding-right: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+}
+
+/*
+==========================================================================
+LOADING ANIMATION
+==========================================================================
+*/
+#loader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.3s ease;
+}
+
+.loader-box {
+    width: 60px;
+    height: 60px;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+    animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg) scale(1); border-radius: 0; }
+    50% { transform: rotate(180deg) scale(0.8); border-radius: 50%; }
+    100% { transform: rotate(360deg) scale(1); border-radius: 0; }
+}
+
+/*
+==========================================================================
+LANDING PAGE
+==========================================================================
+*/
+#landing-page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.landing-container {
+    width: 100%;
+    max-width: 450px;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+    padding: 2.5rem 2rem;
+    text-align: center;
+}
+
+.landing-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.landing-buttons .btn {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.2rem;
+}
+#landing-back-btn {
+    margin-top: 1.5rem;
+}
+
+
+/*
+==========================================================================
+HEADER & PROGRESS
+==========================================================================
+*/
+.sticky-header {
+    position: sticky;
+    top: 0;
+    background-color: var(--bg);
+    padding: 1.5rem 1rem;
+    z-index: 10;
+    border-bottom: var(--border-width) solid var(--border);
+    box-shadow: 0 var(--shadow-offset) 0 var(--shadow);
+    margin-bottom: 0; /* Adjusted */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-content {
+    text-align: left;
+    flex-grow: 1; /* Allow content to take available space */
+    min-width: 0; /* Critical for preventing overflow on flex items */
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0; /* Prevent controls from shrinking */
+}
+
+#user-display {
+    font-weight: 700;
+}
+
+.main-title {
+    font-size: 2.5rem;
+    font-weight: 900;
+    letter-spacing: -2px;
+    margin-bottom: 0.25rem;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    color: var(--accent);
+    display: inline-block; /* FIX: Shrink hitbox to content */
+}
+.main-title:hover {
+    transform: rotate(-1deg) scale(1.02); /* FIX: Tone down animation */
+}
+
+
+.quote {
+    font-size: 1rem;
+    font-weight: 700;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.player-progress-section {
+    background-color: var(--surface);
+    border-bottom: var(--border-width) solid var(--border);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0; /* FIX: Removed space to reduce gap */
+}
+
+.level-display {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    font-weight: 900;
+    padding: 0.5rem 1rem;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+    font-size: 1.2rem;
+    transition: transform 0.3s ease;
+}
+
+.level-display.level-up {
+    animation: levelUpPulse 0.5s ease-in-out;
+}
+
+.xp-bar-container {
+    flex-grow: 1;
+    background-color: var(--bg);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.25rem;
+    position: relative;
+}
+
+.xp-bar {
+    width: 0%;
+    height: 25px;
+    background-color: var(--accent);
+    border-radius: calc(var(--radius) / 2);
+    transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#xp-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: 700;
+    color: var(--text);
+    mix-blend-mode: difference;
+    filter: invert(1) grayscale(1);
+}
+.dark-mode #xp-text {
+    mix-blend-mode: normal; /* Changed from unset */
+    filter: none; /* Changed from unset */
+    color: var(--text-dark); /* Explicitly set color for dark mode */
+}
+
+/* Mobile Responsiveness for Header */
+@media (max-width: 640px) {
+    .sticky-header {
+        padding: 1rem;
+        gap: 1rem;
+    }
+    .main-title {
+        font-size: 1.8rem;
+        letter-spacing: -1px;
+    }
+    .quote {
+        display: none; /* Hide quote on small screens to save space */
+    }
+    .theme-btn span {
+        display: none;
+    }
+    .theme-btn {
+        padding: 0.75rem; /* Make it a square */
+    }
+}
+
+/*
+==========================================================================
+FRIENDS FEATURE & MOBILE NAV
+==========================================================================
+*/
+#friends-btn-desktop {
+    display: none; 
+    position: relative;
+}
+@media (min-width: 1024px) {
+    #friends-btn-desktop {
+        display: flex; 
+        gap: 0.5rem;
+        --shadow-color: var(--shadow);
+    }
+    #friends-btn-desktop svg {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: var(--accent-red);
+    color: var(--text-on-accent);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 2px var(--accent-red);
+    display: none; /* Hidden by default */
+}
+
+#mobile-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 85px;
+    background-color: var(--surface);
+    border-top: var(--border-width) solid var(--border);
+    box-shadow: 0px -6px 0 var(--shadow);
+    z-index: 500;
+}
+
+.mobile-nav-content {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    height: 100%;
+    gap: 0.5rem;
+    padding: 0.75rem;
+}
+
+.mobile-nav-btn {
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+    color: var(--text);
+    opacity: 0.7;
+    transition: all var(--transition-speed) ease;
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    flex: 1 1 0px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-family: var(--font-main);
+    font-weight: 700;
+    height: 65px;
+}
+
+.mobile-nav-btn span {
+    font-weight: 900;
+    font-size: 0.8rem;
+}
+
+.mobile-nav-btn.active {
+    opacity: 1;
+    transform: translateY(-10px);
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    box-shadow: 6px 6px 0 var(--shadow);
+    z-index: 1;
+}
+
+.mobile-nav-btn.active svg {
+    color: var(--text-on-accent);
+}
+
+.mobile-nav-btn svg {
+    width: 28px;
+    height: 28px;
+    stroke: currentColor;
+    stroke-width: var(--border-width);
+}
+
+@media (max-width: 1023px) {
+    #mobile-nav {
+        display: block;
+    }
+    #friends-btn-desktop {
+        display: none;
+    }
+}
+
+#friends-modal .modal-content {
+    position: relative;
+    overflow: hidden; 
+}
+
+#friends-modal-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    opacity: 0.1;
+    overflow: hidden;
+}
+
+#friends-modal-bg svg {
+    width: 200%;
+    height: 200%;
+    animation: bg-pan 40s linear infinite;
+}
+
+@keyframes bg-pan {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(-20%, 10%); }
+    50% { transform: translate(0, -20%); }
+    75% { transform: translate(10%, 10%); }
+    100% { transform: translate(0, 0); }
+}
+
+#friends-modal .tab-content {
+    min-height: 250px;
+}
+
+#friends-modal h3 {
+    font-weight: 900;
+}
+
+.friends-list-container, .friend-requests-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem;
+    background-color: var(--surface);
+}
+
+.friend-item, .friend-request-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    gap: 0.75rem;
+}
+
+.friend-item .friend-name, 
+.friend-request-item span {
+    font-weight: 700;
+    flex-grow: 1;
+}
+
+
+.friend-item:not(:last-child), .friend-request-item:not(:last-child) {
+    border-bottom: var(--border-width) dashed var(--border);
+}
+
+.friend-item-actions, .friend-request-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.friend-level-display {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    font-weight: 900;
+    padding: 0.25rem 0.75rem;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 4px 4px 0 var(--shadow);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.friend-item-actions .remove-friend-btn,
+.friend-request-actions .decline-request-btn {
+    --shadow-color: var(--accent-red);
+}
+.friend-request-actions .accept-request-btn {
+    --shadow-color: var(--accent-green);
+}
+
+#add-friend-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+#search-username-input { flex-grow: 1; }
+
+.friend-status-message {
+    margin-top: 1rem;
+    font-weight: 700;
+    text-align: center;
+    min-height: 1.2em;
+}
+
+
+/*
+==========================================================================
+TASK LIST & ITEMS
+==========================================================================
+*/
+.task-group {
+    margin-bottom: 3rem;
+}
+
+.task-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+.task-group-header .header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.task-group-header h2 {
+    font-size: 1.8rem;
+    font-weight: 900;
+}
+
+.main-quest-group, .task-item {
+    cursor: grab;
+}
+
+.sortable-ghost {
+    opacity: 0.4;
+    background-color: var(--accent);
+}
+
+/* Shake animation for all items during drag */
+body.is-dragging .task-item,
+body.is-dragging .main-quest-group {
+    animation: shake-light 0.4s cubic-bezier(.36,.07,.19,.97) both infinite;
+}
+
+
+.main-quest-group {
+    margin-bottom: 1.5rem; /* FIX: Reduced spacing */
+    transition: all var(--transition-speed) ease;
+}
+
+.main-quest-group.removing {
+     animation: slideOut 0.4s ease forwards;
+}
+
+.main-quest-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+    position: relative;
+    cursor: pointer;
+}
+
+.group-title-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-grow: 1;
+}
+
+.expand-icon {
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+}
+
+.expand-icon-wrapper {
+    padding: 8px;
+    margin: -8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+}
+
+@media (min-width: 1024px) {
+    .expand-icon-wrapper:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    .dark-mode .expand-icon-wrapper:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+}
+
+.main-quest-group.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+/* Emphasis for group headers */
+.main-quest-group-header::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    right: 5px;
+    bottom: 5px;
+    border: var(--border-width) dashed var(--border);
+    border-radius: calc(var(--radius) * 0.5);
+    opacity: 0.5;
+    pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
+}
+
+.main-quest-group-header h3 {
+    font-size: 1.3rem;
+    font-weight: 900;
+}
+
+.main-quest-group-header .group-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+
+#daily-task-list, #standalone-task-list, .main-quest-group ul {
+    list-style: none;
+}
+
+/* FIX: Remove space from empty standalone quest list */
+#standalone-task-list:empty {
+    display: none;
+}
+
+.main-quest-group ul.task-list-group {
+    min-height: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease-out, margin-top 0.2s ease-out;
+    margin-top: 0;
+    padding: 0 0.5rem; /* FIX: Add padding for shake animation room */
+}
+
+/* FIX: Removed hover behavior from this rule to prevent accidental expansion on mobile */
+.main-quest-group.expanded ul.task-list-group {
+    max-height: 1000px; /* Increased max-height for very long lists */
+    margin-top: 1rem;
+    transition: max-height 0.25s ease-in;
+    /* FIX: Add padding to prevent shadow clipping on child elements */
+    padding-right: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+
+.task-item {
+    display: flex;
+    flex-wrap: wrap; 
+    align-items: center;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all var(--transition-speed) ease, max-height var(--transition-speed) ease;
+    position: relative;
+    overflow: hidden;
+    max-height: 100px; /* Base height for transitions */
+}
+
+/* Standalone quests look like group headers */
+.task-item.standalone-quest {
+     padding: 1rem;
+}
+ .task-item.standalone-quest::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    right: 5px;
+    bottom: 5px;
+    border: var(--border-width) dashed var(--border);
+    border-radius: calc(var(--radius) * 0.5);
+    opacity: 0.5;
+    pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
+}
+ .task-item.standalone-quest .task-text {
+    font-size: 1.3rem;
+    font-weight: 900;
+}
+
+.task-item.overdue {
+    animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) infinite both;
+    border-color: var(--accent-red);
+    --shadow-color: var(--accent-red);
+}
+
+/* NEW: Style for when a timer finishes */
+.task-item.timer-finished {
+    border-color: var(--accent-red);
+    --shadow-color: var(--accent-red);
+    animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) infinite both;
+}
+
+.task-item.daily-completed {
+    max-height: 50px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    opacity: 0.6;
+    filter: grayscale(0.5);
+    cursor: pointer; /* To indicate it's clickable for undo */
+}
+.task-item.daily-completed .task-text {
+    text-decoration: line-through;
+}
+
+.task-item.daily-completed .task-buttons-wrapper {
+    display: none;
+}
+
+/* Weekly goal met style */
+.task-item.weekly-goal-met {
+    border-style: dashed;
+    opacity: 0.8;
+}
+.task-item.weekly-goal-met::after {
+    content: 'GOAL MET!';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-10deg);
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--accent);
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+/* Hide edit/delete when timer is active on any screen size */
+.task-item.timer-active .task-actions {
+    display: none;
+}
+
+/* Add/Remove Animation */
+.task-item.adding {
+    animation: slideIn 0.4s ease forwards;
+}
+
+.task-item.removing {
+    animation: slideOut 0.4s ease forwards;
+}
+
+/* Completion Animation */
+.task-item.completed {
+    animation: celebrate 0.8s ease-in-out forwards;
+}
+
+.task-item .task-content {
+     display: flex;
+     align-items: center;
+     flex-grow: 1;
+     flex-basis: 0; /* Important for flex wrapping */
+     margin-right: 1rem;
+     min-width: 0; /* ADDED: Prevents long text from pushing controls */
+}
+
+.task-item .task-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    outline: none;
+    transition: all var(--transition-speed) ease;
+    padding-bottom: 5px; 
+    margin-right: 1rem;
+    word-break: break-word; /* Ensure long text wraps */
+}
+
+.task-buttons-wrapper {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+    align-items: center;
+}
+
+.task-item .task-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.streak-counter {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 700;
+    margin-right: 1rem;
+    color: var(--accent-orange);
+}
+
+.streak-counter svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* NEW: Weekly Goal Tag Styling */
+.weekly-goal-tag {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+    box-shadow: 4px 4px 0 var(--shadow);
+    flex-shrink: 0; /* Prevent from shrinking */
+}
+/*
+==========================================================================
+SHARED QUESTS
+==========================================================================
+*/
+.shared-quests-container {
+    margin-bottom: 1rem;
+}
+
+.task-item.shared-quest {
+    border-style: double;
+    border-width: 4px;
+    padding: 0.75rem 1rem;
+    max-height: 120px; /* Allow more height */
+}
+
+.shared-quest-info {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: var(--border-width) dashed var(--border);
+    font-size: 0.9em;
+}
+
+.shared-with-tag {
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+.shared-status-indicators {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-indicator {
+    width: 20px;
+    height: 20px;
+    border: var(--border-width) solid var(--border);
+    border-radius: 50%;
+    background-color: var(--surface);
+    transition: background-color 0.3s ease;
+    position: relative;
+}
+
+.status-indicator.completed {
+    background-color: var(--accent-green);
+}
+
+.status-indicator.completed::after {
+    content: '✔';
+    color: var(--text-on-accent);
+    font-weight: 900;
+    font-size: 12px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.task-item.friend-completed-pulse {
+    animation: friendCompletedPulse 0.8s ease-in-out;
+}
+
+.task-item.shared-quest-finished {
+    animation: sharedQuestFinish 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
+}
+
+#share-quest-modal .modal-content {
+    max-width: 400px;
+}
+.share-quest-friend-list {
+     max-height: 300px;
+     overflow-y: auto;
+     border: var(--border-width) solid var(--border);
+     border-radius: var(--radius);
+     padding: 0.5rem;
+}
+.share-friend-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    gap: 1rem;
+    cursor: pointer;
+    border-radius: calc(var(--radius) / 2);
+    transition: background-color var(--transition-speed) ease;
+}
+.share-friend-item:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+.dark-mode .share-friend-item:hover {
+    background-color: rgba(255,255,255,0.05);
+}
+.share-friend-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: transparent;
+}
+.share-friend-item .btn {
+    margin-left: auto;
+}
+/*
+==========================================================================
+TIMER CLOCK BUTTON
+==========================================================================
+*/
+.timer-clock-btn {
+    position: relative;
+}
+
+.timer-clock-btn .progress-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px; /* Slightly larger than icon */
+    height: 32px;
+}
+
+.timer-clock-btn .progress-ring-circle {
+    transition: stroke-dashoffset 0.5s linear;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    stroke: var(--accent);
+    stroke-width: 3;
+    fill: transparent;
+}
+
+/*
+==========================================================================
+BUTTONS & CONTROLS
+==========================================================================
+*/
+.btn {
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-main);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+    --shadow-color: var(--accent); /* Buttons get accent colored shadows */
+    box-shadow: 4px 4px 0 var(--shadow-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+}
+
+.btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--shadow-color);
+}
+
+.btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--shadow-color);
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 4px 4px 0 var(--shadow-color);
+}
+
+#settings-btn {
+    background-color: var(--surface);
+     --shadow-color: var(--shadow);
+}
+
+
+.btn.icon-btn {
+    padding: 0.5rem;
+    aspect-ratio: 1 / 1;
+}
+
+.btn.icon-btn svg {
+    width: 24px;
+    height: 24px;
+    stroke: var(--text);
+    stroke-width: var(--border-width);
+    transition: transform 0.2s ease;
+}
+
+.btn.icon-btn:hover svg:not(.progress-ring) {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.complete-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: var(--border-width) solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-right: 1rem;
+    transition: all var(--transition-speed) ease;
+    position: relative;
+    background-color: var(--surface);
+}
+
+.complete-btn:hover {
+    transform: scale(1.1);
+}
+
+.complete-btn.checked {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+
+.complete-btn.checked::after {
+    content: '✔';
+    color: var(--text-on-accent);
+    font-weight: 900;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.task-item.daily-completed .complete-btn {
+    pointer-events: none;
+}
+
+/*
+==========================================================================
+TASK INTERACTIONS (UNIFIED CLICK-TO-SHOW)
+==========================================================================
+*/
+
+/* Base style for action button wrappers: a hidden overlay */
+.task-buttons-wrapper,
+.main-quest-group-header .group-actions {
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(var(--surface-rgb), 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 5;
+    transition: opacity var(--transition-speed) ease;
+    border-radius: calc(var(--radius) - var(--border-width));
+}
+
+/* EXCEPTION: If a timer is active, the wrapper becomes a normal flex container again */
+.task-item.timer-active .task-buttons-wrapper {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: static;
+    width: auto;
+    height: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    z-index: auto;
+    margin-left: auto;
+    border-radius: 0;
+}
+
+/* On desktop, group actions are inline instead of an overlay */
+@media (min-width: 1024px) {
+    .main-quest-group-header .group-actions {
+        position: static;
+        width: auto;
+        height: auto;
+        background-color: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        z-index: auto;
+        /* Opacity is now controlled by the .actions-visible class below */
+    }
+}
+
+/* --- Unified Click/Tap Interactions for All Screen Sizes --- */
+
+/* When a task or group has .actions-visible, show the action buttons */
+.task-item.actions-visible .task-buttons-wrapper,
+.main-quest-group-header.actions-visible .group-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+    
+/* And blur the content behind the overlay (but NOT the complete button) */
+.task-item.actions-visible .task-content,
+.main-quest-group-header.actions-visible .group-title-container {
+    filter: blur(3px);
+    transition: filter var(--transition-speed) ease;
+    pointer-events: none;
+}
+
+/*
+==========================================================================
+MODALS & PANELS (ADD TASK, SETTINGS)
+==========================================================================
+*/
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-speed) ease, visibility 0s var(--transition-speed);
+}
+
+.modal-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+}
+
+.modal-content {
+    background-color: var(--bg);
+    border: var(--border-width) solid var(--border);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 90%;
+    max-width: 500px;
+    transform: scale(0.9) rotate(-3deg);
+    transition: transform var(--transition-speed) cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+#account-modal .modal-content, #username-modal .modal-content, #manage-account-modal .modal-content {
+    max-width: 400px;
+    padding: 1.5rem;
+}
+
+.modal-overlay.visible .modal-content {
+    transform: scale(1) rotate(0deg);
+}
+
+.modal-content h2 {
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    font-weight: 900;
+}
+
+#new-task-input, #new-group-input, .form-group input, #edit-task-input, #new-username-input, #search-username-input {
+    width: 100%;
+    font-family: var(--font-main);
+    font-size: 1.1rem;
+    padding: 1rem;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    background: var(--surface);
+    color: var(--text);
+}
+.form-group {
+     margin-bottom: 1.5rem;
+}
+
+#new-task-input:focus, #new-group-input:focus, .form-group input:focus, #edit-task-input:focus, #new-username-input:focus, #search-username-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--border-width) var(--accent);
+}
+
+#weekly-goal-container, #edit-weekly-goal-container {
+    margin-top: 1rem;
+    border-top: var(--border-width) dashed var(--border);
+    padding-top: 1rem;
+}
+
+#weekly-goal-container label, #edit-weekly-goal-container label {
+    font-weight: 700;
+    margin-bottom: 1rem; /* Increased space for slider */
+    display: block;
+}
+
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.modal-submit-btn {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    --shadow-color: var(--shadow);
+}
+
+.settings-group {
+    margin-bottom: 2rem;
+}
+
+.settings-group h3 {
+    font-weight: 900;
+    font-size: 1.1rem;
+    border-bottom: var(--border-width) solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.settings-group .data-actions,
+.settings-group .account-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.theme-options {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.color-options {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background-color: rgba(0,0,0,0.04);
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+}
+
+.dark-mode .color-options {
+    background-color: rgba(255,255,255,0.04);
+}
+
+.theme-btn {
+    gap: 0.5rem;
+    --shadow-color: var(--shadow); /* Use normal shadow color */
+}
+.theme-btn svg {
+     width: 20px;
+     height: 20px;
+     stroke-width: var(--border-width);
+}
+
+.theme-btn.selected {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+}
+.theme-btn.selected svg {
+    stroke: var(--text-on-accent);
+}
+
+.color-swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: var(--border-width) solid var(--border);
+    cursor: pointer;
+    transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.selected {
+    box-shadow: 0 0 0 var(--border-width) var(--border);
+    transform: scale(1.1);
+}
+
+/* Volume and Timer Slider Styles */
+.volume-slider-container, .timer-slider-container, .weekly-goal-slider-container {
+    padding-top: 0.5rem;
+}
+.timer-slider-container {
+    margin-bottom: 1.5rem;
+}
+.timer-slider-container label {
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    display: block;
+}
+#timer-duration-display {
+    background: var(--surface);
+    padding: 0.25rem 0.5rem;
+    border-radius: calc(var(--radius) / 2);
+    border: var(--border-width) solid var(--border);
+}
+
+.timer-unit-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.timer-unit-btn {
+    --shadow-color: var(--shadow);
+    font-size: 0.9rem;
+    padding: 0.5rem 0.75rem;
+}
+.timer-unit-btn.selected {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+    cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 24px;
+    width: 24px;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: 50%;
+    margin-top: -5px; /* Vertically center thumb for new track height */
+    box-shadow: 4px 4px 0 var(--shadow);
+    transition: all var(--transition-speed) ease;
+}
+input[type="range"]::-moz-range-thumb {
+    height: 24px;
+    width: 24px;
+    background-color: var(--surface);
+    border: var(--border-width) solid var(--border);
+    border-radius: 50%;
+    box-shadow: 4px 4px 0 var(--shadow);
+    transition: all var(--transition-speed) ease;
+}
+input[type="range"]:active::-webkit-slider-thumb {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--shadow);
+}
+input[type="range"]:active::-moz-range-thumb {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--shadow);
+}
+input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 16px;
+    background: var(--accent);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+}
+input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 16px;
+    background: var(--accent);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+}
+
+/* Account Modal Specific Styles */
+.form-toggle {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: relative;
+}
+.toggle-btn {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    background-color: var(--surface);
+    border: none;
+    color: var(--text);
+    transition: all var(--transition-speed) ease;
+    position: relative;
+}
+.toggle-btn.active {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+}
+.toggle-btn .notification-badge {
+    top: 50%;
+    transform: translateY(-50%);
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+}
+
+
+/* FIX: Neobrutalism for Auth forms */
+.auth-form .form-group {
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+.auth-form .form-group label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+/* IMPORT: Hide tab content that is not active */
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
+
+.form-divider {
+    text-align: center;
+    margin: 1.5rem 0;
+    font-weight: 700;
+    color: var(--text);
+    opacity: 0.7;
+}
+
+.google-btn-custom {
+    background-color: #4285F4;
+    color: white;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-main);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+    box-shadow: 4px 4px 0 var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+}
+.google-btn-custom:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--shadow);
+}
+.google-btn-custom:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--shadow);
+}
+.dark-mode .google-btn-custom {
+    border-color: var(--border-dark);
+    box-shadow: 4px 4px 0 var(--shadow-dark);
+}
+.dark-mode .google-btn-custom:hover {
+    box-shadow: 6px 6px 0 var(--shadow-dark);
+}
+.dark-mode .google-btn-custom:active {
+    box-shadow: 2px 2px 0 var(--shadow-dark);
+}
+.google-btn-custom svg {
+    width: 20px;
+    height: 20px;
+}
+
+.error-message, .success-message {
+    font-weight: 700;
+    text-align: center;
+    margin-top: 1rem;
+    min-height: 1.2em;
+    padding: 0 0.5rem;
+    line-height: 1.4;
+}
+
+.error-message {
+    color: var(--accent-red-light);
+}
+.success-message {
+    color: var(--accent-green-light);
+}
+
+/*
+==========================================================================
+CONFETTI & CELEBRATIONS
+==========================================================================
+*/
+.confetti {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.party-time-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+    background: linear-gradient(-45deg, var(--accent-pink), var(--accent-blue), var(--accent-green), var(--accent-purple));
+    background-size: 400% 400%;
+    animation: party-bg 3s ease infinite, fade-out-party 1s 4s forwards;
+    opacity: 0.3;
+}
+
+@keyframes party-bg {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes fade-out-party {
+    to { opacity: 0; }
+}
+
+@keyframes confetti-fall {
+    0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(150px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+/*
+==========================================================================
+ANIMATIONS
+==========================================================================
+*/
+@keyframes grain {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-5%, -10%); }
+    20% { transform: translate(-15%, 5%); }
+    30% { transform: translate(7%, -25%); }
+    40% { transform: translate(-5%, 25%); }
+    50% { transform: translate(-15%, 10%); }
+    60% { transform: translate(15%, 0%); }
+    70% { transform: translate(0%, 15%); }
+    80% { transform: translate(3%, 35%); }
+    90% { transform: translate(-10%, 10%); }
+}
+
+@keyframes shake { /* Overdue shake */
+    10%, 90% { transform: translate3d(-1px, 0, 0); }
+    20%, 80% { transform: translate3d(2px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+    40%, 60% { transform: translate3d(3px, 0, 0); }
+}
+@keyframes shake-light { /* Dragging shake */
+     0% { transform: rotate(0deg); }
+     25% { transform: rotate(0.5deg); }
+     50% { transform: rotate(0eg); }
+     75% { transform: rotate(-0.5deg); }
+     100% { transform: rotate(0deg); }
+}
+
+@keyframes levelUpPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2) rotate(-5deg); box-shadow: 0 0 25px var(--accent); }
+    100% { transform: scale(1); }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+        max-height: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 120px; /* Base height */
+        margin-bottom: 1.5rem;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+        max-height: 120px;
+    }
+    to {
+        opacity: 0;
+        transform: translateX(20px);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+}
+
+@keyframes celebrate {
+    0% { transform: scale(1); }
+    20% { transform: scale(1.05) rotate(2deg); background-color: var(--accent); box-shadow: 0 0 20px var(--accent); }
+    40% { transform: scale(0.95) rotate(-2deg); }
+    60% { transform: scale(1.02); }
+    100% {
+        transform: translateX(100px) scale(0.5);
+        opacity: 0;
+        max-height: 0;
+        padding: 0;
+        margin-bottom: 0;
+        border-width: 0;
+    }
+}
+
+@keyframes friendCompletedPulse {
+    0% { box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color); }
+    50% { box-shadow: var(--shadow-offset) var(--shadow-offset) 15px var(--accent-green); }
+    100% { box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color); }
+}
+
+@keyframes sharedQuestFinish {
+    0% { transform: scale(1) rotate(0); opacity: 1; }
+    30% { transform: scale(1.1) rotate(-5deg); }
+    100% { transform: scale(0) rotate(180deg); opacity: 0; max-height: 0; padding: 0; margin: 0; }
 }
