@@ -78,7 +78,7 @@ import {
 
 // --- FIREBASE SETUP ---
 const firebaseConfig = {
-    apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSM",
+    apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKJFlDngGOSM",
     authDomain: "procrastinope.firebaseapp.com",
     projectId: "procrastinope",
     storageBucket: "procrastinope.appspot.com",
@@ -914,8 +914,9 @@ async function initializeAppLogic(initialUser) {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
+        // Helper for mobile-specific action visibility toggle
         function handleMobileActions(element) {
-             if (window.innerWidth > 1023) return;
+             if (window.innerWidth > 1023) return; // Ensure this is strictly mobile
              if (e.target.closest('button')) { 
                  clearTimeout(actionsTimeoutId);
                  return;
@@ -939,6 +940,7 @@ async function initializeAppLogic(initialUser) {
              }
         }
         
+        // Handle group header clicks
         if (groupHeader) { 
             const groupId = groupHeader.parentElement.dataset.groupId;
             const g = generalTaskGroups.find(g => g.id === groupId);
@@ -946,13 +948,16 @@ async function initializeAppLogic(initialUser) {
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
-            
-            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
+            const isEditClick = e.target.closest('.edit-group-btn'); // Added edit group button
+
+            // Expand/collapse logic
+            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick && !isEditClick); // Exclude edit button from expand trigger
 
             if (shouldExpand) {
                 if (g) {
                     g.isExpanded = !g.isExpanded; 
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
+                    saveState(); // Save state after expanding/collapsing
                 }
                 return;
             }
@@ -969,13 +974,21 @@ async function initializeAppLogic(initialUser) {
                 deleteGroup(groupId);
                 return;
             }
+            if (isEditClick) { // Handle edit group button click
+                // Implement edit group name modal/logic here
+                console.log('Edit group clicked for:', groupId);
+                // For now, let's just log. A full implementation would involve a new modal.
+                return;
+            }
             
+            // Mobile-specific actions for group headers
             if (window.innerWidth <= 1023) {
                 handleMobileActions(groupHeader);
             }
             return; 
         }
 
+        // Handle task item clicks
         if (taskItem) {
             const id = taskItem.dataset.id;
             const { task, type } = findTaskAndContext(id);
@@ -988,19 +1001,31 @@ async function initializeAppLogic(initialUser) {
                 return isOwner ? task.ownerCompleted : task.friendCompleted;
             }
             
-            if (isMyPartCompleted()) {
-                uncompleteDailyTask(id);
-                return;
+            // Handle completion/uncompletion directly
+            if (e.target.closest('.complete-btn')) {
+                if (isMyPartCompleted()) {
+                    uncompleteDailyTask(id);
+                } else {
+                    completeTask(id);
+                }
+                return; // Crucial: stop further processing if complete button was clicked
             }
             
-            handleMobileActions(taskItem);
+            // Mobile-specific actions for task items (click to toggle actions)
+            if (window.innerWidth <= 1023) {
+                handleMobileActions(taskItem);
+            }
 
-            if(e.target.closest('button')) {
+            // Handle clicks on other action buttons within the task item
+            if(e.target.closest('button')) { // This will catch share, edit, delete, timer buttons
                 currentEditingTaskId = id;
-                if (e.target.closest('.complete-btn')) completeTask(id);
-                else if (e.target.closest('.delete-btn')) deleteTask(id);
+                if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.share-btn')) openShareModal(id);
-                else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
+                else if (e.target.closest('.timer-clock-btn')) { 
+                    const { task: currentTask } = findTaskAndContext(id); 
+                    if (currentTask && currentTask.timerStartTime) openModal(timerMenuModal); 
+                    else openModal(timerModal); 
+                }
                 else if (e.target.closest('.edit-btn')) {
                     if (task) {
                         editTaskIdInput.value = task.id;
@@ -1009,7 +1034,7 @@ async function initializeAppLogic(initialUser) {
                         if (type === 'daily') {
                             const goal = task.weeklyGoal || 0;
                             editWeeklyGoalSlider.value = goal;
-                            editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
+                            editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal} day${goal > 1 ? 's' : ''}` : 'None'; // Corrected display
                             editWeeklyGoalContainer.style.display = 'block';
                         } else {
                             editWeeklyGoalContainer.style.display = 'none';
@@ -1208,7 +1233,7 @@ async function initializeAppLogic(initialUser) {
         try {
             const userDocRef = doc(db, "users", currentUser.uid);
             const userDocSnap = await getDoc(userDocRef);
-            const currentUsername = userDocSnap.data().username;
+            const currentUsername = userDocSnap.exists() ? userDocSnap.data().username : null;
 
             if (newUsername === currentUsername) {
                 errorEl.textContent = "This is already your username.";
@@ -1277,8 +1302,8 @@ async function initializeAppLogic(initialUser) {
 
         const commonTaskOptions = {
             animation: 150,
-            delay: 500,
-            delayOnTouchOnly: true,
+            delay: 500, // Apply delay to all devices for drag initiation
+            // delayOnTouchOnly: true, // REMOVED: This was causing immediate drag on desktop
             onStart: () => document.body.classList.add('is-dragging'),
             onEnd: onTaskDrop 
         };
@@ -1292,7 +1317,7 @@ async function initializeAppLogic(initialUser) {
             animation: 150,
             handle: '.main-quest-group-header',
             delay: 500,
-            delayOnTouchOnly: true,
+            // delayOnTouchOnly: true, // REMOVED
             onStart: () => document.body.classList.add('is-dragging'),
             onEnd: (e) => {
                 document.body.classList.remove('is-dragging');
@@ -1415,8 +1440,11 @@ async function initializeAppLogic(initialUser) {
         if (!user || !usernameToFind) return;
 
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
-        if (currentUserDoc.exists() && usernameToFind === currentUserDoc.data().username) {
-            friendStatusMessage.textContent = "You can't add yourself!";
+        const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
+
+        // Check if the user is trying to add their own username
+        if (currentUsername && usernameToFind === currentUsername.toLowerCase()) {
+            friendStatusMessage.textContent = "You can't send a friend request to yourself!";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
@@ -1431,6 +1459,14 @@ async function initializeAppLogic(initialUser) {
         }
         
         const targetUserId = usernameSnap.data().userId;
+
+        // Robust check: Ensure the target user ID is not the current user's ID
+        if (user.uid === targetUserId) {
+            friendStatusMessage.textContent = "You can't send a friend request to yourself!";
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+            return;
+        }
+
         const targetUserDocRef = doc(db, "users", targetUserId);
         
         try {
