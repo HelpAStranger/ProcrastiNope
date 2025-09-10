@@ -254,6 +254,15 @@ main.container {
         flex-grow: 1; /* Let the content area grow to fill space */
         margin-right: 0;
     }
+
+    /* Add hover-to-expand behavior only for desktop */
+    .main-quest-group:hover ul.task-list-group {
+        max-height: 1000px;
+        margin-top: 1rem;
+        transition: max-height 0.25s ease-in;
+        padding-right: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
 }
 
 /*
@@ -817,10 +826,10 @@ body.is-dragging .main-quest-group {
     overflow: hidden;
     transition: max-height 0.2s ease-out, margin-top 0.2s ease-out;
     margin-top: 0;
-    padding: 0;
+    padding: 0 0.5rem; /* FIX: Add padding for shake animation room */
 }
 
-.main-quest-group:hover ul.task-list-group,
+/* FIX: Removed hover behavior from this rule to prevent accidental expansion on mobile */
 .main-quest-group.expanded ul.task-list-group {
     max-height: 1000px; /* Increased max-height for very long lists */
     margin-top: 1rem;

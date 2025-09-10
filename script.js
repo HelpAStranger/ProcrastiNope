@@ -456,7 +456,16 @@ async function initializeAppLogic(initialUser) {
     const debouncedSaveData = debounce(saveData, 1500);
 
     const saveState = () => {
-        const data = { dailyTasks, standaloneMainQuests, generalTaskGroups, playerData, settings };
+        // Create a version of generalTaskGroups without the isExpanded property for saving
+        const groupsToSave = generalTaskGroups.map(({ isExpanded, ...rest }) => rest);
+
+        const data = { 
+            dailyTasks, 
+            standaloneMainQuests, 
+            generalTaskGroups: groupsToSave, // Use the cleaned version
+            playerData, 
+            settings 
+        };
         if (!user) {
             saveData(data);
         } else {
@@ -465,14 +474,32 @@ async function initializeAppLogic(initialUser) {
     };
 
     function loadAndDisplayData(data) {
+        // Preserve the current isExpanded state from the in-memory array
+        const expandedGroupIds = new Set();
+        if (Array.isArray(generalTaskGroups)) {
+            generalTaskGroups.forEach(g => {
+                if (g.isExpanded) {
+                    expandedGroupIds.add(g.id);
+                }
+            });
+        }
+    
+        // Load persisted data
         dailyTasks = data.dailyTasks || [];
         standaloneMainQuests = data.standaloneMainQuests || [];
         generalTaskGroups = data.generalTaskGroups || [];
         playerData = data.playerData || { level: 1, xp: 0 };
         settings = { ...settings, ...(data.settings || {}) }; 
+        
+        // Re-apply the transient state to the newly loaded data
         generalTaskGroups.forEach(group => {
-            if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
+            if (expandedGroupIds.has(group.id)) {
+                group.isExpanded = true;
+            } else {
+                group.isExpanded = false;
+            }
         });
+        
         applySettings();
         renderAllLists();
         updateProgressUI();
@@ -833,14 +860,13 @@ async function initializeAppLogic(initialUser) {
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
             
-            // On mobile, only the icon expands. On desktop, the whole header does.
+            // On mobile, expand only on icon click. On desktop, expand on header click (excluding buttons).
             const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
 
             if (shouldExpand) {
                 if (g) {
-                    g.isExpanded = !g.isExpanded; // 1. Update the state object
-                    saveState();                  // 2. Save the state
-                    // 3. Animate on the DOM directly instead of re-rendering
+                    g.isExpanded = !g.isExpanded; // 1. Update the in-memory state
+                    // 2. Animate on the DOM directly. Do not save state, as it's a view-only change and would cancel the animation.
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
                 }
                 return;
@@ -1660,4 +1686,3 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         return cloudData;
     }
 }
-
