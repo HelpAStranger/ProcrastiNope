@@ -267,7 +267,7 @@
             width: 200%;
             height: 200%;
             /* FIXED: Replaced malformed base64 URL with a corrected one. */
-            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSkiLz48L3N2Zz4=');
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MDAgNTAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSKIvz48L3N2Zz4=');
             background-size: 250px 250px;
             opacity: var(--noise-opacity);
             pointer-events: none;
@@ -672,6 +672,10 @@
         @media (max-width: 1023px) {
             #mobile-nav {
                 display: block; /* Show on mobile */
+            }
+            /* FIX: Explicitly hide the desktop friends button on mobile */
+            #friends-btn-desktop {
+                display: none;
             }
         }
         
@@ -1217,7 +1221,8 @@
         */
         @media (max-width: 1023px) {
             /* On mobile, action buttons are hidden until tap */
-            .task-buttons-wrapper {
+            .task-buttons-wrapper,
+            .main-quest-group-header .group-actions { /* FIX: Apply overlay to group actions as well */
                 opacity: 0;
                 pointer-events: none;
                 
@@ -1238,15 +1243,17 @@
                 border-radius: calc(var(--radius) - var(--border-width));
             }
 
-            /* When a task is tapped, show the action buttons */
-            .task-item.actions-visible .task-buttons-wrapper {
+            /* When a task or group is tapped, show the action buttons */
+            .task-item.actions-visible .task-buttons-wrapper,
+            .main-quest-group-header.actions-visible .group-actions { /* FIX: Show group actions */
                 opacity: 1;
                 pointer-events: auto;
             }
             
             /* And blur the content behind the overlay */
             .task-item.actions-visible .task-content,
-            .task-item.actions-visible .complete-btn {
+            .task-item.actions-visible .complete-btn,
+            .main-quest-group-header.actions-visible .group-title-container { /* FIX: Blur group title */
                 filter: blur(3px);
                 transition: filter var(--transition-speed) ease;
                 pointer-events: none; /* Prevent clicking blurred items */
@@ -1265,17 +1272,6 @@
                 z-index: auto;
                 margin-left: auto;
                 border-radius: 0; /* Reset radius for this case */
-            }
-            
-            /* NEW: Group Header Mobile Actions */
-            .main-quest-group-header.actions-visible .group-actions {
-                opacity: 1;
-                pointer-events: auto;
-            }
-            .main-quest-group-header.actions-visible .group-title-container {
-                filter: blur(3px);
-                transition: filter var(--transition-speed) ease;
-                pointer-events: none;
             }
         }
         
@@ -2745,8 +2741,7 @@
                     importDataBtn.style.display = 'none';
                     resetProgressBtn.textContent = 'Reset Cloud Data';
                     
-                    // IMPORT: Show friends buttons for logged-in users
-                    friendsBtnDesktop.style.display = 'flex';
+                    // FIX: Let CSS media queries handle the desktop friends button visibility
                     mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
 
 
@@ -2761,8 +2756,7 @@
                     importDataBtn.style.display = 'inline-flex';
                     resetProgressBtn.textContent = 'Reset Progress';
                     
-                    // IMPORT: Hide friends buttons for guests
-                    friendsBtnDesktop.style.display = 'none';
+                    // FIX: Let CSS media queries handle the desktop friends button visibility
                     mobileNav.querySelector('[data-section="friends"]').style.display = 'none';
                 }
             }
