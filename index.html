@@ -2274,6 +2274,22 @@
                 
                 if (user) {
                     // A user is logged in.
+                    // ALWAYS check for guest data to merge upon login.
+                    const guestDataString = localStorage.getItem('anonymousUserData');
+                    if (guestDataString) {
+                        try {
+                            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                            const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+                            const cloudData = docSnap.exists() && docSnap.data().appData ? docSnap.data().appData : {};
+                            const mergedData = mergeGuestDataWithCloud(cloudData);
+                            await window.firebaseSDK.setDoc(userDocRef, { appData: mergedData }, { merge: true });
+                            localStorage.removeItem('anonymousUserData');
+                            sessionStorage.removeItem('isGuest'); // Also clear guest session flag
+                        } catch (mergeError) {
+                            console.error("Failed to merge guest data on login:", mergeError);
+                        }
+                    }
+
                     // If the app isn't running, start it.
                     // If it is running (e.g. from a guest session), update it with the new user's data.
                     if (!appController) {
@@ -3685,7 +3701,124 @@
                     return "An unexpected error occurred. Check the console for more details.";
             }
         }
+        
+        // BUGFIX: Added this function which was called but not defined
+        function setupAuthForms(container, onAuthSuccess) {
+            // Clear previous content and clone the template
+            container.innerHTML = '';
+            const template = document.getElementById('account-modal-content');
+            const content = template.content.cloneNode(true);
+            container.appendChild(content);
 
+            // Get form elements
+            const toggleBtns = container.querySelectorAll('.toggle-btn');
+            const signupForm = container.querySelector('[data-form="signup"]');
+            const loginForm = container.querySelector('[data-form="login"]');
+            const googleBtnContainer = container.querySelector('.google-signin-btn-container');
+
+            // Create and append Google Sign-In button
+            const googleBtn = document.createElement('button');
+            googleBtn.className = 'google-btn-custom';
+            googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
+            if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
+            
+            // Toggle between login and signup forms
+            toggleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    toggleBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const showSignup = btn.dataset.tab === 'signup';
+                    signupForm.style.display = showSignup ? 'block' : 'none';
+                    loginForm.style.display = showSignup ? 'none' : 'block';
+                });
+            });
+
+            // Handle sign-up
+            signupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = signupForm.querySelector('.signup-username').value.trim().toLowerCase();
+                const email = signupForm.querySelector('.signup-email').value;
+                const password = signupForm.querySelector('.signup-password').value;
+                const errorEl = signupForm.querySelector('.signup-error');
+                errorEl.textContent = '';
+
+                try {
+                    // Check if username is taken
+                    const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                    const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+                    if (usernameSnap.exists()) {
+                        throw new Error('This username is already taken.');
+                    }
+
+                    // Create user
+                    const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    // Save username in Firestore
+                    const batch = window.firebaseSDK.writeBatch(db);
+                    batch.set(usernamesRef, { userId: user.uid });
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    batch.set(userDocRef, { username, email, friends: [], friendRequests: [] });
+                    await batch.commit();
+
+                    onAuthSuccess();
+                } catch (error) {
+                    errorEl.textContent = error.message || getCoolErrorMessage(error);
+                }
+            });
+
+            // Handle login
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const emailOrUsername = loginForm.querySelector('.login-email').value;
+                const password = loginForm.querySelector('.login-password').value;
+                const errorEl = loginForm.querySelector('.login-error');
+                errorEl.textContent = '';
+                
+                try {
+                    let emailToLogin = emailOrUsername;
+                    // Check if it's an email or username
+                    if (!emailOrUsername.includes('@')) {
+                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", emailOrUsername.toLowerCase());
+                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+                        if (usernameSnap.exists()) {
+                            const targetUserId = usernameSnap.data().userId;
+                            const userDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
+                            const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
+                            if(userDocSnap.exists()) {
+                               emailToLogin = userDocSnap.data().email;
+                            } else { throw new Error("User data not found for this username."); }
+                        } else { throw { code: 'auth/user-not-found' }; }
+                    }
+                    await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
+                    onAuthSuccess();
+                } catch (error) {
+                    errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
+
+            // Handle Google Sign-In
+            if(googleBtn) {
+                googleBtn.addEventListener('click', async () => {
+                    const provider = new window.firebaseSDK.GoogleAuthProvider();
+                    const googleLoader = document.getElementById('google-signin-loader-modal');
+                    try {
+                        openModal(googleLoader);
+                        await window.firebaseSDK.signInWithPopup(auth, provider);
+                        // onAuthStateChanged will handle the rest
+                        onAuthSuccess();
+                    } catch (error) {
+                        console.error("Google Sign-In Error: ", error);
+                        const errorEl = loginForm.querySelector('.login-error');
+                        errorEl.textContent = getCoolErrorMessage(error);
+                    } finally {
+                        closeModal(googleLoader);
+                    }
+                });
+            }
+        }
+
+        // BUGFIX: This function was incomplete, causing a syntax error
         function mergeGuestDataWithCloud(cloudData = {}) {
             const guestDataString = localStorage.getItem('anonymousUserData');
             if (!guestDataString) return cloudData;
@@ -3712,3 +3845,21 @@
                 }
                 if (guestData.playerData) {
                     if (!mergedData.playerData) {
+                        mergedData.playerData = guestData.playerData;
+                    } else {
+                        // A simple merge: add XP, take the higher level.
+                        const newXp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
+                        const newLevel = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
+                        mergedData.playerData.xp = newXp;
+                        mergedData.playerData.level = newLevel;
+                    }
+                }
+                return mergedData;
+            } catch (error) {
+                console.error("Failed to merge guest data:", error);
+                return cloudData; // Return original data on error
+            }
+        }
+    </script>
+</body>
+</html>
