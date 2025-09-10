@@ -1184,6 +1184,29 @@ SHARED QUESTS
 .share-friend-item .btn {
     margin-left: auto;
 }
+/* NEW: Shared Quest Actions Wrapper */
+.task-item.shared-quest .shared-quest-actions {
+    opacity: 1; /* Always visible for shared quests */
+    pointer-events: auto;
+    position: static; /* Position normally within flex container */
+    width: auto;
+    height: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    z-index: auto;
+    margin-left: auto;
+    border-radius: 0;
+    display: flex; /* Ensure it's a flex container */
+    gap: 0.5rem;
+}
+.task-item.shared-quest .shared-quest-actions .btn {
+    --shadow-color: var(--shadow); /* Use normal shadow for shared quest actions */
+}
+.task-item.shared-quest .shared-quest-actions .delete-shared-quest-btn {
+    --shadow-color: var(--accent-red); /* Red shadow for delete */
+}
+
 /*
 ==========================================================================
 TIMER CLOCK BUTTON
