@@ -2202,34 +2202,54 @@
     <script type="module">
         // --- NOTE ON SECURITY & PERMISSIONS ERRORS ---
         // The error log shows "Permission Denied! Check your Firestore Security Rules."
-        // This is a common issue and is not a bug in the client-side code itself,
-        // but a misconfiguration in your Firebase project's security settings.
-        // To fix this, you must update your Firestore Security Rules in the
-        // Firebase Console. The client-side code assumes that logged-in users
-        // have permission to read and write to their own documents.
+        // This is not a bug in the client-side code, but a misconfiguration
+        // in your Firebase project's security settings. For this app's features
+        // (especially the friends system) to work, you MUST update your
+        // Firestore Security Rules in the Firebase Console.
         //
-        // Here are the essential rules needed for this app to function:
+        // The client-side code is written to perform actions like one user updating
+        // another user's document (e.g., sending a friend request). The rules below
+        // are designed to allow these specific actions.
+        //
+        // ==> Copy and paste the following rules into your Firebase Console <==
+        // ==> (Firestore Database -> Rules tab)                               <==
         //
         // rules_version = '2';
         // service cloud.firestore {
         //   match /databases/{database}/documents {
-        //     // Users can read and write to their own user document
-        //     match /users/{userId} {
-        //       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-        //       allow create: if request.auth != null;
-        //     }
         //
-        //     // Usernames must be unique. Anyone can read, but only the owner can create/delete.
+        //     // Usernames must be unique and are public.
         //     match /usernames/{username} {
         //       allow read;
         //       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
         //       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
         //     }
+        //
+        //     // User data collection.
+        //     match /users/{userId} {
+        //       // Any logged-in user can read profiles (for friends list).
+        //       allow read: if request.auth != null;
+        //
+        //       // A user can create their own document.
+        //       allow create: if request.auth != null && request.auth.uid == userId;
+        //
+        //       // IMPORTANT: This rule allows the client-side friend logic to work.
+        //       // A user can update their OWN document fully.
+        //       // They can ALSO update ANOTHER user's document.
+        //       // This is required for actions like sending/accepting a friend request or
+        //       // removing a friend, where one user's action must update multiple documents.
+        //       // For a production app with higher security needs, these multi-document
+        //       // updates should be handled by a more secure backend (e.g., Cloud Functions).
+        //       allow update: if request.auth != null;
+        //
+        //       // Only the owner can delete their account data.
+        //       allow delete: if request.auth != null && request.auth.uid == userId;
+        //     }
         //   }
         // }
         //
-        // Your Firebase config is meant to be public. True security is enforced 
-        // by your Firestore Security Rules, not by hiding code.
+        // Your Firebase config is meant to be public. True security is enforced
+        // by your Firestore Security Rules, not by hiding your API keys.
         
         // --- FIREBASE SETUP ---
         const firebaseConfig = {
@@ -3670,6 +3690,15 @@
                 showRandomQuote();
                 setInterval(checkOverdueTasks, 60 * 1000);
             };
+
+            // FIX: Initialize AudioContext on the first user interaction to comply with browser autoplay policies.
+            const initAudioContext = () => {
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(e => console.error("AudioContext resume failed:", e));
+                }
+            };
+            document.body.addEventListener('click', initAudioContext, { once: true });
+            document.body.addEventListener('keydown', initAudioContext, { once: true });
 
             initOnce();
             await loadUserSession();
