@@ -2240,7 +2240,6 @@
         // IMPORT: Listener for friend requests
         let unsubscribeFromFriends = null;
         let appController = null;
-        let isSigningIn = false; // Global flag for auth state transitions
         
         // FIX: Moved to module scope to prevent temporal dead zone error on partial app initialization
         let activeMobileActionsItem = null; 
@@ -2258,14 +2257,14 @@
             auth = window.firebaseSDK.getAuth(app);
             db = window.firebaseSDK.getFirestore(app);
             
+            // BUGFIX: onAuthStateChanged is the single source of truth for the user's state.
+            // All UI updates related to auth status (login, logout, initial load) are handled here.
             window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
-                if (isSigningIn) return; // Don't run logic during sign-in process
-                
+                // Cleanup previous user's data listeners to prevent memory leaks.
                 if (unsubscribeFromFirestore) {
                     unsubscribeFromFirestore(); 
                     unsubscribeFromFirestore = null;
                 }
-                // IMPORT: Unsubscribe from friends listener on auth state change
                 if (unsubscribeFromFriends) {
                     unsubscribeFromFriends();
                     unsubscribeFromFriends = null;
@@ -2274,27 +2273,34 @@
                 currentUser = user;
                 
                 if (user) {
-                    // For any authenticated user, initialize or update the full app.
-                    // The app logic will handle prompting for a username if it's missing.
+                    // A user is logged in.
+                    // If the app isn't running, start it.
+                    // If it is running (e.g. from a guest session), update it with the new user's data.
                     if (!appController) {
-                        if(appController) appController.shutdown();
+                        // This handles the transition from guest/logged-out to logged-in.
                         appController = await initializeAppLogic(user); 
                     } else {
+                        // This handles cases like a user refreshing the page while logged in.
                         await appController.updateUser(user);
                     }
+                    // Show the main app and hide the landing page.
                     landingPage.style.display = 'none';
                     appWrapper.style.display = 'block';
                     loaderOverlay.style.display = 'none';
-                } else { // No user / Guest
-                     if (sessionStorage.getItem('isGuest')) {
+                } else { 
+                    // No user is logged in.
+                    // Check if they are continuing as a guest.
+                    if (sessionStorage.getItem('isGuest')) {
                         if (!appController) appController = await initializeAppLogic(null);
                         landingPage.style.display = 'none';
                         appWrapper.style.display = 'block';
                         loaderOverlay.style.display = 'none';
                     } else {
+                        // The user is fully logged out. Show the landing page.
                         loaderOverlay.style.display = 'none';
                         landingPage.style.display = 'flex';
                         appWrapper.style.display = 'none';
+                        // Shut down the app controller to clear all data and stop listeners.
                         if(appController) appController.shutdown();
                         appController = null;
                     }
@@ -2331,7 +2337,7 @@
             landingAuthContainer.style.display = 'block';
             
             const onAuthSuccess = () => {
-                // The onAuthStateChanged listener will handle redirection.
+                // The onAuthStateChanged listener will handle redirection automatically.
             };
             
             setupAuthForms(landingAuthContainer, onAuthSuccess);
@@ -3706,193 +3712,3 @@
                 }
                 if (guestData.playerData) {
                     if (!mergedData.playerData) {
-                        mergedData.playerData = guestData.playerData;
-                    } else {
-                        mergedData.playerData.xp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
-                        mergedData.playerData.level = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
-                    }
-                }
-                return mergedData;
-            } catch (e) {
-                console.error("Failed to parse or merge guest data:", e);
-                return cloudData;
-            }
-        }
-
-        async function handleSignInSuccess(user, isNewUser = false) {
-            isSigningIn = true; // Set flag
-            const isGuestBeforeSignIn = sessionStorage.getItem('isGuest') === 'true';
-            
-            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-            
-            // Only merge data if the user was a guest before this sign-in action
-            if (isGuestBeforeSignIn) {
-                const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-                let finalData = {};
-                if (docSnap.exists() && docSnap.data().appData) {
-                    finalData = mergeGuestDataWithCloud(docSnap.data().appData);
-                } else {
-                    const guestDataString = localStorage.getItem('anonymousUserData');
-                    finalData = guestDataString ? JSON.parse(guestDataString) : {};
-                }
-                
-                const dataToSet = { appData: finalData };
-                if (isNewUser) {
-                    dataToSet.email = user.email;
-                }
-                
-                await window.firebaseSDK.setDoc(userDocRef, dataToSet, { merge: true });
-                localStorage.removeItem('anonymousUserData');
-                sessionStorage.removeItem('isGuest');
-            }
-             isSigningIn = false; // Unset flag
-             // FIX: Removing reload to prevent sign-in loop. onAuthStateChanged will handle the state change.
-             // window.location.reload(); 
-        }
-        
-        // Simple modal functions for use before the main app controller is initialized
-        function showGlobalModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if(modal) modal.classList.add('visible');
-        }
-        function hideGlobalModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if(modal) modal.classList.remove('visible');
-        }
-
-        function setupAuthForms(container, onSuccess) {
-            const template = document.getElementById('account-modal-content');
-            container.innerHTML = template.innerHTML;
-            container.querySelector('.form-toggle').addEventListener('click', (e) => {
-                if (e.target.matches('.toggle-btn')) {
-                    const tab = e.target.dataset.tab;
-                    container.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-                    e.target.classList.add('active');
-                    container.querySelectorAll('.auth-form').forEach(form => form.style.display = form.dataset.form === tab ? 'block' : 'none');
-                    container.querySelectorAll('.error-message').forEach(el => el.textContent = '');
-                }
-            });
-            container.querySelector('[data-form="signup"]').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const email = container.querySelector('.signup-email').value;
-                const password = container.querySelector('.signup-password').value;
-                const username = container.querySelector('.signup-username').value.trim().toLowerCase();
-                const errorEl = container.querySelector('.signup-error');
-                errorEl.textContent = '';
-
-                if (!username || username.length < 3) {
-                    errorEl.textContent = 'Username must be at least 3 characters.';
-                    return;
-                }
-                
-                try {
-                    // FIX: Proactively check for existing email for better UX
-                    const signInMethods = await window.firebaseSDK.fetchSignInMethodsForEmail(auth, email);
-                    if (signInMethods.length > 0) {
-                        errorEl.textContent = 'This email is already in use. Try logging in.';
-                        return;
-                    }
-
-                    const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                    const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-
-                    if (usernameSnap.exists()) {
-                        errorEl.textContent = 'This username is already taken.';
-                        return;
-                    }
-
-                    const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
-                    
-                    const batch = window.firebaseSDK.writeBatch(db);
-                    const userDocRef = window.firebaseSDK.doc(db, "users", userCredential.user.uid);
-                    batch.set(usernamesRef, { userId: userCredential.user.uid });
-                    // IMPORT: Initialize friends and friendRequests fields
-                    batch.set(userDocRef, { 
-                        username: username, 
-                        email: email,
-                        appData: {},
-                        friends: [],
-                        friendRequests: []
-                    });
-                    await batch.commit();
-                    
-                    await handleSignInSuccess(userCredential.user, true);
-                    
-                    onSuccess();
-                } catch (error) { errorEl.textContent = getCoolErrorMessage(error); }
-            });
-            container.querySelector('[data-form="login"]').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const loginInput = container.querySelector('.login-email').value;
-                const password = container.querySelector('.login-password').value;
-                const errorEl = container.querySelector('.login-error');
-                errorEl.textContent = '';
-
-                let emailToLogin = loginInput; // Initialize with the input value
-
-                try {
-                    if (!loginInput.includes('@')) {
-                        const username = loginInput.trim().toLowerCase();
-                        // Firestore lookup for username to email
-                        try {
-                            const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                            const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-
-                            if (!usernameSnap.exists()) {
-                                errorEl.textContent = "User not found.";
-                                return;
-                            }
-                            const userId = usernameSnap.data().userId;
-                            const userDocRef = window.firebaseSDK.doc(db, "users", userId);
-                            const userSnap = await window.firebaseSDK.getDoc(userDocRef);
-                            
-                            if (!userSnap.exists() || !userSnap.data().email) {
-                                errorEl.textContent = "Could not find email for this user.";
-                                return;
-                            }
-                            emailToLogin = userSnap.data().email;
-                        } catch (lookupError) {
-                            // Specific error handling for Firestore lookup permission issues during username login
-                            if (lookupError.code === 'permission-denied' || (lookupError.message && lookupError.message.toLowerCase().includes("missing or insufficient permissions"))) {
-                                errorEl.textContent = "Permission Denied! To login with username, Firestore Security Rules must allow public read access for 'usernames' and 'users' collections (specifically the email field).";
-                                return;
-                            }
-                            // Re-throw other lookup errors to be handled by the outer catch
-                            throw lookupError; 
-                        }
-                    }
-
-                    // Attempt Firebase Auth sign-in
-                    const userCredential = await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
-                    await handleSignInSuccess(userCredential.user);
-                    onSuccess();
-                } catch (authError) {
-                    errorEl.textContent = getCoolErrorMessage(authError);
-                }
-            });
-            const googleBtnContainer = container.querySelector('.google-signin-btn-container');
-            if (googleBtnContainer) {
-                const customBtn = document.createElement('button');
-                customBtn.type = 'button';
-                customBtn.className = 'google-btn-custom';
-                customBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.222 0-9.618-3.22-11.28-7.581l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.015 35.258 44 30.036 44 24c0-1.341-.138-2.65-.389-3.917z"></path></svg> <span>Sign in with Google</span>`;
-                googleBtnContainer.appendChild(customBtn);
-                customBtn.addEventListener('click', async () => {
-                    showGlobalModal('google-signin-loader-modal');
-                    const provider = new window.firebaseSDK.GoogleAuthProvider();
-                    try {
-                        const result = await window.firebaseSDK.signInWithPopup(auth, provider);
-                        await handleSignInSuccess(result.user, true); // Assume Google sign in is a new user for data merge logic
-                        onSuccess();
-                    } catch (error) {
-                         const errorEl = container.querySelector('.login-error');
-                         if (errorEl) errorEl.textContent = getCoolErrorMessage(error);
-                    } finally {
-                        hideGlobalModal('google-signin-loader-modal');
-                    }
-                });
-            }
-        }
-    </script>
-</body>
-</html>
