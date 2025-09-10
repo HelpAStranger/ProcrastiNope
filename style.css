@@ -126,6 +126,8 @@ html {
     scrollbar-color: var(--accent) var(--surface);
     /* FIX: Prevent layout shift when modals open/close */
     scrollbar-gutter: stable;
+    /* ADDED: Smooth scrolling for anchor links and programmatic scrolls */
+    scroll-behavior: smooth;
 }
 
 body {
@@ -1596,17 +1598,6 @@ input[type="range"]::-moz-range-track {
     font-size: 11px;
 }
 
-
-/* FIX: Neobrutalism for Auth forms */
-.auth-form .form-group {
-    margin-bottom: 1.5rem;
-    text-align: left;
-}
-.auth-form .form-group label {
-    display: block;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-}
 
 /* IMPORT: Hide tab content that is not active */
 .tab-content {
