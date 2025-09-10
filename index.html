@@ -2222,198 +2222,93 @@
         let unsubscribeFromFriends = null;
         let appController = null;
         
-        // --- GLOBAL VARIABLES AND HELPER FUNCTIONS ---
-        // Moved from inside initializeAppLogic and other functions to module scope
+        // FIX: Moved to module scope to prevent temporal dead zone error on partial app initialization
         let activeMobileActionsItem = null; 
-        let actionsTimeoutId = null;
-        // Initialize settings here, it will be overwritten by loaded data
-        let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 }; 
 
-        // DOM Elements (declared globally for access by various functions)
-        const appWrapper = document.getElementById('app-wrapper');
+        // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
         const landingPage = document.getElementById('landing-page');
+        const appWrapper = document.getElementById('app-wrapper');
         const landingChoices = document.getElementById('landing-choices');
         const landingAuthContainer = document.getElementById('landing-auth-container');
-        const confirmModal = document.getElementById('confirm-modal');
-        const confirmActionBtn = document.getElementById('confirm-action-btn');
-        const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
-        const confirmTitle = document.getElementById('confirm-title');
-        const confirmText = document.getElementById('confirm-text');
 
-        // Audio context
-        const audioCtx = window.AudioContext ? new AudioContext() : null;
-
-        // --- Sound Playing Function ---
-        function playSound(type) {
-            if (!audioCtx || settings.volume === 0) return;
-            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-            o.connect(g); g.connect(audioCtx.destination);
-            let v = settings.volume, d = 0.2;
-            switch (type) {
-                case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
-                case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
-                case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
-                case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
-                case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
-                case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
-                case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
-                case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
-                case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
-            }
-            g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
-            o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
-        }
-
-        // --- Modal Control Functions ---
-        // Moved to top level to be accessible by setupAuthForms
-        let openModal, closeModal; 
-
-        openModal = (modal) => {
-            if(modal) {
-                if (activeMobileActionsItem) {
-                    activeMobileActionsItem.classList.remove('actions-visible');
-                    activeMobileActionsItem = null;
-                }
-                if (appWrapper) appWrapper.classList.add('blur-background');
-                modal.classList.add('visible');
-                playSound('open');
-            }
-        };
-        closeModal = (modal) => {
-            if(modal) {
-                if (appWrapper) appWrapper.classList.remove('blur-background');
-                modal.classList.remove('visible');
-                playSound('close');
-            }
-        };
-
-        // --- Authentication Form Setup ---
-        // Moved to top level and will be called by showAuthFormsOnLanding
-        function setupAuthForms(container, onAuthSuccess) {
-            container.innerHTML = ''; // Clear previous content
-            const template = document.getElementById('account-modal-content');
-            const content = template.content.cloneNode(true);
-            container.appendChild(content);
-
-            const toggleBtns = container.querySelectorAll('.toggle-btn');
-            const signupForm = container.querySelector('[data-form="signup"]');
-            const loginForm = container.querySelector('[data-form="login"]');
-            const googleBtnContainer = container.querySelector('.google-signin-btn-container');
-
-            // Create and append Google Sign-In button
-            const googleBtn = document.createElement('button');
-            googleBtn.type = 'button'; // Prevent form submission
-            googleBtn.className = 'google-btn-custom';
-            googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
-            if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
+        // --- Initialize Firebase and start the auth flow ---
+        try {
+            app = window.firebaseSDK.initializeApp(firebaseConfig);
+            auth = window.firebaseSDK.getAuth(app);
+            db = window.firebaseSDK.getFirestore(app);
             
-            // Toggle between login and signup forms
-            toggleBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    toggleBtns.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    const showSignup = btn.dataset.tab === 'signup';
-                    signupForm.style.display = showSignup ? 'block' : 'none';
-                    loginForm.style.display = showSignup ? 'none' : 'block';
-                });
-            });
-
-            // Handle sign-up
-            signupForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const username = signupForm.querySelector('.signup-username').value.trim().toLowerCase();
-                const email = signupForm.querySelector('.signup-email').value;
-                const password = signupForm.querySelector('.signup-password').value;
-                const errorEl = signupForm.querySelector('.signup-error');
-                errorEl.textContent = '';
-
-                try {
-                    // Check if username is taken
-                    const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
-                    const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-                    if (usernameSnap.exists()) {
-                        throw new Error('This username is already taken.');
-                    }
-
-                    const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user;
-
-                    // Save username in Firestore
-                    const batch = window.firebaseSDK.writeBatch(db);
-                    batch.set(usernamesRef, { userId: user.uid });
-                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                    batch.set(userDocRef, { username, email, friends: [], friendRequests: [] }); // Initialize friends/requests
-                    await batch.commit();
-
-                    onAuthSuccess(); // Trigger auth success callback (which will eventually lead to app initialization)
-                } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error);
+            // BUGFIX: onAuthStateChanged is the single source of truth for the user's state.
+            // All UI updates related to auth status (login, logout, initial load) are handled here.
+            window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
+                // Cleanup previous user's data listeners to prevent memory leaks.
+                if (unsubscribeFromFirestore) {
+                    unsubscribeFromFirestore(); 
+                    unsubscribeFromFirestore = null;
                 }
-            });
-
-            // Handle login
-            loginForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const emailOrUsername = loginForm.querySelector('.login-email').value;
-                const password = loginForm.querySelector('.login-password').value;
-                const errorEl = loginForm.querySelector('.login-error');
-                errorEl.textContent = '';
+                if (unsubscribeFromFriends) {
+                    unsubscribeFromFriends();
+                    unsubscribeFromFriends = null;
+                }
                 
-                try {
-                    let emailToLogin = emailOrUsername;
-                    // If input doesn't look like an email, try to resolve it as a username
-                    if (!emailOrUsername.includes('@') && emailOrUsername.length > 0) {
-                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", emailOrUsername.toLowerCase());
-                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-                        if (usernameSnap.exists()) {
-                            const targetUserId = usernameSnap.data().userId;
-                            const userDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
-                            const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
-                            if(userDocSnap.exists() && userDocSnap.data().email) {
-                               emailToLogin = userDocSnap.data().email;
-                            } else { throw new Error("User data not found for this username."); }
-                        } else { 
-                            // If username not found, still try to treat input as email
-                            // or let the Firebase auth error handle 'user-not-found'
-                            // This condition ensures we don't throw an error prematurely if it IS an email
-                            if (emailOrUsername.includes('@')) {
-                                emailToLogin = emailOrUsername;
-                            } else {
-                                // If it's not an email and username lookup failed, throw user-not-found
-                                throw { code: 'auth/user-not-found', message: 'User not found.' };
-                            }
+                currentUser = user;
+                
+                if (user) {
+                    // A user is logged in.
+                    // ALWAYS check for guest data to merge upon login.
+                    const guestDataString = localStorage.getItem('anonymousUserData');
+                    if (guestDataString) {
+                        try {
+                            const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                            const docSnap = await window.firebaseSDK.getDoc(userDocRef);
+                            const cloudData = docSnap.exists() && docSnap.data().appData ? docSnap.data().appData : {};
+                            const mergedData = mergeGuestDataWithCloud(cloudData);
+                            await window.firebaseSDK.setDoc(userDocRef, { appData: mergedData }, { merge: true });
+                            localStorage.removeItem('anonymousUserData');
+                            sessionStorage.removeItem('isGuest'); // Also clear guest session flag
+                        } catch (mergeError) {
+                            console.error("Failed to merge guest data on login:", mergeError);
                         }
                     }
-                    await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
-                    onAuthSuccess(); // Trigger auth success callback
-                } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error);
+
+                    // If the app isn't running, start it.
+                    // If it is running (e.g. from a guest session), update it with the new user's data.
+                    if (!appController) {
+                        // This handles the transition from guest/logged-out to logged-in.
+                        appController = await initializeAppLogic(user); 
+                    } else {
+                        // This handles cases like a user refreshing the page while logged in.
+                        await appController.updateUser(user);
+                    }
+                    // Show the main app and hide the landing page.
+                    landingPage.style.display = 'none';
+                    appWrapper.style.display = 'block';
+                    loaderOverlay.style.display = 'none';
+                } else { 
+                    // No user is logged in.
+                    // Check if they are continuing as a guest.
+                    if (sessionStorage.getItem('isGuest')) {
+                        if (!appController) appController = await initializeAppLogic(null);
+                        landingPage.style.display = 'none';
+                        appWrapper.style.display = 'block';
+                        loaderOverlay.style.display = 'none';
+                    } else {
+                        // The user is fully logged out. Show the landing page.
+                        loaderOverlay.style.display = 'none';
+                        landingPage.style.display = 'flex';
+                        appWrapper.style.display = 'none';
+                        // Shut down the app controller to clear all data and stop listeners.
+                        if(appController) appController.shutdown();
+                        appController = null;
+                    }
                 }
             });
-
-            // Handle Google Sign-In
-            if(googleBtn) {
-                googleBtn.addEventListener('click', async () => {
-                    const provider = new window.firebaseSDK.GoogleAuthProvider();
-                    const googleLoader = document.getElementById('google-signin-loader-modal');
-                    try {
-                        openModal(googleLoader); // Use top-level openModal
-                        await window.firebaseSDK.signInWithPopup(auth, provider);
-                        // onAuthStateChanged will handle the rest, but calling onAuthSuccess ensures immediate UI update if needed.
-                        onAuthSuccess(); 
-                    } catch (error) {
-                        console.error("Google Sign-In Error: ", getCoolErrorMessage(error));
-                        const errorEl = loginForm.querySelector('.login-error'); // Show error in the login form context
-                        errorEl.textContent = getCoolErrorMessage(error);
-                    } finally {
-                        closeModal(googleLoader); // Use top-level closeModal
-                    }
-                });
-            }
+        } catch (err) {
+            console.error("Firebase initialization failed:", err);
+            loaderOverlay.innerHTML = '<p style="color: var(--text);">Error: Could not connect. Please check your Firebase config.</p>';
         }
-        
-        // --- Landing Page Logic ---
+
+        // --- LANDING PAGE / AUTH FLOW ---
         function showLandingPage() {
             landingAuthContainer.style.display = 'none';
             landingChoices.style.display = 'block';
@@ -2423,7 +2318,7 @@
             sessionStorage.setItem('isGuest', 'true');
             loaderOverlay.style.display = 'flex';
             if (!appController) {
-                appController = await initializeAppLogic(null); // Initialize with null user for guest
+                appController = await initializeAppLogic(null);
             }
             landingPage.style.display = 'none';
             appWrapper.style.display = 'block';
@@ -2434,35 +2329,29 @@
             showAuthFormsOnLanding('login');
         });
 
-        // Modified to call the top-level setupAuthForms
         function showAuthFormsOnLanding(initialTab) {
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
             
             const onAuthSuccess = () => {
                 // The onAuthStateChanged listener will handle redirection automatically.
-                // No need to manually open modals or change displays here for auth success.
             };
             
-            // Call the globally defined setupAuthForms
             setupAuthForms(landingAuthContainer, onAuthSuccess);
             
-            // Activate the correct tab
             landingAuthContainer.querySelector(`.toggle-btn[data-tab="${initialTab}"]`).click();
             
-            // Add back button if it doesn't exist
             if (!landingAuthContainer.querySelector('#landing-back-btn')) {
                 const backBtn = document.createElement('button');
                 backBtn.id = 'landing-back-btn';
                 backBtn.className = 'btn';
                 backBtn.textContent = 'Back';
-                backBtn.onclick = showLandingPage; // Navigate back to initial choices
+                backBtn.onclick = showLandingPage;
                 landingAuthContainer.appendChild(backBtn);
             }
         }
         
-        // --- Main Application Logic ---
-        // Initialize appController after Firebase is ready and auth state is checked.
+        // --- MAIN APPLICATION LOGIC ---
         async function initializeAppLogic(initialUser) {
 
             // FIX: Helper function to only focus on non-touch devices to prevent mobile keyboard auto-opening
@@ -2472,17 +2361,57 @@
                 }
             };
 
-            // --- Core App State Variables ---
-            let user = initialUser; // Current logged-in user or null (for guests)
-            // Settings are now declared globally at the top for consistency.
-            // let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 }; 
+            // FIX: Define shared variables and functions first to avoid initialization errors.
+            let user = initialUser;
+            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+            const audioCtx = window.AudioContext ? new AudioContext() : null;
+            
+            function playSound(type) {
+                if (!audioCtx || settings.volume === 0) return;
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.connect(g); g.connect(audioCtx.destination);
+                let v = settings.volume, d = 0.2;
+                switch (type) {
+                    case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
+                    case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
+                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
+                    case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
+                    case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
+                    case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
+                    case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
+                    case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
+                    case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
+                }
+                g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
+                o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
+            }
+
+            let lastSection = 'daily';
+            const openModal = (modal) => {
+                if(modal) {
+                    if (activeMobileActionsItem) {
+                        activeMobileActionsItem.classList.remove('actions-visible');
+                        activeMobileActionsItem = null;
+                    }
+                    appWrapper.classList.add('blur-background');
+                    modal.classList.add('visible');
+                    playSound('open');
+                }
+            };
+            const closeModal = (modal) => {
+                if(modal) {
+                    appWrapper.classList.remove('blur-background');
+                    modal.classList.remove('visible');
+                    playSound('close');
+                }
+            };
             
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
             let currentListToAdd = null, currentEditingTaskId = null;
             const activeTimers = {};
+            let actionsTimeoutId = null;
             
-            // Get DOM elements needed by app logic
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
             const generalTaskListContainer = document.getElementById('general-task-list-container');
@@ -2537,7 +2466,11 @@
             const userDisplay = document.getElementById('user-display');
             const accountModal = document.getElementById('account-modal');
             const manageAccountModal = document.getElementById('manage-account-modal');
-            // confirmModal elements are declared globally
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmActionBtn = document.getElementById('confirm-action-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+            const confirmTitle = document.getElementById('confirm-title');
+            const confirmText = document.getElementById('confirm-text');
             const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
@@ -2555,19 +2488,16 @@
             const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
             const deleteAccountBtn = document.getElementById('delete-account-btn');
 
-            // --- MODAL OPEN/CLOSE (using global functions now) ---
-            // `openModal` and `closeModal` are already defined globally.
-            // `playSound` is also global.
 
             async function promptForUsernameIfNeeded() {
-                if (!user) return; // Only for logged-in users
+                if (!user) return; // Not for guests
 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 const existingData = docSnap.exists() ? docSnap.data().appData : null;
                 
-                // Only prompt if username is missing and it wasn't a direct email/password signup that already provided one.
-                // If it's an email/password user, `createUserWithEmailAndPassword` in `setupAuthForms` already sets their username.
+                // FIX: Only prompt for username if they don't have one and were NOT signed up via email/password.
+                // This prevents the username modal from appearing after a successful email sign-up.
                 const isEmailUser = user.providerData.some(p => p.providerId === 'password');
 
                 if (!docSnap.exists() || !docSnap.data().username) {
@@ -2607,16 +2537,16 @@
                                 batch.set(usernamesRef, { userId: user.uid });
                                 batch.set(userDocRef, { 
                                     username: username, 
-                                    email: user.email, // Ensure email is set if not already
-                                    appData: existingData || {}, // Preserve existing data if any
-                                    friends: [], // Initialize friends list
-                                    friendRequests: [] // Initialize friend requests list
+                                    email: user.email,
+                                    appData: existingData || {},
+                                    friends: [], // IMPORT: Initialize friends list for new user
+                                    friendRequests: [] // IMPORT: Initialize friend requests list
                                 }, { merge: true });
                                 await batch.commit();
                                 
-                                usernameModal.removeAttribute('data-persistent'); // Allow closing now
+                                usernameModal.removeAttribute('data-persistent');
                                 closeModal(usernameModal);
-                                resolve(); // Resolve the promise, indicating username is set
+                                resolve();
 
                             } catch (error) {
                                 usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
@@ -2627,7 +2557,6 @@
                         };
                     });
                 }
-                resolve(); // Resolve immediately if username is already set
             }
             
             // =========================================================================
@@ -2700,32 +2629,25 @@
                 standaloneMainQuests = data.standaloneMainQuests || [];
                 generalTaskGroups = data.generalTaskGroups || [];
                 playerData = data.playerData || { level: 1, xp: 0 };
-                // Overwrite the default settings with loaded data, ensure all keys are present
-                settings = { 
-                    theme: data.settings?.theme || 'system', 
-                    accentColor: data.settings?.accentColor || 'var(--accent-red)',
-                    volume: data.settings?.volume === undefined ? 0.3 : data.settings.volume // Explicitly check for undefined for volume
-                }; 
-                
-                // Ensure groups have an isExpanded property
+                // Overwrite the default settings with loaded data
+                settings = { ...settings, ...(data.settings || {}) }; 
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
-                applySettings(); // Apply loaded settings immediately
+                applySettings();
                 renderAllLists();
                 updateProgressUI();
             }
 
             async function initialLoad() {
                 return new Promise((resolve) => {
-                    if (!user) { // Guest user
+                    if (!user) {
                         const localData = JSON.parse(localStorage.getItem('anonymousUserData')) || {};
                         loadAndDisplayData(localData);
                         resolve();
                         return;
                     }
                     
-                    // Logged-in user
                     // IMPORT: Listen for friend requests in real-time
                     listenForFriendRequests();
 
@@ -2745,22 +2667,22 @@
                         console.error("Error listening to Firestore:", getCoolErrorMessage(error));
                         if (isFirstLoad) {
                              isFirstLoad = false;
-                             resolve(); // Resolve even on error to allow app to load
+                             resolve();
                         }
                     });
                 });
             }
 
             async function updateUserUI() {
-                if (user) { // Logged in state
+                if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    manageAccountBtn.style.display = 'inline-flex'; // Show manage account for both password and Google users
+                    // Show manage account button for BOTH password and google users
+                    manageAccountBtn.style.display = 'inline-flex';
 
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-                    // Use username if available, otherwise fall back to email or a placeholder
-                    const username = docSnap.exists() && docSnap.data().username ? docSnap.data().username : (user.email || 'User');
+                    const username = docSnap.exists() && docSnap.data().username ? docSnap.data().username : user.email;
 
                     userDisplay.textContent = `Logged in as: ${username}`;
                     userDisplay.style.display = 'flex';
@@ -2773,7 +2695,8 @@
                     friendsBtnDesktop.style.display = 'flex';
                     mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
 
-                } else { // Guest or logged out state
+
+                } else {
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
                     manageAccountBtn.style.display = 'none';
@@ -2792,42 +2715,29 @@
             const XP_PER_TASK = 35;
             const XP_PER_TIMER_MINUTE = 2;
             const getXpForNextLevel = (level) => 50 + (level * 50);
-            const quotes = ["The secret of getting ahead is getting started.", "A year from now you may wish you had started today.", "The future depends on what you do today.", "The best way to predict the future is to create it.", "Don't watch the clock; do what it does. Keep going."];
+            const quotes = ["The secret of getting ahead is getting started.", "A year from now you may wish you had started today.", "The future depends on what you do today."];
             function showRandomQuote() { quoteEl.textContent = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`; }
             function getStartOfWeek(date) {
                 const d = new Date(date);
                 const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday is day 1, Sunday is day 0 (becomes day 1 of next week in some locales, but this correctly shifts it back to Monday)
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
                 return new Date(d.setDate(diff)).setHours(0, 0, 0, 0);
             }
             const checkDailyReset = () => {
                 const today = new Date().toDateString();
                 const lastVisit = localStorage.getItem('lastVisitDate');
                 if (today !== lastVisit) {
-                    // Reset streaks for dailies
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
                     dailyTasks.forEach(task => {
-                        // If yesterday was the last completion day and streak is active, increment. Otherwise, reset.
-                        if (task.completedToday && task.lastCompleted === new Date(Date.now() - 86400000).toDateString()) {
-                            task.streak = (task.streak || 0) + 1;
-                        } else if (!task.completedToday) { // If it wasn't completed today, reset streak
-                            task.streak = 0;
-                        }
-                        task.completedToday = false; // Reset daily completion status
-                        // Reset weekly completions if a new week has started
-                        if (task.weeklyGoal > 0) {
-                             const now = new Date();
-                             if (task.weekStartDate === undefined || task.weekStartDate < getStartOfWeek(now)) {
-                                task.weekStartDate = getStartOfWeek(now);
-                                task.weeklyCompletions = 0;
-                             }
-                        }
+                        if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
+                        else if (!task.completedToday) task.streak = 0;
+                        task.completedToday = false;
                     });
                     localStorage.setItem('lastVisitDate', today);
                     saveState();
                 }
             };
             function addXp(amount) {
-                if (!amount || amount === 0) return;
                 playerData.xp += Math.round(amount);
                 if (playerData.xp < 0) playerData.xp = 0;
                 const requiredXp = getXpForNextLevel(playerData.level);
@@ -2839,11 +2749,9 @@
                 playerData.xp -= requiredXp;
                 playSound('levelUp');
                 levelDisplayEl.classList.add('level-up');
-                // Remove class after animation
                 levelDisplayEl.addEventListener('animationend', () => levelDisplayEl.classList.remove('level-up'), { once: true });
-                
                 const newRequiredXp = getXpForNextLevel(playerData.level);
-                if (playerData.xp >= newRequiredXp) levelUp(newRequiredXp); // Handle multiple level ups
+                if (playerData.xp >= newRequiredXp) levelUp(newRequiredXp);
             }
             function updateProgressUI() {
                 const requiredXp = getXpForNextLevel(playerData.level);
@@ -2854,15 +2762,10 @@
             }
             function checkOverdueTasks() {
                 const now = Date.now();
-                // Iterate through all tasks from all lists
-                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(task => {
+                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(task => {
                     const taskEl = document.querySelector(`.task-item[data-id="${task.id}"]`);
-                    // Only mark as overdue if not completed today and if it's an old task
-                    if (taskEl && !task.completedToday && (now - task.createdAt) > 86400000) { 
-                        taskEl.classList.add('overdue');
-                    } else if (taskEl) {
-                        taskEl.classList.remove('overdue'); // Ensure it's removed if conditions are no longer met
-                    }
+                    if (!taskEl || task.completedToday) return;
+                    taskEl.classList.toggle('overdue', (now - task.createdAt) > 86400000);
                 });
             }
             function checkAllTasksCompleted() {
@@ -2884,23 +2787,10 @@
                 const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
                 let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
                 let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
-                
-                // Timer progress ring calculation
-                let timerProgressOffset = '';
-                if (task.timerStartTime && task.timerDuration) {
-                    const elapsed = (Date.now() - task.timerStartTime) / 1000;
-                    const remainingSeconds = Math.max(0, task.timerDuration - elapsed);
-                    const r = 10; // radius of progress ring circle
-                    const c = r * 2 * Math.PI; // circumference
-                    const p = remainingSeconds > 0 ? remainingSeconds / task.timerDuration : 0; // progress percentage
-                    const offset = c - (p * c);
-                    timerProgressOffset = `stroke-dashoffset: ${offset};`;
-                }
-
                 li.innerHTML = `<button class="complete-btn"></button>
                     <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
                     <div class="task-buttons-wrapper">
-                        <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12" style="${timerProgressOffset}"></circle></svg></button>
+                        <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                         <div class="task-actions">
                             <button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                             <button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
@@ -2909,7 +2799,17 @@
                 if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
                 if (task.timerFinished) li.classList.add('timer-finished');
                 if (task.timerStartTime && task.timerDuration) {
-                    li.classList.add('timer-active');
+                    const elapsed = (Date.now() - task.timerStartTime) / 1000;
+                    const remaining = Math.max(0, task.timerDuration - elapsed);
+                    if (remaining > 0) {
+                        li.classList.add('timer-active');
+                        const ring = li.querySelector('.progress-ring-circle');
+                        if (ring) {
+                            const r = 10;
+                            const c = r * 2 * Math.PI;
+                            ring.style.strokeDashoffset = c - (p * c);
+                        }
+                    }
                 }
                 return li;
             };
@@ -2918,13 +2818,7 @@
                 const common = { id: Date.now().toString(), text, createdAt: Date.now() };
                 if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()) });
                 else if (list === 'standalone') standaloneMainQuests.push({ ...common });
-                else { // Adding to a group
-                    const g = generalTaskGroups.find(g => g.id === list); 
-                    if (g) { 
-                        if (!g.tasks) g.tasks = []; 
-                        g.tasks.push({ ...common }); 
-                    }
-                }
+                else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common }); } }
                 renderAllLists();
                 saveState(); 
                 playSound('add');
@@ -2935,138 +2829,64 @@
                 saveState(); 
                 playSound('addGroup'); 
             };
-            const deleteGroup = (id) => { 
-                const groupName = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; 
-                showConfirm(`Delete "${groupName}"?`, 'All tasks within this group will also be deleted.', () => { 
-                    generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); 
-                    renderAllLists(); 
-                    saveState(); 
-                    playSound('delete'); 
-                }); 
-            };
+            const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
             const findTaskAndContext = (id) => {
                 let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
                 task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
-                for (const g of generalTaskGroups) { 
-                    if (g && g.tasks) { 
-                        const taskInGroup = g.tasks.find(t => t && t.id === id); 
-                        if (taskInGroup) return { task: taskInGroup, list: g.tasks, group: g, type: 'group' }; 
-                    } 
-                } return {}; // Task not found
+                for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } return {};
             };
-            const deleteTask = (id) => { 
-                stopTimer(id, false); // Stop timer if running, without re-rendering immediately
-                const {list} = findTaskAndContext(id); 
-                if (list) {
-                    const i = list.findIndex(t => t.id === id); 
-                    if(i > -1) list.splice(i, 1); 
-                }
-                renderAllLists(); // Re-render everything
-                saveState(); 
-                playSound('delete'); 
-            };
+            const deleteTask = (id) => { stopTimer(id, false); const {list} = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
             const completeTask = (id) => {
-                stopTimer(id, false); // Stop timer if running
-                const { task, type, list, group } = findTaskAndContext(id);
-                if (!task) return;
-                
-                // Remove timer finished state if it was there
+                stopTimer(id, false); const { task, type } = findTaskAndContext(id); if (!task) return;
                 if (task.timerFinished) delete task.timerFinished;
-                
-                addXp(XP_PER_TASK); 
-                playSound('complete');
-                
+                addXp(XP_PER_TASK); playSound('complete');
                 if (type === 'daily') {
-                    if(task.completedToday) return; // Already completed today
-                    task.completedToday = true;
-                    task.lastCompleted = new Date().toDateString();
-                    if (task.weeklyGoal > 0) { 
-                        const now = new Date();
-                        // If today is a new week, reset weekly completions
-                        if (task.weekStartDate === undefined || task.weekStartDate < getStartOfWeek(now)) {
-                           task.weekStartDate = getStartOfWeek(now);
-                           task.weeklyCompletions = 1; 
-                        } else {
-                           task.weeklyCompletions = (task.weeklyCompletions || 0) + 1; 
-                        }
-                    }
-                } else { // For non-daily tasks (standalone or group)
-                    createConfetti(document.querySelector(`.task-item[data-id="${id}"]`)); // Create confetti animation
-                    
-                    // Remove task from its list
-                    if (list) { 
-                        const i = list.findIndex(t => t.id === id); 
-                        if(i > -1) list.splice(i, 1); 
-                    }
-                    // If the group is now empty, remove the group itself
-                    if (group && (!group.tasks || group.tasks.length === 0)) { 
-                        const groupIndex = generalTaskGroups.findIndex(g => g.id === group.id); 
-                        if(groupIndex > -1) generalTaskGroups.splice(groupIndex, 1); 
-                    }
+                    if(task.completedToday) return; task.completedToday = true; task.lastCompleted = new Date().toDateString();
+                    if (task.weeklyGoal > 0) { const now = new Date(); if (task.weekStartDate < getStartOfWeek(now)) { task.weekStartDate = getStartOfWeek(now); task.weeklyCompletions = 1; } else { task.weeklyCompletions = (task.weeklyCompletions || 0) + 1; } }
+                } else {
+                    createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
+                    const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
+                    if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
                 }
-                
                 saveState();
-                renderAllLists(); // Re-render to show changes (completed status, removed task)
-
-                // Check for celebratory completion
-                const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); 
-                if (allTasksDone) createFullScreenConfetti(true); // Full party mode
-                else if (allDailiesDone) createFullScreenConfetti(false); // Smaller confetti for daily completion
+                renderAllLists();
+                const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
-            const uncompleteDailyTask = (id) => { 
-                const task = dailyTasks.find(t => t.id === id); 
-                if (task && task.completedToday) { 
-                    task.completedToday = false; 
-                    if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
-                        task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); // Decrement weekly goal count
-                    }
-                    addXp(-XP_PER_TASK); // Deduct XP
-                    playSound('delete'); 
-                    saveState(); 
-                    renderAllLists(); 
-                } 
-            };
+            const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
             const editTask = (id, text, goal) => {
                 const { task, type } = findTaskAndContext(id);
                 if (task) {
                     task.text = text;
-                    if (type === 'daily') { // Weekly goal can only be set for daily tasks
-                        task.weeklyGoal = goal || 0; // Ensure goal is a number, 0 if not specified
-                        // If current completions exceed new goal, cap it.
-                        if (task.weeklyCompletions > task.weeklyGoal) {
-                             task.weeklyCompletions = task.weeklyGoal;
-                        }
-                    }
+                    if (type === 'daily') task.weeklyGoal = goal;
                     saveState();
                     renderAllLists();
                 }
             };
             function finishTimer(id) {
                 playSound('timerUp');
-                stopTimer(id, false); // Stop interval without re-rendering immediately
+                stopTimer(id, false); // Stop interval without re-rendering
                 const { task } = findTaskAndContext(id);
                 if (task) {
-                    task.timerFinished = true; // Mark as finished
+                    task.timerFinished = true;
                     delete task.timerStartTime;
                     delete task.timerDuration;
                     saveState();
-                    renderAllLists(); // Re-render to show the finished state
+                    renderAllLists();
                 }
             }
             function startTimer(id, mins) {
-                stopTimer(id, false); // Stop any existing timer for this task
+                stopTimer(id, false);
                 const { task } = findTaskAndContext(id);
                 if (!task) return;
 
                 task.timerStartTime = Date.now();
-                task.timerDuration = mins * 60; // Convert minutes to seconds
-                delete task.timerFinished; // Remove finished state if present
+                task.timerDuration = mins * 60;
+                delete task.timerFinished;
                 
                 saveState();
-                renderAllLists(); // Re-render to show timer active state and progress ring
+                renderAllLists();
             }
             function stopTimer(id, shouldRender = true) {
-                // Clear the interval associated with this task ID
                 if (activeTimers[id]) {
                     clearInterval(activeTimers[id]);
                     delete activeTimers[id];
@@ -3075,114 +2895,88 @@
                 if (task) {
                     delete task.timerStartTime;
                     delete task.timerDuration;
-                    if (shouldRender) { // Only re-render if requested
+                    if (shouldRender) {
                         saveState();
                         renderAllLists();
                     }
                 }
             }
             function resumeTimers() {
-                // Clear any existing active timer intervals before setting new ones
                 Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-                activeTimers = {}; // Reset the map
-
-                let needsSaveAndRender = false; // Flag to see if any timer state changed
-                
-                // Collect all tasks that have active timers
-                const tasksWithTimers = [
-                    ...dailyTasks.filter(t => t.timerStartTime && t.timerDuration),
-                    ...standaloneMainQuests.filter(t => t.timerStartTime && t.timerDuration),
-                    ...generalTaskGroups.flatMap(g => g.tasks || []).filter(t => t.timerStartTime && t.timerDuration)
-                ];
-
-                tasksWithTimers.forEach(t => {
-                    const elapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
-                    const remainingSeconds = Math.max(0, (t.timerDuration || 0) - elapsed);
-                    
-                    if (remainingSeconds > 0) {
-                        // Set up the interval for this timer
-                         activeTimers[t.id] = setInterval(() => {
-                            const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
-                            const currentRemaining = Math.max(0, (t.timerDuration || 0) - currentElapsed);
-                            
-                            const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
-                            // If the element is gone or the timer was stopped, clear this interval
-                            if (!taskEl || !activeTimers[t.id]) {
-                                clearInterval(activeTimers[t.id]);
-                                delete activeTimers[t.id];
-                                return;
-                            }
-
-                            if (currentRemaining > 0) {
-                                // Update progress ring visual
-                                const ring = taskEl.querySelector('.progress-ring-circle');
-                                if (ring) {
-                                    const r = ring.r.baseVal.value;
-                                    if (r > 0) {
-                                        const c = r * 2 * Math.PI;
-                                        const p = currentRemaining / t.timerDuration;
-                                        ring.style.strokeDashoffset = c - (p * c);
-                                    }
+                let needsSaveAndRender = false;
+                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                    if (t && t.timerStartTime && t.timerDuration) {
+                        const elapsed = (Date.now() - t.timerStartTime) / 1000;
+                        const remainingSeconds = t.timerDuration - elapsed;
+                        
+                        if (remainingSeconds > 0) {
+                             activeTimers[t.id] = setInterval(() => {
+                                const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
+                                const currentRemaining = (t.timerDuration || 0) - currentElapsed;
+                                
+                                const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
+                                if (!taskEl || !activeTimers[t.id]) {
+                                    clearInterval(activeTimers[t.id]);
+                                    delete activeTimers[t.id];
+                                    return;
                                 }
-                            } else {
-                                // Timer has reached zero, finish it
-                                finishTimer(t.id); // finishTimer handles clearing interval and re-rendering
+
+                                if (currentRemaining > 0) {
+                                    const ring = taskEl.querySelector('.progress-ring-circle');
+                                    if (ring) {
+                                        const r = ring.r.baseVal.value;
+                                        if (r > 0) {
+                                            const c = r * 2 * Math.PI;
+                                            const p = currentRemaining / t.timerDuration;
+                                            ring.style.strokeDashoffset = c - (p * c);
+                                        }
+                                    }
+                                } else {
+                                    finishTimer(t.id);
+                                }
+                            }, 1000);
+                        } else {
+                            if (!t.timerFinished) {
+                                t.timerFinished = true;
+                                delete t.timerStartTime;
+                                delete t.timerDuration;
+                                needsSaveAndRender = true;
                             }
-                        }, 1000); // Update every second
-                    } else {
-                        // If remainingSeconds is 0 or less, it means the timer already expired before resume was called.
-                        // Mark it as finished and trigger a save/render.
-                        if (!t.timerFinished) {
-                            t.timerFinished = true;
-                            delete t.timerStartTime;
-                            delete t.timerDuration;
-                            needsSaveAndRender = true;
                         }
                     }
                 });
-                
-                // If any timers expired while the app was inactive, save and re-render.
                 if (needsSaveAndRender) {
                     saveState();
                     renderAllLists();
                 }
             }
             
-            // Event listener for task interactions (completion, deletion, editing, timer)
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
                 const taskItem = e.target.closest('.task-item');
                 const groupHeader = e.target.closest('.main-quest-group-header');
 
-                // Handles showing/hiding action buttons on mobile when a task/group is tapped
                 function handleMobileActions(element) {
-                     if (window.innerWidth > 1023) return; // Only for mobile
-                     // If a button within the actions menu was clicked, don't toggle visibility
+                     if (window.innerWidth > 1023) return;
                      if (e.target.closest('button')) { 
-                         clearTimeout(actionsTimeoutId); // Clear timeout if an action was performed
+                         clearTimeout(actionsTimeoutId);
                          return;
                      }
-                     
-                     clearTimeout(actionsTimeoutId); // Clear previous timeout
-                     
-                     // If another item is already showing actions, hide it
+                     clearTimeout(actionsTimeoutId);
                      if (activeMobileActionsItem && activeMobileActionsItem !== element) {
                          activeMobileActionsItem.classList.remove('actions-visible');
                      }
-                     
                      const wasVisible = element.classList.contains('actions-visible');
                      element.classList.toggle('actions-visible');
-                     
-                     if (!wasVisible) { // If actions are now visible
-                         activeMobileActionsItem = element; // Set this as the active item
-                         // Set a timeout to auto-hide actions after a few seconds
+                     if (!wasVisible) {
+                         activeMobileActionsItem = element;
                          actionsTimeoutId = setTimeout(() => {
-                             if(element.classList.contains('actions-visible')) { // Check if it's still visible
+                             if(element.classList.contains('actions-visible')) {
                                  element.classList.remove('actions-visible');
-                                 activeMobileActionsItem = null; // Clear active item
+                                 activeMobileActionsItem = null;
                              }
-                         }, 3000); // Hide after 3 seconds
-                     } else { // If actions were just hidden by tapping again
-                         activeMobileActionsItem = null; // Clear active item
+                         }, 3000);
+                     } else {
+                         activeMobileActionsItem = null;
                      }
                 }
                 
@@ -3190,82 +2984,54 @@
                     const groupId = groupHeader.parentElement.dataset.groupId;
                     const g = generalTaskGroups.find(g => g.id === groupId);
 
-                    // If the expand icon was clicked, toggle group expansion and prevent opening actions menu
+                    // Phone: expand icon is a separate action
                     if (window.innerWidth <= 1023 && e.target.closest('.expand-icon')) {
                         if (g) g.isExpanded = !g.isExpanded; 
                         saveState(); 
                         renderAllLists();
-                        return; // Stop propagation to prevent mobile actions menu from opening
+                        return; // Prevent action menu from opening
                     }
                     
                     const isButton = e.target.closest('button');
                     if (isButton) {
-                        if (e.target.closest('.add-task-to-group-btn')) { 
-                            currentListToAdd = groupId; 
-                            weeklyGoalContainer.style.display = 'none'; // Weekly goals are not for group tasks
-                            addTaskModalTitle.textContent = `Add to "${g?.name || 'Group'}"`; 
-                            openModal(addTaskModal); 
-                            focusOnDesktop(newTaskInput); 
-                        } 
-                        else if (e.target.closest('.delete-group-btn')) { 
-                            deleteGroup(groupId); 
-                        }
-                        // Edit group name functionality could be added here if needed.
-                    } else { // If not a button, handle tap for mobile actions or desktop expansion
-                         if (window.innerWidth <= 1023) { // On mobile, tap header to show actions
+                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); focusOnDesktop(newTaskInput); } 
+                        else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
+                    } else {
+                         if (window.innerWidth <= 1023) {
                              handleMobileActions(groupHeader);
-                         } else { // On desktop, tap header to toggle expansion
+                         } else {
                             if (g) g.isExpanded = !g.isExpanded; 
                             saveState(); 
                             renderAllLists();
                          }
                     }
-                    return; // Prevent further processing if it's a group header interaction
+                    return; 
                 }
 
-                // Handle task item interactions
                 if (taskItem) {
                     const id = taskItem.dataset.id;
-                    
-                    // If task is already completed for today, tapping it will uncomplete it
                     if (taskItem.classList.contains('daily-completed')) {
                         uncompleteDailyTask(id);
-                        return; // Stop here, action handled
+                        return;
                     }
                     
-                    // Handle showing/hiding action buttons on mobile
                     handleMobileActions(taskItem);
 
-                    // If a button inside the task item was clicked
                     if(e.target.closest('button')) {
-                        currentEditingTaskId = id; // Set current task ID for modals
-                        
-                        if (e.target.closest('.complete-btn')) { 
-                            completeTask(id); 
-                        }
-                        else if (e.target.closest('.delete-btn')) { 
-                            deleteTask(id); 
-                        }
-                        else if (e.target.closest('.timer-clock-btn')) { 
-                            const { task } = findTaskAndContext(id); 
-                            if (task && task.timerStartTime) { // If timer is active
-                                openModal(timerMenuModal); // Show cancel timer modal
-                            } else { // If timer is not active
-                                openModal(timerModal); // Show set timer modal
-                                focusOnDesktop(timerDurationSlider); // Focus on slider
-                            }
-                        }
+                        currentEditingTaskId = id;
+                        if (e.target.closest('.complete-btn')) completeTask(id);
+                        else if (e.target.closest('.delete-btn')) deleteTask(id);
+                        else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
                         else if (e.target.closest('.edit-btn')) {
                             const { task, type } = findTaskAndContext(id);
                             if (task) {
                                 editTaskIdInput.value = task.id;
                                 editTaskInput.value = task.text;
-                                // Update modal title and weekly goal section based on task type
                                 editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
                                 if (type === 'daily') {
                                     const goal = task.weeklyGoal || 0;
                                     editWeeklyGoalSlider.value = goal;
-                                    updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay); // Update display text
+                                    editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
                                     editWeeklyGoalContainer.style.display = 'block';
                                 } else {
                                     editWeeklyGoalContainer.style.display = 'none';
@@ -3278,189 +3044,50 @@
                 } 
             });
 
-            // --- Form Submission Handlers ---
-            addTaskForm.addEventListener('submit', (e) => { 
-                e.preventDefault(); 
-                const t = newTaskInput.value.trim(); 
-                if (t && currentListToAdd) { 
-                    const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; // Only apply goal to daily tasks
-                    addTask(t, currentListToAdd, goal); 
-                    newTaskInput.value = ''; // Clear input
-                    weeklyGoalSlider.value = 0; // Reset slider
-                    updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); // Update display text
-                    closeModal(addTaskModal); 
-                } 
-            });
-            editTaskForm.addEventListener('submit', (e) => { 
-                e.preventDefault(); 
-                const id = editTaskIdInput.value; 
-                const newText = editTaskInput.value.trim(); 
-                const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; 
-                if(id && newText) { 
-                    editTask(id, newText, newGoal); 
-                    closeModal(editTaskModal); 
-                } 
-            });
-            timerForm.addEventListener('submit', (e) => { 
-                e.preventDefault(); 
-                const v = parseInt(timerDurationSlider.value, 10);
-                const u = timerUnitSelector.querySelector('.selected').dataset.unit;
-                let minutes = 0; 
-                switch(u){ 
-                    case 'seconds': minutes = v / 60; break;
-                    case 'minutes': minutes = v; break;
-                    case 'hours': minutes = v * 60; break;
-                    case 'days': minutes = v * 1440; break; // 24 * 60
-                    case 'weeks': minutes = v * 10080; break; // 7 * 24 * 60
-                    case 'months': minutes = v * 43200; break; // ~30 * 24 * 60
-                } 
-                if(minutes > 0 && currentEditingTaskId) {
-                    startTimer(currentEditingTaskId, minutes); // Start timer in minutes
-                    closeModal(timerModal); 
-                    currentEditingTaskId = null; // Clear context
-                } 
-            });
-            timerMenuCancelBtn.addEventListener('click', () => { 
-                if (currentEditingTaskId) stopTimer(currentEditingTaskId); // Stop timer
-                closeModal(timerMenuModal); 
-                currentEditingTaskId = null; // Clear context
-            });
-            
-            // Update timer duration display as slider changes
+            addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
+            editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
+            timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
+            timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
             timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
+            timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
+            addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
             
-            // Handle timer unit selection
-            timerUnitSelector.addEventListener('click', (e) => { 
-                const t = e.target.closest('.timer-unit-btn'); 
-                if (t) { 
-                    timerUnitSelector.querySelector('.selected').classList.remove('selected'); 
-                    t.classList.add('selected'); 
-                    playSound('toggle'); 
-                } 
-            });
-            
-            addGroupForm.addEventListener('submit', (e) => { 
-                e.preventDefault(); 
-                const n = newGroupInput.value.trim(); 
-                if (n) { 
-                    addGroup(n); 
-                    newGroupInput.value = ''; // Clear input
-                    closeModal(addGroupModal); 
-                } 
-            });
-            
-            // Button handlers for opening modals
-            addTaskTriggerBtnDaily.addEventListener('click', () => { 
-                currentListToAdd = 'daily'; 
-                weeklyGoalContainer.style.display = 'block'; // Show weekly goal for daily tasks
-                addTaskModalTitle.textContent = 'Add Daily Quest'; 
-                weeklyGoalSlider.value = 0; // Reset slider
-                updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); // Update display text
-                openModal(addTaskModal); 
-                focusOnDesktop(newTaskInput); 
-            });
-            addStandaloneTaskBtn.addEventListener('click', () => { 
-                currentListToAdd = 'standalone'; 
-                weeklyGoalContainer.style.display = 'none'; // Hide weekly goal for standalone tasks
-                addTaskModalTitle.textContent = 'Add Main Quest'; 
-                openModal(addTaskModal); 
-                focusOnDesktop(newTaskInput); 
-            });
-            addGroupBtn.addEventListener('click', () => { 
-                openModal(addGroupModal); 
-                focusOnDesktop(newGroupInput); 
-            });
+            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
             settingsBtn.addEventListener('click', () => openModal(settingsModal));
-
-            // Generic modal close button handler
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', (e) => {
                 const modalId = e.currentTarget.dataset.closeModal;
                 const modal = document.getElementById(modalId);
-                if (modal && modal.getAttribute('data-persistent') !== 'true') { // Prevent closing persistent modals
-                    closeModal(modal); 
+                if (modal.getAttribute('data-persistent') !== 'true') {
+                    closeModal(modal);
                     if (modalId === 'friends-modal') {
-                        // FIX: Restore the active mobile nav button when closing friends modal
+                        // FIX: Restore the active mobile nav button
                         const activeBtn = mobileNav.querySelector(`.mobile-nav-btn.active`);
-                        const prevSection = activeBtn?.dataset.section || 'daily'; // Default to daily
-                        // Trigger the show section logic for the previously active tab
+                        const prevSection = activeBtn.dataset.section;
+                        // Trigger the show section logic
                         document.querySelectorAll('.task-group').forEach(group => {
                             group.classList.toggle('mobile-visible', group.dataset.section === prevSection);
                         });
                     }
                 }
             }));
-            
-            // Handle closing modals by clicking outside
             [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal].forEach(m => { 
                 if (m) m.addEventListener('click', (e) => { 
-                    // Close if click is on overlay itself and modal is not persistent
                     if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                         closeModal(m); 
                     }
                 }); 
             });
-
-            // Shows a confirmation modal
-            function showConfirm(title, text, cb) { 
-                confirmTitle.textContent = title; 
-                confirmText.textContent = text; 
-                confirmCallback = cb; // Store the callback function
-                openModal(confirmModal); 
-            }
-            // Confirm button action
-            confirmActionBtn.addEventListener('click', () => { 
-                if (confirmCallback) confirmCallback(); // Execute the stored callback
-                closeModal(confirmModal); 
-                confirmCallback = null; // Clear callback
-            });
-            // Cancel button action
-            confirmCancelBtn.addEventListener('click', () => { 
-                closeModal(confirmModal); 
-                confirmCallback = null; // Clear callback
-            });
-
-            // Applies theme and accent color settings
-            const applySettings = () => { 
-                document.documentElement.style.setProperty('--accent', settings.accentColor); 
-                document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); 
-                volumeSlider.value = settings.volume; 
-
-                const isDarkModePreference = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const useDarkMode = settings.theme === 'dark' || (settings.theme === 'system' && isDarkModePreference);
-                document.documentElement.classList.toggle('dark-mode', useDarkMode);
-
-                // Update theme button selection
-                document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected')); 
-                const selectedThemeBtn = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
-                if (selectedThemeBtn) selectedThemeBtn.classList.add('selected');
-            };
+            function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
+            confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
+            confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
+            const applySettings = () => { document.documentElement.style.setProperty('--accent', settings.accentColor); document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); if(typeof settings.volume==='undefined') settings.volume=0.3; volumeSlider.value = settings.volume; const d = window.matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.classList.toggle('dark-mode', settings.theme === 'dark' || (settings.theme === 'system' && d)); document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected')); const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`); if(s)s.classList.add('selected'); };
+            themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(); playSound('toggle'); } });
+            colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
+            volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
+            volumeSlider.addEventListener('change', () => playSound('toggle'));
             
-            // Theme selection buttons
-            themeOptionsButtons.addEventListener('click', (e) => { 
-                const t = e.target.closest('.theme-btn'); 
-                if (t) { 
-                    settings.theme = t.dataset.theme; 
-                    saveState(); 
-                    applySettings(); 
-                    playSound('toggle'); 
-                } 
-            });
-            // Accent color selection
-            colorOptions.addEventListener('click', (e) => { 
-                if(e.target.classList.contains('color-swatch')) { 
-                    settings.accentColor = e.target.dataset.color; 
-                    saveState(); 
-                    applySettings(); 
-                } 
-            });
-            // Volume slider
-            volumeSlider.addEventListener('input', () => { 
-                settings.volume = parseFloat(volumeSlider.value); 
-                saveState(); 
-            });
-            volumeSlider.addEventListener('change', () => playSound('toggle')); // Play sound on change
-            
-            // Updates the text for the weekly goal slider
             function updateGoalDisplay(slider, display) {
                 const value = slider.value;
                 if (value === '0') {
@@ -3472,95 +3099,31 @@
             weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
             editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
             
-            // Data management buttons
-            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone. All your tasks, progress, and settings will be lost.', () => { 
-                playerData = { level: 1, xp: 0 }; 
-                dailyTasks = []; 
-                standaloneMainQuests = []; 
-                generalTaskGroups = []; 
-                localStorage.removeItem('anonymousUserData'); // Also clear guest data
-                renderAllLists(); 
-                saveState(); 
-                playSound('delete'); 
-            }));
-            exportDataBtn.addEventListener('click', () => { 
-                const dataToExport = user ? localStorage.getItem('anonymousUserData') : JSON.stringify({
-                    dailyTasks: dailyTasks,
-                    standaloneMainQuests: standaloneMainQuests,
-                    generalTaskGroups: generalTaskGroups,
-                    playerData: playerData,
-                    settings: settings
-                });
-                const b = new Blob([dataToExport || '{}'], {type: "application/json"}), a = document.createElement("a"); 
-                a.href = URL.createObjectURL(b); 
-                a.download = `procrasti-nope_backup_${user ? 'guest' : user.uid}_${new Date().toISOString().split('T')[0]}.json`; 
-                a.click(); 
-                URL.revokeObjectURL(a.href); // Clean up URL object
-            });
+            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
+            exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
             importDataBtn.addEventListener('click', () => importFileInput.click());
-            importFileInput.addEventListener('change', (e) => { 
-                const f = e.target.files[0]; 
-                if(!f) return; 
-                showConfirm("Import Data?", `Importing will overwrite your current ${user ? 'guest' : 'cloud'} progress. Are you sure?`, () => { 
-                    const r = new FileReader(); 
-                    r.onload = (e) => { 
-                        try {
-                            const importedData = JSON.parse(e.target.result);
-                            // Basic validation, ensure it has the expected structure
-                            if (importedData && (importedData.dailyTasks || importedData.settings)) {
-                                if (!user) { // Importing as guest
-                                    localStorage.setItem('anonymousUserData', e.target.result);
-                                } else { // Importing for logged-in user (will be saved to cloud)
-                                    // Manually merge data, then saveState will handle cloud upload
-                                    loadAndDisplayData(importedData); 
-                                    // Save immediately as it's an import action
-                                    saveData({ ...importedData, ...{ appData: importedData } }); // Structure for Firebase save
-                                }
-                                // Reload UI to reflect imported data
-                                location.reload(); 
-                            } else {
-                                alert("Invalid data file. Please ensure it's a valid Procrasti-Nope backup.");
-                            }
-                        } catch (err) {
-                            alert("Error parsing file. Please ensure it's a valid JSON backup.");
-                            console.error("Import error:", err);
-                        }
-                    }; 
-                    r.readAsText(f); 
-                }); 
-                e.target.value = ''; // Clear the input value so the same file can be selected again
-            });
-
-            // Sound on hover for interactive elements
-            document.body.addEventListener('mouseover', e => { 
-                const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title, .toggle-btn, .mobile-nav-btn, .task-item, .main-quest-group-header'); // Add more elements as needed
-                if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; // Only trigger if mouse enters element, not if it's already inside
-                playSound('hover'); 
-            });
+            importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
+            document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
             
-            // Manage Account modal logic
             manageAccountBtn.addEventListener('click', () => {
                 const reauthContainer = manageAccountModal.querySelector('#reauth-container');
                 const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
                 const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
 
-                // Reset form states
+                // Reset form state every time it's opened
                 manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
                 manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
 
                 if (isGoogleUser) {
                     reauthContainer.style.display = 'none';
                     manageFormsContainer.style.display = 'block';
-                    // Hide options not applicable or handled differently for Google users
-                    manageAccountModal.querySelector('#update-email-form').style.display = 'none'; // Email change handled via re-auth
-                    manageAccountModal.querySelector('#update-password-form').style.display = 'none'; // Password change handled via re-auth
-                    manageAccountModal.querySelector('#update-username-form').style.display = 'block'; // Username change specific to Google
-                    // Clear password fields that are no longer relevant for Google users
-                    manageAccountModal.querySelector('#update-email-password').value = '';
-                    manageAccountModal.querySelector('#reauth-password').value = '';
-                } else { // Email/Password user
+                    // Hide options not applicable to Google users
+                    manageAccountModal.querySelector('#update-email-form').style.display = 'none';
+                    manageAccountModal.querySelector('#update-password-form').style.display = 'none';
+                    manageAccountModal.querySelector('#update-username-form').style.display = 'block';
+                } else {
                     reauthContainer.style.display = 'block';
-                    manageFormsContainer.style.display = 'none'; // Hide forms until re-authenticated
+                    manageFormsContainer.style.display = 'none';
                     // Ensure all forms are potentially visible after re-auth
                     manageAccountModal.querySelector('#update-email-form').style.display = 'block';
                     manageAccountModal.querySelector('#update-password-form').style.display = 'block';
@@ -3569,7 +3132,7 @@
                 openModal(manageAccountModal);
             });
 
-            // Re-authentication form for sensitive actions
+
             const reauthForm = document.getElementById('reauth-form');
             reauthForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
@@ -3577,8 +3140,8 @@
                 const errorEl = document.getElementById('reauth-error');
                 errorEl.textContent = '';
 
-                if (!currentUser || !currentUser.email) { // Should not happen if currentUser is set
-                    errorEl.textContent = 'Error: No user logged in.';
+                if (!currentUser || !currentUser.email) {
+                    errorEl.textContent = 'No user is currently logged in.';
                     return;
                 }
 
@@ -3589,52 +3152,46 @@
                     // On success, hide re-auth and show management forms
                     document.getElementById('reauth-container').style.display = 'none';
                     document.getElementById('manage-forms-container').style.display = 'block';
-                    // Clear password field after successful re-auth
-                    document.getElementById('reauth-password').value = '';
                 } catch (error) {
                     errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Update email form
             const updateEmailForm = document.getElementById('update-email-form');
             updateEmailForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const newEmail = document.getElementById('update-email-input').value;
-                const password = document.getElementById('update-email-password').value; // Password for re-authentication
+                const password = document.getElementById('update-email-password').value;
                 const errorEl = document.getElementById('update-email-error');
                 const successEl = document.getElementById('update-email-success');
                 errorEl.textContent = '';
                 successEl.textContent = '';
 
                 if (!password) {
-                    errorEl.textContent = 'Please enter your current password to confirm changes.';
+                    errorEl.textContent = 'Please enter your current password.';
                     return;
                 }
 
                 try {
-                    // Re-authenticate before updating sensitive info
+                    // Re-authenticate before sensitive operation
                     const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
                     await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
 
                     // Update email in Firebase Auth
                     await window.firebaseSDK.updateEmail(currentUser, newEmail);
                     
-                    // Update email in Firestore user document
+                    // Update email in Firestore
                     const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
                     await window.firebaseSDK.updateDoc(userDocRef, { email: newEmail });
 
                     successEl.textContent = 'Email updated successfully!';
-                    updateEmailForm.reset(); // Clear form fields
-                    // Update the display name if it uses email as fallback
-                    updateUserUI(); 
+                    updateEmailForm.reset();
 
                 } catch (error) {
                     errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Update password form
             const updatePasswordForm = document.getElementById('update-password-form');
             updatePasswordForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
@@ -3647,13 +3204,12 @@
                 try {
                     await window.firebaseSDK.updatePassword(currentUser, newPassword);
                     successEl.textContent = 'Password updated successfully!';
-                    updatePasswordForm.reset(); // Clear form fields
+                    updatePasswordForm.reset();
                 } catch (error) {
                      errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Update username form (specific for Google users or users changing username)
             const updateUsernameForm = document.getElementById('update-username-form');
             updateUsernameForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
@@ -3664,7 +3220,7 @@
                 successEl.textContent = '';
 
                 if (!currentUser) {
-                    errorEl.textContent = "You must be logged in to change your username.";
+                    errorEl.textContent = "You must be logged in.";
                     return;
                 }
                 
@@ -3683,7 +3239,6 @@
                         return;
                     }
                     
-                    // Check if the new username is available in the 'usernames' collection
                     const newUsernameRef = window.firebaseSDK.doc(db, "usernames", newUsername);
                     const newUsernameSnap = await window.firebaseSDK.getDoc(newUsernameRef);
                     
@@ -3692,187 +3247,116 @@
                         return;
                     }
 
-                    // If username is available, perform batch update:
-                    // 1. Delete old username entry from 'usernames' collection
-                    // 2. Add new username entry to 'usernames' collection
-                    // 3. Update username field in user's document
+                    const oldUsernameRef = window.firebaseSDK.doc(db, "usernames", currentUsername);
+
                     const batch = window.firebaseSDK.writeBatch(db);
-                    // Only delete old username if it existed
-                    if (currentUsername) {
-                        const oldUsernameRef = window.firebaseSDK.doc(db, "usernames", currentUsername);
-                        batch.delete(oldUsernameRef);
-                    }
-                    batch.set(newUsernameRef, { userId: currentUser.uid }); // Map new username to user ID
-                    batch.update(userDocRef, { username: newUsername }); // Update username in user doc
+                    batch.delete(oldUsernameRef);
+                    batch.set(newUsernameRef, { userId: currentUser.uid });
+                    batch.update(userDocRef, { username: newUsername });
                     await batch.commit();
 
                     successEl.textContent = "Username updated successfully!";
-                    updateUserUI(); // Refresh the display name in settings
+                    updateUserUI(); // To refresh the display name in settings
                     updateUsernameForm.reset();
                 } catch (error) {
                     errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
             
-            // Initialize SortableJS for drag-and-drop functionality
             function initSortable() {
-                // Callback function when a task is dropped
                 function onTaskDrop(evt) {
-                    document.body.classList.remove('is-dragging'); // Remove drag class from body
+                    document.body.classList.remove('is-dragging');
                     const taskId = evt.item.dataset.id;
-                    if (!taskId) return; // Should not happen if task elements are correctly generated
-
-                    // Find the task and its original list
+                    if (!taskId) return;
                     const { task, list: sourceListArray } = findTaskAndContext(taskId);
-                    if (!task || !sourceListArray) { // Task or source list not found
-                        renderAllLists(); // Re-render to reset state in case of error
-                        return; 
-                    }
-                    // Remove task from its original position
+                    if (!task || !sourceListArray) return;
                     const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
                     if (originalIndex > -1) sourceListArray.splice(originalIndex, 1);
-                    else { // Should not happen if task was found
-                        renderAllLists(); 
-                        return;
-                    }
+                     else return; 
 
-                    // Determine the destination list
-                    const toListEl = evt.to; // The UL element where the item was dropped
-                    const toGroupId = toListEl.dataset.groupId; // If it's a group list
+                    const toListEl = evt.to;
+                    const toListId = toListEl.id;
+                    const toGroupId = toListEl.dataset.groupId;
                     let destListArray;
 
-                    if (toListEl.id === 'daily-task-list') destListArray = dailyTasks;
-                    else if (toListEl.id === 'standalone-task-list') destListArray = standaloneMainQuests;
-                    else if (toGroupId) { // Dropped into a group's task list
+                    if (toListId === 'daily-task-list') destListArray = dailyTasks;
+                    else if (toListId === 'standalone-task-list') destListArray = standaloneMainQuests;
+                    else if (toGroupId) {
                         const group = generalTaskGroups.find(g => g.id === toGroupId);
                         if (group) {
-                            if (!group.tasks) group.tasks = []; // Ensure tasks array exists
+                            if (!group.tasks) group.tasks = [];
                             destListArray = group.tasks;
                         }
                     }
 
-                    // If destination list could not be determined, put task back in original list
-                    if (!destListArray) { 
-                        sourceListArray.splice(originalIndex, 0, task); // Put it back
-                        renderAllLists(); // Re-render to visually correct it
+                    if (!destListArray) {
+                        sourceListArray.splice(originalIndex, 0, task);
                         return;
                     }
                     
-                    // Insert task into the destination list at the new index
                     destListArray.splice(evt.newIndex, 0, task);
-                    
-                    saveState(); // Save changes to persistence
-                    renderAllLists(); // Re-render to reflect the new order
+                    saveState();
+                    renderAllLists();
                 }
 
-                // Common SortableJS options
                 const commonTaskOptions = {
-                    animation: 150, // Animation speed in ms
-                    delay: 50, // Delay before drag starts (touch devices)
+                    animation: 150,
+                    delay: 500,
                     delayOnTouchOnly: true,
-                    ghostClass: 'sortable-ghost', // Class for the placeholder element
-                    onStart: () => document.body.classList.add('is-dragging'), // Add class to body when dragging starts
-                    onEnd: onTaskDrop // Callback when drag ends
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: onTaskDrop 
                 };
 
-                // Apply SortableJS to daily tasks list
-                new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'tasks' }); // Group tasks together
-                // Apply SortableJS to standalone tasks list
-                new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'tasks' });
-                // Apply SortableJS to each group's task list
+                new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'dailyQuests' });
+                new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'mainQuests' });
                 document.querySelectorAll('.task-list-group').forEach(listEl => {
-                    new Sortable(listEl, { ...commonTaskOptions, group: 'tasks' });
+                    new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
                 });
-                // Apply SortableJS to general task groups (for reordering groups)
                 new Sortable(generalTaskListContainer, {
                     animation: 150,
-                    handle: '.main-quest-group-header', // Drag only by the header
-                    delay: 50,
+                    handle: '.main-quest-group-header',
+                    delay: 500,
                     delayOnTouchOnly: true,
-                    ghostClass: 'sortable-ghost',
                     onStart: () => document.body.classList.add('is-dragging'),
-                    onEnd: (e) => { // Callback for group reordering
+                    onEnd: (e) => {
                         document.body.classList.remove('is-dragging');
-                        // Reorder groups in the data array
                         const [item] = generalTaskGroups.splice(e.oldIndex, 1);
                         generalTaskGroups.splice(e.newIndex, 0, item);
-                        saveState(); // Save the new group order
-                        // No re-render needed here, as only order changed visually.
+                        saveState();
                     }
                 });
             }
 
-            // Creates a burst of confetti at a specific location
-            function createConfetti(el) { 
-                if (!el) return;
-                const r = el.getBoundingClientRect(); // Get element's position and size
-                createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); // Burst at element's center
-            }
-            // Creates confetti effects
-            function createFullScreenConfetti(party, o = null) { // o = {x, y} origin coordinates
-                const count = party ? 200 : 100; // More confetti for full party mode
-                for (let i = 0; i < count; i++) {
+            function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
+            function createFullScreenConfetti(party, o = null) {
+                // FIX: Ensure confetti elements are properly removed from the DOM.
+                for (let i = 0; i < (party ? 200 : 100); i++) {
                     const c = document.createElement('div'); c.className = 'confetti';
-                    // Random initial position, centered if origin (o) is provided
-                    const sx = o ? o.x : Math.random() * window.innerWidth; 
-                    const sy = o ? o.y : -20; // Start slightly above screen
-                    c.style.left = `${sx}px`;
-                    c.style.top = `${sy}px`;
-                    // Random color
-                    c.style.backgroundColor = ['var(--accent-pink)', 'var(--accent-blue)', 'var(--accent-green)', 'var(--accent-orange)', 'var(--accent-purple)'][Math.floor(Math.random() * 5)];
+                    const sx = o ? o.x : Math.random()*window.innerWidth, sy = o ? o.y : -20;
+                    c.style.left=`${sx}px`; c.style.top=`${sy}px`; c.style.backgroundColor = ['var(--accent-pink)','var(--accent-blue)','var(--accent-green)','var(--accent-orange)','var(--accent-purple)'][Math.floor(Math.random()*5)];
                     document.body.appendChild(c);
-                    
-                    // Animation properties
-                    const angle = Math.random() * Math.PI * 2; // Random direction
-                    const velocity = 50 + Math.random() * 100; // Random speed
-                    const exitX = Math.cos(angle) * velocity * (Math.random() * 5); // Horizontal displacement
-                    const exitY = (Math.sin(angle) * velocity) + (window.innerHeight - sy); // Vertical displacement (away from origin)
-
-                    // Apply animation
-                    c.animate([
-                        { transform: 'translate(0,0) rotate(0deg)', opacity: 1 }, // Start state
-                        { transform: `translate(${exitX}px, ${exitY}px) rotate(${Math.random() * 720}deg)`, opacity: 0 } // End state
-                    ], {
-                        duration: 3000 + Math.random() * 2000, // Random duration
-                        easing: 'cubic-bezier(0.1,0.5,0.5,1)' // Easing function
-                    }).onfinish = () => c.remove(); // Remove element from DOM when animation ends
+                    const a = Math.random()*Math.PI*2, v=50+Math.random()*100, ex=Math.cos(a)*v*(Math.random()*5), ey=(Math.sin(a)*v)+(window.innerHeight-sy);
+                    c.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${ex}px, ${ey}px) rotate(${Math.random()*720}deg)`,opacity:0}],{duration:3000+Math.random()*2000,easing:'cubic-bezier(0.1,0.5,0.5,1)'}).onfinish=()=>c.remove();
                 }
-                // If it's a full party mode, add a temporary background overlay
-                if (party) {
-                    const p = document.createElement('div'); p.className = 'party-time-overlay';
-                    document.body.appendChild(p);
-                    setTimeout(() => p.remove(), 5000); // Remove overlay after 5 seconds
-                }
+                if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
             }
+            const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); resumeTimers(); };
             
-            // Renders all task lists (daily, standalone, groups) and initializes sortable
-            const renderAllLists = () => { 
-                renderDailyTasks(); 
-                renderStandaloneTasks(); 
-                renderGeneralTasks(); 
-                checkOverdueTasks(); // Update overdue status
-                initSortable();      // Re-initialize sortable for dynamically added/moved items
-                resumeTimers();      // Resume any active timers
-            };
-            
-            // Handles login button click in settings menu
             settingsLoginBtn.addEventListener('click', () => {
                 const accountModalContent = accountModal.querySelector('.modal-content');
-                setupAuthForms(accountModalContent, () => { // Pass callback for when auth is successful
-                    closeModal(accountModal); // Close auth modal
-                    closeModal(settingsModal); // Close settings modal
+                setupAuthForms(accountModalContent, () => {
+                    closeModal(accountModal);
+                    closeModal(settingsModal);
                 });
                 openModal(accountModal);
             });
 
-            // Logout functionality
             logoutBtn.addEventListener('click', () => {
-                showConfirm("Logout?", "Are you sure you want to log out? You will be returned to the landing page.", () => {
-                    closeModal(settingsModal); // Close settings modal
-                    sessionStorage.removeItem('isGuest'); // Clear guest session flag
-                    localStorage.removeItem('userTheme'); // Clear theme preference for fresh login
-                    window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error))); // Sign out from Firebase
-                    // onAuthStateChanged will handle redirecting to landing page and app shutdown
+                showConfirm("Logout?", "You will be returned to the landing page.", () => {
+                    closeModal(settingsModal);
+                    sessionStorage.removeItem('isGuest'); 
+                    localStorage.removeItem('userTheme');
+                    window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
             
@@ -3887,21 +3371,19 @@
              * It updates the UI with a notification badge.
              */
             function listenForFriendRequests() {
-                if (!user) return; // Only for logged-in users
+                if (!user) return;
                 // Unsubscribe from any previous listener to prevent duplicates.
                 if (unsubscribeFromFriends) unsubscribeFromFriends();
                 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                // Listen for changes to the user document, specifically for friendRequests array
                 unsubscribeFromFriends = window.firebaseSDK.onSnapshot(userDocRef, (doc) => {
                     if (doc.exists()) {
                         const requests = doc.data().friendRequests || [];
-                        // Update badge with request count
                         if (requests.length > 0) {
                             friendRequestCountBadge.textContent = requests.length;
                             friendRequestCountBadge.style.display = 'inline';
                         } else {
-                            friendRequestCountBadge.style.display = 'none'; // Hide if no requests
+                            friendRequestCountBadge.style.display = 'none';
                         }
                     }
                 }, (error) => {
@@ -3914,11 +3396,11 @@
              * when the friends modal is opened. This is done on-demand to save reads.
              */
             async function renderFriendsAndRequests() {
-                if (!user) return; // Only for logged-in users
+                if (!user) return;
                 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const userDoc = await window.firebaseSDK.getDoc(userDocRef);
-                if (!userDoc.exists()) return; // User doc not found, something is wrong
+                if (!userDoc.exists()) return;
 
                 const userData = userDoc.data();
                 const friendUIDs = userData.friends || [];
@@ -3928,19 +3410,15 @@
                 if (friendUIDs.length === 0) {
                     friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
                 } else {
-                    friendsListContainer.innerHTML = ''; // Clear existing list
-                    // Efficiently fetch multiple user profiles using a query with 'in' clause
-                    const friendsQuery = window.firebaseSDK.query(
-                        window.firebaseSDK.collection(db, "users"), 
-                        window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', friendUIDs)
-                    );
+                    friendsListContainer.innerHTML = '';
+                    // Efficiently fetch multiple user profiles with a 'in' query
+                    const friendsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', friendUIDs));
                     const friendDocs = await window.firebaseSDK.getDocs(friendsQuery);
                     friendDocs.forEach(doc => {
                          const friend = doc.data();
-                         const level = friend.appData?.playerData?.level || 1; // Get friend's level, default to 1
+                         const level = friend.appData?.playerData?.level || 1;
                          const friendEl = document.createElement('div');
                          friendEl.className = 'friend-item';
-                         // HTML structure for a friend item
                          friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
                          friendsListContainer.appendChild(friendEl);
                     });
@@ -3950,76 +3428,54 @@
                 if (requestUIDs.length === 0) {
                     friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
                 } else {
-                    friendRequestsContainer.innerHTML = ''; // Clear existing list
-                    // Fetch details of users who sent requests
-                    const requestsQuery = window.firebaseSDK.query(
-                        window.firebaseSDK.collection(db, "users"), 
-                        window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', requestUIDs)
-                    );
+                    friendRequestsContainer.innerHTML = '';
+                    const requestsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', requestUIDs));
                     const requestDocs = await window.firebaseSDK.getDocs(requestsQuery);
                     requestDocs.forEach(doc => {
                         const requestUser = doc.data();
                         const requestEl = document.createElement('div');
                         requestEl.className = 'friend-request-item';
-                        // HTML structure for a friend request item
                         requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
                         friendRequestsContainer.appendChild(requestEl);
                     });
                 }
             }
             
-            // Handles the action of sending a friend request
             async function handleAddFriend(e) {
                 e.preventDefault();
                 const usernameToFind = searchUsernameInput.value.trim().toLowerCase();
-                friendStatusMessage.textContent = ''; // Clear previous messages
+                friendStatusMessage.textContent = '';
                 
-                if (!user || !usernameToFind) return; // Ensure user is logged in and input is not empty
+                if (!user || !usernameToFind) return;
 
-                // Get current user's data to check for self-addition or existing friendship
                 const currentUserDoc = await window.firebaseSDK.getDoc(window.firebaseSDK.doc(db, "users", user.uid));
-                const currentUserData = currentUserDoc.data();
-
-                if (usernameToFind === currentUserData.username) {
+                if (usernameToFind === currentUserDoc.data().username) {
                     friendStatusMessage.textContent = "You can't add yourself!";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
                     return;
                 }
                 
-                // Efficiently check if the username exists in the 'usernames' collection.
+                // Efficiently check if username exists. One read.
                 const usernamesRef = window.firebaseSDK.doc(db, "usernames", usernameToFind);
                 const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
-                if (!usernameSnap.exists()) { // Username not found
+                if (!usernameSnap.exists()) {
                     friendStatusMessage.textContent = "User not found.";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
                     return;
                 }
                 
                 const targetUserId = usernameSnap.data().userId;
-                const targetUserRef = window.firebaseSDK.doc(db, "users", targetUserId);
+                const targetUserDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
                 
-                // Check if already friends or if request is pending
-                if (currentUserData.friends?.includes(targetUserId)) {
-                    friendStatusMessage.textContent = "You are already friends!";
-                    friendStatusMessage.style.color = 'var(--accent-orange-light)';
-                    return;
-                }
-                if (currentUserData.friendRequests?.includes(targetUserId)) {
-                     friendStatusMessage.textContent = "Friend request already sent.";
-                     friendStatusMessage.style.color = 'var(--accent-orange-light)';
-                     return;
-                }
-
                 // Use a transaction to safely update both users' documents.
                 try {
-                    // Add current user's ID to the target user's friendRequests array
-                    await window.firebaseSDK.updateDoc(targetUserRef, {
+                    await window.firebaseSDK.updateDoc(targetUserDocRef, {
                         friendRequests: window.firebaseSDK.arrayUnion(user.uid)
                     });
                     friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
                     friendStatusMessage.style.color = 'var(--accent-green-light)';
-                    searchUsernameInput.value = ''; // Clear input field
+                    searchUsernameInput.value = '';
                 } catch (error) {
                     friendStatusMessage.textContent = "Could not send request.";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
@@ -4027,80 +3483,70 @@
                 }
             }
             
-            // Handles accepting or declining a friend request
             async function handleRequestAction(e, action) {
                 const button = e.target.closest('button');
                 if (!button) return;
 
-                const senderUid = button.dataset.uid; // The UID of the user who sent the request
+                const senderUid = button.dataset.uid;
                 const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
                 
-                // Use a batch write for atomic operations
                 const batch = window.firebaseSDK.writeBatch(db);
-                
                 // Always remove the request from the current user's list.
                 batch.update(currentUserRef, { friendRequests: window.firebaseSDK.arrayRemove(senderUid) });
 
                 if (action === 'accept') {
                     const senderUserRef = window.firebaseSDK.doc(db, "users", senderUid);
-                    // Add each other to their respective friends lists.
+                    // Add each other to the friends list.
                     batch.update(currentUserRef, { friends: window.firebaseSDK.arrayUnion(senderUid) });
                     batch.update(senderUserRef, { friends: window.firebaseSDK.arrayUnion(user.uid) });
                 }
-                // If action is 'decline', only the removal from requests is needed.
                 
-                await batch.commit(); // Execute the batch
-                renderFriendsAndRequests(); // Re-render the lists to reflect changes
+                await batch.commit();
+                renderFriendsAndRequests(); // Re-render the lists
             }
             
-            // Removes a friend from the friends list
             async function removeFriend(e) {
                 const button = e.target.closest('button');
                 if (!button) return;
-                const friendUidToRemove = button.dataset.uid; // The UID of the friend to remove
+                const friendUidToRemove = button.dataset.uid;
                 
-                // Prompt for confirmation before proceeding
-                showConfirm("Remove Friend?", "Are you sure you want to remove this friend? This action cannot be undone.", async () => {
+                showConfirm("Remove Friend?", "Are you sure you want to remove this friend?", async () => {
                     const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const friendUserRef = window.firebaseSDK.doc(db, "users", friendUidToRemove);
                     
-                    // Use a batch write to remove each other from friends lists
                     const batch = window.firebaseSDK.writeBatch(db);
+                    // Remove each other from friends lists
                     batch.update(currentUserRef, { friends: window.firebaseSDK.arrayRemove(friendUidToRemove) });
                     batch.update(friendUserRef, { friends: window.firebaseSDK.arrayRemove(user.uid) });
                     
                     await batch.commit();
-                    renderFriendsAndRequests(); // Re-render lists
+                    renderFriendsAndRequests();
                 });
             }
 
-            // Event listeners for interactions within the Friends Modal
+
+            // Event Listeners for Friends Modal
             friendsBtnDesktop.addEventListener('click', () => {
                 openModal(friendsModal);
-                renderFriendsAndRequests(); // Load and display friends/requests when modal opens
+                renderFriendsAndRequests();
             });
             
-            addFriendForm.addEventListener('submit', handleAddFriend); // Handle sending friend requests
+            addFriendForm.addEventListener('submit', handleAddFriend);
             
-            // Event delegation for accept/decline buttons within friend requests list
             friendRequestsContainer.addEventListener('click', e => {
                  if (e.target.closest('.accept-request-btn')) handleRequestAction(e, 'accept');
                  if (e.target.closest('.decline-request-btn')) handleRequestAction(e, 'decline');
             });
             
-            // Event delegation for remove friend button within friends list
             friendsListContainer.addEventListener('click', e => {
                 if (e.target.closest('.remove-friend-btn')) removeFriend(e);
             });
             
-            // Handle switching tabs within the friends modal
             friendsModal.querySelector('.form-toggle').addEventListener('click', (e) => {
                 if (e.target.matches('.toggle-btn')) {
-                    const tab = e.target.dataset.tab; // Get target tab ID (my-friends, requests, add-friend)
-                    // Update active button state
+                    const tab = e.target.dataset.tab;
                     friendsModal.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
                     e.target.classList.add('active');
-                    // Show/hide corresponding tab content
                     friendsModal.querySelectorAll('.tab-content').forEach(form => form.classList.toggle('active', form.id === `${tab}-tab`));
                 }
             });
@@ -4110,119 +3556,99 @@
             // =========================================================================
             mobileNav.addEventListener('click', (e) => {
                 const button = e.target.closest('.mobile-nav-btn');
-                if (!button) return; // Exit if click was not on a nav button
+                if (!button) return;
 
-                const section = button.dataset.section; // Get target section (daily, main, friends)
+                const section = button.dataset.section;
                 
-                // Keep track of the last selected section (excluding friends) to return to.
+                // Keep track of the last selected section that is not friends, so we can return to it.
                 if (section !== 'friends') {
                     lastSection = section;
                 }
 
-                // Update active button state
                 mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
 
-                // Handle navigation
                 if (section === 'friends') {
-                    openModal(friendsModal); // Open the friends modal
-                    renderFriendsAndRequests(); // Load data into friends modal
+                    openModal(friendsModal);
+                    renderFriendsAndRequests();
                 } else {
-                    // Show only the selected task group section on mobile
                     document.querySelectorAll('.task-group').forEach(group => {
                         group.classList.toggle('mobile-visible', group.dataset.section === section);
                     });
                 }
-                playSound('toggle'); // Sound feedback for navigation
+                playSound('toggle');
             });
 
             // Account Deletion Logic
             deleteAccountBtn.addEventListener('click', () => {
-                showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data. Are you absolutely sure?', async () => {
+                showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data.', async () => {
                     try {
-                        // For Google users, re-authentication isn't needed via password
                         const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
                         
-                        if (!isGoogleUser) { // For email/password users, require password confirmation
-                           const password = document.getElementById('reauth-password').value; // Get password from manage account form
-                           // If the user hasn't re-authenticated yet, prompt them or ensure they do
-                           if (!password) { 
-                                // Show error, or better, force re-authentication by showing re-auth form first
-                                alert("Please re-enter your password to confirm deletion."); // Simple alert for now
-                                return;
-                           }
+                        if (!isGoogleUser) {
+                           const password = document.getElementById('reauth-password').value;
                            const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
                            await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
                         }
 
-                        // Get username before deleting user doc, necessary for deleting from 'usernames' collection
+                        // Get the username before deleting the user document
                         const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
                         const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
                         const username = userDocSnap.exists() ? userDocSnap.data().username : null;
 
-                        // Perform deletions in a batch write for atomicity
+                        // Delete user-related data in a batch write
                         const batch = window.firebaseSDK.writeBatch(db);
-                        batch.delete(userDocRef); // Delete user's main document
-                        if (username) { // If username exists, delete its entry in the 'usernames' collection
+                        batch.delete(userDocRef);
+                        if (username) {
                             const usernameDocRef = window.firebaseSDK.doc(db, "usernames", username);
                             batch.delete(usernameDocRef);
                         }
-                        // Consider other collections like 'friendRequests' if they were stored per-user
 
-                        await batch.commit(); // Commit all deletions
-                        
-                        // Delete user from Firebase Authentication itself
+                        // Delete user from Firebase Authentication
                         await window.firebaseSDK.deleteUser(currentUser);
                         
-                        // Close modals and trigger logout
+                        await batch.commit();
+
                         closeModal(manageAccountModal);
-                        window.firebaseSDK.signOut(auth); // Sign out from Firebase
-                        // Reload page to ensure full cleanup and redirect to landing page
+                        // Sign out and reload page to reflect changes
+                        window.firebaseSDK.signOut(auth);
                         window.location.reload(); 
                     } catch (error) {
-                        console.error("Error deleting account:", getCoolErrorMessage(error));
-                        // Display error to user, maybe in the manage account modal
-                        const errorEl = document.getElementById('reauth-error') || document.getElementById('update-password-error'); // Try to find an error element
-                        if (errorEl) errorEl.textContent = getCoolErrorMessage(error);
-                        else alert("Error deleting account: " + getCoolErrorMessage(error));
+                        console.error("Error deleting account:", error);
+                        const errorEl = document.getElementById('update-password-error');
+                        errorEl.textContent = getCoolErrorMessage(error);
                     }
                 });
             });
 
 
-            // --- Main App Initialization Flow ---
             async function loadUserSession() {
-                await initialLoad(); // Load data from Firestore or localStorage
-                await updateUserUI(); // Update UI based on login status and user data
-                await promptForUsernameIfNeeded(); // Prompt for username if necessary
-                await updateUserUI(); // Update UI again in case username was set
-                checkDailyReset(); // Check for daily resets (e.g., new day)
-                resumeTimers(); // Resume any active timers after page load/refresh
+                await initialLoad();
+                await updateUserUI();
+                await promptForUsernameIfNeeded();
+                await updateUserUI(); // Update UI again in case username changed
+                checkDailyReset();
+                resumeTimers();
             }
             
-            // Function to run one-time setup tasks
             const initOnce = () => {
-                // Listen for system theme changes
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
-                showRandomQuote(); // Display a random quote on load
-                setInterval(checkOverdueTasks, 60 * 1000); // Check for overdue tasks every minute
+                showRandomQuote();
+                setInterval(checkOverdueTasks, 60 * 1000);
             };
 
-            initOnce(); // Run one-time setup
-            await loadUserSession(); // Load user data and initialize app
+            initOnce();
+            await loadUserSession();
 
-            // Return object with methods to manage the app lifecycle
             return {
-                isPartial: false, // Indicate the app controller is fully initialized
-                shutdown: () => { // Clean up listeners and intervals when app is closed (e.g., logout)
+                isPartial: false,
+                shutdown: () => {
                      Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-                     if (unsubscribeFromFirestore) unsubscribeFromFirestore(); // Cleanup Firestore listener
-                     if (unsubscribeFromFriends) unsubscribeFromFriends(); // Cleanup friends listener
-                     // Remove global listeners if any were added
+                     if (unsubscribeFromFriends) unsubscribeFromFriends(); // Cleanup listener
                 },
-                updateUser: async (newUser) => { // Method to handle user switching (e.g., login/logout)
+                updateUser: async (newUser) => {
                     user = newUser;
-                    await loadUserSession(); // Reload session data with the new user
+                    await loadUserSession();
                 }
             };
         }
@@ -4230,12 +3656,15 @@
         // =========================================================================
         // UTILITY/SHARED AUTH FUNCTIONS
         // =========================================================================
-        // Provides user-friendly error messages for Firebase auth errors.
         function getCoolErrorMessage(error) {
             const defaultMessage = "An unexpected vortex appeared! Please try again.";
             if (!error) return defaultMessage;
-            
-            // Specific Firebase Auth error codes
+            if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
+                return "Permission Denied! Check your Firestore Security Rules.";
+            }
+            if (error.code === 'permission-denied') {
+                 return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
+            }
             switch (error.code) {
                 case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
                 case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
@@ -4248,156 +3677,172 @@
                 case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
                 case 'auth/too-many-requests': return "You have made too many sign-in attempts. Please wait a bit before trying again.";
                 case 'auth/invalid-credential': return "Invalid login credentials. Please check your username and password.";
-                case 'auth/network-request-failed': return "Network error. Please check your internet connection.";
-                // Firestore specific errors
-                case 'permission-denied': return "Permission Denied! Please check your Firestore Security Rules.";
-                // Generic errors
                 default:
-                    console.error("Firebase/App Error:", error); // Log original error for debugging
-                    // Check for custom error messages or generic fallback
-                    return error.message || defaultMessage;
+                    console.error("Firebase/App Error:", error);
+                    return "An unexpected error occurred. Check the console for more details.";
+            }
+        }
+        
+        // BUGFIX: This function was incomplete, causing a syntax error
+        function setupAuthForms(container, onAuthSuccess) {
+            // Clear previous content and clone the template
+            container.innerHTML = '';
+            const template = document.getElementById('account-modal-content');
+            const content = template.content.cloneNode(true);
+            container.appendChild(content);
+
+            // Get form elements
+            const toggleBtns = container.querySelectorAll('.toggle-btn');
+            const signupForm = container.querySelector('[data-form="signup"]');
+            const loginForm = container.querySelector('[data-form="login"]');
+            const googleBtnContainer = container.querySelector('.google-signin-btn-container');
+
+            // Create and append Google Sign-In button
+            const googleBtn = document.createElement('button');
+            googleBtn.type = 'button'; // FIX: Prevents form submission
+            googleBtn.className = 'google-btn-custom';
+            googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
+            if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
+            
+            // Toggle between login and signup forms
+            toggleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    toggleBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const showSignup = btn.dataset.tab === 'signup';
+                    signupForm.style.display = showSignup ? 'block' : 'none';
+                    loginForm.style.display = showSignup ? 'none' : 'block';
+                });
+            });
+
+            // Handle sign-up
+            signupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = signupForm.querySelector('.signup-username').value.trim().toLowerCase();
+                const email = signupForm.querySelector('.signup-email').value;
+                const password = signupForm.querySelector('.signup-password').value;
+                const errorEl = signupForm.querySelector('.signup-error');
+                errorEl.textContent = '';
+
+                try {
+
+                    // Check if username is taken
+                    const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
+                    const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+                    if (usernameSnap.exists()) {
+                        throw new Error('This username is already taken.');
+                    }
+
+                    // Create user
+                    const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    // Save username in Firestore
+                    const batch = window.firebaseSDK.writeBatch(db);
+                    batch.set(usernamesRef, { userId: user.uid });
+                    const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
+                    batch.set(userDocRef, { username, email, friends: [], friendRequests: [] });
+                    await batch.commit();
+
+                    onAuthSuccess();
+                } catch (error) {
+                    errorEl.textContent = error.message || getCoolErrorMessage(error);
+                }
+            });
+
+            // Handle login
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const emailOrUsername = loginForm.querySelector('.login-email').value;
+                const password = loginForm.querySelector('.login-password').value;
+                const errorEl = loginForm.querySelector('.login-error');
+                errorEl.textContent = '';
+                
+                try {
+                    let emailToLogin = emailOrUsername;
+                    // Check if it's an email or username
+                    if (!emailOrUsername.includes('@')) {
+                        const usernamesRef = window.firebaseSDK.doc(db, "usernames", emailOrUsername.toLowerCase());
+                        const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
+                        if (usernameSnap.exists()) {
+                            const targetUserId = usernameSnap.data().userId;
+                            const userDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
+                            const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
+                            if(userDocSnap.exists()) {
+                               emailToLogin = userDocSnap.data().email;
+                            } else { throw new Error("User data not found for this username."); }
+                        } else { throw { code: 'auth/user-not-found' }; }
+                    }
+                    await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
+                    onAuthSuccess();
+                } catch (error) {
+                    errorEl.textContent = getCoolErrorMessage(error);
+                }
+            });
+
+            // Handle Google Sign-In
+            if(googleBtn) {
+                googleBtn.addEventListener('click', async () => {
+                    const provider = new window.firebaseSDK.GoogleAuthProvider();
+                    const googleLoader = document.getElementById('google-signin-loader-modal');
+                    try {
+                        openModal(googleLoader);
+                        await window.firebaseSDK.signInWithPopup(auth, provider);
+                        // onAuthStateChanged will handle the rest
+                        onAuthSuccess();
+                    } catch (error) {
+                        console.error("Google Sign-In Error: ", error);
+                        const errorEl = loginForm.querySelector('.login-error');
+                        errorEl.textContent = getCoolErrorMessage(error);
+                    } finally {
+                        closeModal(googleLoader);
+                    }
+                });
             }
         }
 
-        // --- Merge Guest Data Logic ---
-        // This function is called when a logged-in user might have previous guest data.
+        // BUGFIX: This function was incomplete, causing a syntax error
         function mergeGuestDataWithCloud(cloudData = {}) {
             const guestDataString = localStorage.getItem('anonymousUserData');
-            if (!guestDataString) return cloudData; // No guest data to merge
-
+            if (!guestDataString) return cloudData;
             try {
                 const guestData = JSON.parse(guestDataString);
-                // Deep clone cloud data to avoid modifying it directly if it's a reference
-                const mergedData = JSON.parse(JSON.stringify(cloudData)); 
-
-                // Helper to merge task lists, prioritizing existing tasks and adding new ones
+                const mergedData = JSON.parse(JSON.stringify(cloudData));
                 const mergeTasks = (cloudTasks = [], guestTasks = []) => {
-                    const existingTexts = new Set(cloudTasks.map(t => t.text)); // Use text as a proxy for task uniqueness for simplicity
-                    const newTasks = guestTasks.filter(t => !existingTexts.has(t.text)); // Add tasks from guest that don't exist in cloud
-                    return [...cloudTasks, ...newTasks]; // Combine lists
+                    const existingTexts = new Set(cloudTasks.map(t => t.text));
+                    const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
+                    return [...cloudTasks, ...newTasks];
                 };
-                
                 mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
                 mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
-
-                // Merge general task groups
                 if (guestData.generalTaskGroups) {
-                    if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = []; // Initialize if cloud has no groups
+                    if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
                     guestData.generalTaskGroups.forEach(guestGroup => {
-                        // Try to find an existing group by name in cloud data
                         const cloudGroup = mergedData.generalTaskGroups.find(cg => cg.name === guestGroup.name);
-                        if (cloudGroup) { // If group exists, merge its tasks
+                        if (cloudGroup) {
                             cloudGroup.tasks = mergeTasks(cloudGroup.tasks, guestGroup.tasks);
-                        } else { // Otherwise, add the guest group as a new group
+                        } else {
                             mergedData.generalTaskGroups.push(guestGroup);
                         }
                     });
                 }
-
-                // Merge player data (XP and Level)
                 if (guestData.playerData) {
-                    if (!mergedData.playerData) { // If cloud has no player data, use guest data
+                    if (!mergedData.playerData) {
                         mergedData.playerData = guestData.playerData;
                     } else {
-                        // Add XP from guest to cloud XP
-                        mergedData.playerData.xp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
-                        // Take the higher level between cloud and guest
-                        mergedData.playerData.level = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
+                        // A simple merge: add XP, take the higher level.
+                        const newXp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
+                        const newLevel = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
+                        mergedData.playerData.xp = newXp;
+                        mergedData.playerData.level = newLevel;
                     }
                 }
-                
-                // Merge settings, prioritizing cloud settings over guest settings if both exist
-                mergedData.settings = { ...guestData.settings, ...cloudData.settings }; 
-                
                 return mergedData;
             } catch (error) {
                 console.error("Failed to merge guest data:", error);
-                return cloudData; // Return original cloud data if merging fails
+                return cloudData; // Return original data on error
             }
         }
-
-        // --- Firebase Auth State Observer ---
-        // This is the main entry point for managing user sessions and initializing the app.
-        window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
-            // Clean up any existing listeners to prevent memory leaks
-            if (unsubscribeFromFirestore) {
-                unsubscribeFromFirestore(); 
-                unsubscribeFromFirestore = null;
-            }
-            if (unsubscribeFromFriends) {
-                unsubscribeFromFriends();
-                unsubscribeFromFriends = null;
-            }
-            
-            currentUser = user; // Update the global currentUser variable
-            
-            if (user) { // User is logged in
-                // Check for and merge guest data if present
-                const guestDataString = localStorage.getItem('anonymousUserData');
-                if (guestDataString) {
-                    try {
-                        const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                        const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-                        const cloudData = docSnap.exists() && docSnap.data().appData ? docSnap.data().appData : {};
-                        const mergedData = mergeGuestDataWithCloud(cloudData);
-                        // Save the merged data back to Firestore
-                        await window.firebaseSDK.setDoc(userDocRef, { appData: mergedData }, { merge: true });
-                        localStorage.removeItem('anonymousUserData'); // Clear guest data
-                        sessionStorage.removeItem('isGuest'); // Clear guest session flag
-                    } catch (mergeError) {
-                        console.error("Failed to merge guest data on login:", mergeError);
-                    }
-                }
-
-                // Initialize the app controller if it hasn't been already
-                if (!appController) {
-                    appController = await initializeAppLogic(user); 
-                } else {
-                    // If appController already exists (e.g., page refresh), update it with new user info
-                    await appController.updateUser(user);
-                }
-                
-                // Transition from landing/loading to the main app view
-                landingPage.style.display = 'none';
-                appWrapper.style.display = 'block';
-                loaderOverlay.style.display = 'none';
-
-            } else { // User is logged out
-                // Check if they are continuing as a guest
-                if (sessionStorage.getItem('isGuest')) {
-                    if (!appController) {
-                        // Initialize app logic for guest mode
-                        appController = await initializeAppLogic(null);
-                    }
-                    // Transition to app view for guest
-                    landingPage.style.display = 'none';
-                    appWrapper.style.display = 'block';
-                    loaderOverlay.style.display = 'none';
-                } else {
-                    // User is fully logged out, show landing page
-                    loaderOverlay.style.display = 'none';
-                    landingPage.style.display = 'flex';
-                    appWrapper.style.display = 'none';
-                    // Shut down the app controller to stop listeners and clear state
-                    if(appController) appController.shutdown();
-                    appController = null;
-                }
-            }
-        });
-
-        // --- Initialize Firebase App ---
-        try {
-            app = window.firebaseSDK.initializeApp(firebaseConfig);
-            auth = window.firebaseSDK.getAuth(app);
-            db = window.firebaseSDK.getFirestore(app);
-            // The onAuthStateChanged listener will be triggered after Firebase is initialized.
-        } catch (err) {
-            console.error("Firebase initialization failed:", err);
-            // Display error message if Firebase fails to initialize
-            loaderOverlay.innerHTML = `<p style="color: var(--text);">Error: Could not connect to backend. Please check your Firebase configuration or internet connection.</p>`;
-            loaderOverlay.style.display = 'flex'; // Ensure loader is visible to show error
-        }
-
     </script>
 </body>
 </html>
