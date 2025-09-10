@@ -1,7 +1,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Procrasti-Nope</title>
     <link rel="icon" type="image/png" href="src/images/icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,7 +42,8 @@
             updateDoc,
             arrayUnion,
             arrayRemove,
-            deleteDoc
+            deleteDoc,
+            documentId // <-- FIX: Import the documentId function
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase functions to the global scope to be used in the main script
@@ -74,7 +75,8 @@
             updateDoc,
             arrayUnion,
             arrayRemove,
-            deleteDoc
+            deleteDoc,
+            documentId // <-- FIX: Expose the documentId function
         };
     </script>
     
@@ -2537,12 +2539,7 @@
             const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
             const deleteAccountBtn = document.getElementById('delete-account-btn');
 
-            // --- START OF FIX ---
-            // This function was rewritten to fix two critical bugs:
-            // 1. A TypeError that crashed the login flow for new Google users, preventing redirection to the app.
-            // 2. A related issue that could sometimes incorrectly prompt existing users to create a username.
-            // The fix involves safely checking for the user's data document and username using optional chaining (`?.`),
-            // which prevents the error and ensures the login process completes successfully.
+
             async function promptForUsernameIfNeeded() {
                 if (!user) return; // Not for guests
 
@@ -2614,7 +2611,6 @@
                     });
                 }
             }
-            // --- END OF FIX ---
             
             // =========================================================================
             // DATA PERSISTENCE & OPTIMIZATION
@@ -3505,7 +3501,7 @@
                 if (!user || !usernameToFind) return;
 
                 const currentUserDoc = await window.firebaseSDK.getDoc(window.firebaseSDK.doc(db, "users", user.uid));
-                if (usernameToFind === currentUserDoc.data().username) {
+                if (currentUserDoc.exists() && usernameToFind === currentUserDoc.data().username) {
                     friendStatusMessage.textContent = "You can't add yourself!";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
                     return;
