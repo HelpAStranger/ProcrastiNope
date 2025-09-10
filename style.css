@@ -1089,7 +1089,7 @@ SHARED QUESTS
     background-color: rgba(0,0,0,0.05);
 }
 .dark-mode .share-friend-item:hover {
-    background-color: rgba(255,255,255,0.05);
+    background-color: rgba(255,255,255,0.04); /* Adjusted for dark mode */
 }
 .share-friend-item.disabled {
     opacity: 0.5;
@@ -1305,9 +1305,7 @@ TASK INTERACTIONS (REFACTORED)
         filter: none !important;
     }
 
-    /* REMOVED: Hover-based visibility for task items on desktop.
-       Now, task actions on desktop will also be toggled by the 'actions-visible' class via JS click. */
-    /*
+    /* Re-enabled: Hover-based visibility for task items on desktop. */
     .task-item:hover .task-buttons-wrapper:not(.timer-active):not(.daily-completed) {
         opacity: 1;
         pointer-events: auto;
@@ -1318,7 +1316,6 @@ TASK INTERACTIONS (REFACTORED)
         transition: filter var(--transition-speed) ease;
         pointer-events: none;
     }
-    */
 }
 
 

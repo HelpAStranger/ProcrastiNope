@@ -1058,7 +1058,10 @@ async function initializeAppLogic(initialUser) {
                 }
             } else {
                 // If not a button click, toggle the actions menu for the task item
-                toggleTaskActions(taskItem);
+                // Only toggle actions on mobile to allow drag-and-drop on desktop.
+                if (window.innerWidth <= 1023) { 
+                    toggleTaskActions(taskItem);
+                }
             }
         } 
     });
