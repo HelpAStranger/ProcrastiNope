@@ -950,27 +950,7 @@ async function initializeAppLogic(initialUser) {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
-        // Helper function for group header specific mobile logic
-        function handleGroupHeaderMobileActions(element) {
-             if (window.innerWidth > 1023) return; // Only for mobile
-             clearTimeout(actionsTimeoutId);
-             if (activeMobileActionsItem && activeMobileActionsItem !== element) {
-                 activeMobileActionsItem.classList.remove('actions-visible');
-             }
-             const wasVisible = element.classList.contains('actions-visible');
-             element.classList.toggle('actions-visible');
-             if (!wasVisible) {
-                 activeMobileActionsItem = element;
-                 actionsTimeoutId = setTimeout(() => {
-                     if(element.classList.contains('actions-visible')) {
-                         element.classList.remove('actions-visible');
-                         activeMobileActionsItem = null;
-                     }
-                 }, 3000);
-             } else {
-                 activeMobileActionsItem = null;
-             }
-        }
+        // Removed handleGroupHeaderMobileActions as it's no longer needed
         
         if (groupHeader) { 
             const groupId = groupHeader.parentElement.dataset.groupId;
@@ -979,15 +959,23 @@ async function initializeAppLogic(initialUser) {
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
-            
-            // On desktop, group header actions are always visible.
-            // On mobile, clicking the header (not a button) should toggle the actions.
-            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !e.target.closest('button'));
+            const isEditClick = e.target.closest('.edit-group-btn'); // Added for consistency
 
-            if (shouldExpand) {
+            if (isExpandClick) {
                 if (g) {
                     g.isExpanded = !g.isExpanded; 
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
+                }
+                // If actions were visible, keep them visible after expand/collapse
+                // and reset the timeout.
+                if (groupHeader.classList.contains('actions-visible')) {
+                    clearTimeout(actionsTimeoutId); // Reset timeout
+                    actionsTimeoutId = setTimeout(() => {
+                        if(groupHeader.classList.contains('actions-visible')) {
+                            groupHeader.classList.remove('actions-visible');
+                            activeMobileActionsItem = null;
+                        }
+                    }, 3000);
                 }
                 return;
             }
@@ -1004,10 +992,15 @@ async function initializeAppLogic(initialUser) {
                 deleteGroup(groupId);
                 return;
             }
+            if (isEditClick) {
+                // If there's an edit group modal, open it here.
+                // For now, just let the click fall through to toggleTaskActions.
+            }
             
-            // This part is for mobile group header actions
-            if (window.innerWidth <= 1023) {
-                handleGroupHeaderMobileActions(groupHeader);
+            // If the click was not on any specific button (expand, add, delete, edit),
+            // toggle the actions overlay.
+            if (!e.target.closest('button')) {
+                toggleTaskActions(groupHeader);
             }
             return; 
         }
@@ -1032,7 +1025,7 @@ async function initializeAppLogic(initialUser) {
             }
             
             // If the click is on a button, perform the button action.
-            // Otherwise, toggle the task actions menu (only on mobile).
+            // Otherwise, toggle the task actions menu.
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.complete-btn')) completeTask(id);
@@ -1057,10 +1050,8 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
-                // Only toggle actions on mobile devices
-                if (window.innerWidth <= 1023) {
-                    toggleTaskActions(taskItem);
-                }
+                // If not a button click and not completed, toggle the actions
+                toggleTaskActions(taskItem);
             }
         } 
     });

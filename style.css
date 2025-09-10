@@ -1286,36 +1286,10 @@ TASK INTERACTIONS (REFACTORED)
 
 /* --- Desktop-Only Layout Adjustments --- */
 @media (min-width: 1024px) {
-    /* On desktop, group header actions are always visible and inline */
-    .main-quest-group-header .group-actions {
-        opacity: 1;
-        pointer-events: auto;
-        position: static;
-        width: auto;
-        height: auto;
-        background-color: transparent;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-        z-index: auto;
-        filter: none !important; /* Remove blur if it was applied by .actions-visible */
-    }
-
-    /* Ensure group title container is not blurred on desktop hover */
-    .main-quest-group-header:hover .group-title-container {
-        filter: none !important;
-    }
-
-    /* Re-introduce hover-based visibility for task items on desktop. */
-    .task-item:hover .task-buttons-wrapper:not(.timer-active):not(.daily-completed) {
-        opacity: 1;
-        pointer-events: auto;
-    }
-    .task-item:hover .task-content:not(.timer-active):not(.daily-completed),
-    .task-item:hover .complete-btn:not(.timer-active):not(.daily-completed) {
-        filter: blur(3px);
-        transition: filter var(--transition-speed) ease;
-        pointer-events: none;
-    }
+    /* REMOVED: Hover-based visibility for task items on desktop.
+       Now relies on the .actions-visible class triggered by click. */
+    /* REMOVED: Override for group actions to be always visible and static.
+       Now relies on the .actions-visible class triggered by click. */
 }
 
 
