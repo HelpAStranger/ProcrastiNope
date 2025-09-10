@@ -368,7 +368,7 @@ async function initializeAppLogic(initialUser) {
         if (!user) return;
 
         const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getGoc(userDocRef);
+        const docSnap = await getDoc(userDocRef);
         const existingData = docSnap.exists() ? docSnap.data().appData : null;
         
         // Check if username is missing or if the user document itself doesn't exist
@@ -909,16 +909,50 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
+    /**
+     * Toggles the visibility of action buttons for a given element (task item or group header).
+     * Manages a global `activeMobileActionsItem` to ensure only one set of actions is visible at a time.
+     * Includes a timeout to automatically hide actions if no further interaction.
+     * @param {HTMLElement} element The DOM element (task-item or main-quest-group-header) whose actions to toggle.
+     */
+    function toggleTaskActions(element) {
+        // If the element has an active timer, its actions are always visible and laid out differently.
+        // Do not toggle the overlay in this case.
+        if (element.classList.contains('timer-active')) {
+            return;
+        }
+
+        clearTimeout(actionsTimeoutId); // Clear any existing timeout for any element
+
+        // If another element's actions are visible, hide them
+        if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+            activeMobileActionsItem.classList.remove('actions-visible');
+        }
+        
+        const wasVisible = element.classList.contains('actions-visible');
+        element.classList.toggle('actions-visible');
+
+        if (!wasVisible) { // If it just became visible
+            activeMobileActionsItem = element;
+            // Set a timeout to hide it after 3 seconds
+            actionsTimeoutId = setTimeout(() => {
+                if(element.classList.contains('actions-visible')) {
+                    element.classList.remove('actions-visible');
+                    activeMobileActionsItem = null;
+                }
+            }, 3000);
+        } else { // If it just became hidden
+            activeMobileActionsItem = null;
+        }
+    }
+
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
-        function handleMobileActions(element) {
-             if (window.innerWidth > 1023) return;
-             if (e.target.closest('button')) { 
-                 clearTimeout(actionsTimeoutId);
-                 return;
-             }
+        // Helper function for group header specific mobile logic
+        function handleGroupHeaderMobileActions(element) {
+             if (window.innerWidth > 1023) return; // Only for mobile
              clearTimeout(actionsTimeoutId);
              if (activeMobileActionsItem && activeMobileActionsItem !== element) {
                  activeMobileActionsItem.classList.remove('actions-visible');
@@ -946,7 +980,9 @@ async function initializeAppLogic(initialUser) {
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
             
-            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
+            // On desktop, group header actions are always visible.
+            // On mobile, clicking the header (not a button) should toggle the actions.
+            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !e.target.closest('button'));
 
             if (shouldExpand) {
                 if (g) {
@@ -969,8 +1005,9 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
+            // This part is for mobile group header actions
             if (window.innerWidth <= 1023) {
-                handleMobileActions(groupHeader);
+                handleGroupHeaderMobileActions(groupHeader);
             }
             return; 
         }
@@ -987,16 +1024,15 @@ async function initializeAppLogic(initialUser) {
                 return isOwner ? task.ownerCompleted : task.friendCompleted;
             }
             
+            // If the task is completed (or my part of a shared task is completed),
+            // a click should uncomplete it, not open the actions menu.
             if (isMyPartCompleted()) {
                 uncompleteDailyTask(id);
                 return;
             }
             
-            // Only handle mobile actions if on a mobile screen size
-            if (window.innerWidth <= 1023) {
-                handleMobileActions(taskItem);
-            }
-
+            // If the click is on a button, perform the button action.
+            // Otherwise, toggle the task actions menu.
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.complete-btn')) completeTask(id);
@@ -1020,6 +1056,9 @@ async function initializeAppLogic(initialUser) {
                         focusOnDesktop(editTaskInput);
                     }
                 }
+            } else {
+                // If not a button click, toggle the actions menu for the task item
+                toggleTaskActions(taskItem);
             }
         } 
     });

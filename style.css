@@ -1286,10 +1286,10 @@ TASK INTERACTIONS (REFACTORED)
 
 /* --- Desktop-Only Layout Adjustments --- */
 @media (min-width: 1024px) {
-    /* On desktop, change group actions to be inline instead of a full overlay */
+    /* On desktop, group header actions are always visible and inline */
     .main-quest-group-header .group-actions {
-        opacity: 1; /* Make group actions always visible on desktop */
-        pointer-events: auto; /* Make group actions always clickable on desktop */
+        opacity: 1;
+        pointer-events: auto;
         position: static;
         width: auto;
         height: auto;
@@ -1305,18 +1305,20 @@ TASK INTERACTIONS (REFACTORED)
         filter: none !important;
     }
 
-    /* NEW: Show task buttons wrapper on hover for desktop */
+    /* REMOVED: Hover-based visibility for task items on desktop.
+       Now, task actions on desktop will also be toggled by the 'actions-visible' class via JS click. */
+    /*
     .task-item:hover .task-buttons-wrapper:not(.timer-active):not(.daily-completed) {
         opacity: 1;
         pointer-events: auto;
     }
-    /* NEW: Blur task content on hover for desktop, unless timer is active or task is completed */
     .task-item:hover .task-content:not(.timer-active):not(.daily-completed),
     .task-item:hover .complete-btn:not(.timer-active):not(.daily-completed) {
         filter: blur(3px);
         transition: filter var(--transition-speed) ease;
         pointer-events: none;
     }
+    */
 }
 
 
