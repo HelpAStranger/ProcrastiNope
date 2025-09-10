@@ -1381,6 +1381,12 @@ async function initializeAppLogic(initialUser) {
         button.classList.add('active');
 
         if (section === 'friends') {
+            // --- FIX START ---
+            // Explicitly hide other sections to prevent blank page on close
+            document.querySelectorAll('.task-group').forEach(group => {
+                group.classList.remove('mobile-visible');
+            });
+            // --- FIX END ---
             openModal(friendsModal);
             renderFriendsAndRequests();
         } else {
@@ -1638,4 +1644,3 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         return cloudData;
     }
 }
-
