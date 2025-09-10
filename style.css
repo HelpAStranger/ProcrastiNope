@@ -905,8 +905,7 @@ body.is-dragging .main-quest-group {
     animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) infinite both;
 }
 
-/* Adjust .task-item.daily-completed to be more specific to non-shared daily tasks */
-.task-item.daily-completed:not(.shared-quest) {
+.task-item.daily-completed {
     max-height: 50px;
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
@@ -914,29 +913,13 @@ body.is-dragging .main-quest-group {
     filter: grayscale(0.5);
     cursor: pointer; /* To indicate it's clickable for undo */
 }
-.task-item.daily-completed:not(.shared-quest) .task-text {
+.task-item.daily-completed .task-text {
     text-decoration: line-through;
 }
-.task-item.daily-completed:not(.shared-quest) .task-buttons-wrapper {
+
+.task-item.daily-completed .task-buttons-wrapper {
     display: none;
 }
-
-/* NEW: Styles for when *my part* of a shared quest is completed */
-.task-item.my-part-completed {
-    max-height: 50px; /* Collapse slightly */
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    opacity: 0.8; /* Slightly less opaque than active, but more than fully completed daily */
-    filter: grayscale(0.3);
-    cursor: pointer; /* To indicate it's clickable for undo */
-}
-.task-item.my-part-completed .task-text {
-    text-decoration: line-through;
-}
-.task-item.my-part-completed .task-buttons-wrapper {
-    display: none; /* Hide action buttons */
-}
-
 
 /* Hide edit/delete when timer is active on any screen size */
 .task-item.timer-active .task-actions {
