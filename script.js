@@ -829,25 +829,41 @@ async function initializeAppLogic(initialUser) {
             const groupId = groupHeader.parentElement.dataset.groupId;
             const g = generalTaskGroups.find(g => g.id === groupId);
 
-            if (window.innerWidth <= 1023 && e.target.closest('.expand-icon')) {
-                if (g) g.isExpanded = !g.isExpanded; 
-                saveState(); 
-                renderAllLists();
+            const isExpandClick = e.target.closest('.expand-icon');
+            const isAddClick = e.target.closest('.add-task-to-group-btn');
+            const isDeleteClick = e.target.closest('.delete-group-btn');
+            
+            // On mobile, only the icon expands. On desktop, the whole header does.
+            const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
+
+            if (shouldExpand) {
+                if (g) {
+                    g.isExpanded = !g.isExpanded; // 1. Update the state object
+                    saveState();                  // 2. Save the state
+                    // 3. Animate on the DOM directly instead of re-rendering
+                    groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
+                }
+                return;
+            }
+
+            // --- Logic for other buttons ---
+            if (isAddClick) {
+                currentListToAdd = groupId; 
+                weeklyGoalContainer.style.display = 'none'; 
+                addTaskModalTitle.textContent = `Add to "${g.name}"`; 
+                openModal(addTaskModal); 
+                focusOnDesktop(newTaskInput);
+                return;
+            } 
+            if (isDeleteClick) {
+                deleteGroup(groupId);
                 return;
             }
             
-            const isButton = e.target.closest('button');
-            if (isButton) {
-                if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); focusOnDesktop(newTaskInput); } 
-                else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
-            } else {
-                 if (window.innerWidth <= 1023) {
-                     handleMobileActions(groupHeader);
-                 } else {
-                    if (g) g.isExpanded = !g.isExpanded; 
-                    saveState(); 
-                    renderAllLists();
-                 }
+            // --- Logic for mobile actions overlay ---
+            // This runs on mobile if no button was clicked
+            if (window.innerWidth <= 1023) {
+                handleMobileActions(groupHeader);
             }
             return; 
         }
@@ -1644,3 +1660,4 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         return cloudData;
     }
 }
+
