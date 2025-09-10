@@ -2421,7 +2421,8 @@
         
         document.getElementById('landing-guest-btn').addEventListener('click', async () => {
             sessionStorage.setItem('isGuest', 'true');
-            loaderOverlay.style.display = 'flex';
+            // FIX: Ensure loader overlay is displayed immediately
+            loaderOverlay.style.display = 'flex'; 
             if (!appController) {
                 appController = await initializeAppLogic(null); // Initialize with null user for guest
             }
@@ -2461,8 +2462,19 @@
             }
         }
         
-        // --- Main Application Logic ---
-        // Initialize appController after Firebase is ready and auth state is checked.
+        // =========================================================================
+        // GLOBALLY ACCESSIBLE VARIABLES AND FUNCTIONS FOR APP CONTROLLER
+        // =========================================================================
+
+        // These are variables and functions that will be used by the appController
+        // and need to be accessible outside its scope when initialized.
+        let lastSection = 'daily'; // To store the last viewed mobile section
+        let activeTimers = {}; // Stores active timer intervals for tasks
+        let confirmCallback = null; // Stores the callback for the confirmation modal
+        let lastLoggedInUserEmail = null; // Store email for re-auth purposes
+
+        // --- Main Application Logic Controller ---
+        // This function initializes the app state, UI, and event listeners.
         async function initializeAppLogic(initialUser) {
 
             // FIX: Helper function to only focus on non-touch devices to prevent mobile keyboard auto-opening
@@ -2480,7 +2492,6 @@
             let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
             let playerData = { level: 1, xp: 0 };
             let currentListToAdd = null, currentEditingTaskId = null;
-            const activeTimers = {};
             
             // Get DOM elements needed by app logic
             const dailyTaskListContainer = document.getElementById('daily-task-list');
@@ -2537,12 +2548,12 @@
             const userDisplay = document.getElementById('user-display');
             const accountModal = document.getElementById('account-modal');
             const manageAccountModal = document.getElementById('manage-account-modal');
-            // confirmModal elements are declared globally
             const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
-            let confirmCallback = null;
-            
+            const noDailyTasksMessageElement = document.getElementById('no-daily-tasks-message');
+            const noGeneralTasksMessageElement = document.getElementById('no-general-tasks-message');
+
             // IMPORT: Friends feature DOM elements
             const friendsBtnDesktop = document.getElementById('friends-btn-desktop');
             const friendsModal = document.getElementById('friends-modal');
@@ -2743,7 +2754,8 @@
                         }
                     }, (error) => {
                         console.error("Error listening to Firestore:", getCoolErrorMessage(error));
-                        if (isFirstLoad) {
+                        // FIX: Ensure the promise resolves even if there's a Firestore listener error
+                        if (isFirstLoad) { 
                              isFirstLoad = false;
                              resolve(); // Resolve even on error to allow app to load
                         }
@@ -2872,9 +2884,22 @@
                 return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
             }
             
-            const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
-            const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
-            const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
+            const renderDailyTasks = () => { 
+                dailyTaskListContainer.innerHTML = ''; 
+                // FIX: Display message only if tasks list is empty AND the user is not actively typing in the add task input
+                noDailyTasksMessageElement.style.display = (dailyTasks.length === 0 && !document.getElementById('new-task-input')?.matches(':focus')) ? 'block' : 'none';
+                dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); 
+            };
+            const renderStandaloneTasks = () => { 
+                standaloneTaskListContainer.innerHTML = ''; 
+                standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
+            };
+            const renderGeneralTasks = () => { 
+                generalTaskListContainer.innerHTML = ''; 
+                generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); 
+                // FIX: Display message only if both standalone and grouped task lists are empty AND the user is not actively typing
+                noGeneralTasksMessageElement.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0 && !document.getElementById('add-standalone-task-btn')?.matches(':focus') && !document.getElementById('add-group-btn')?.matches(':focus')) ? 'block' : 'none';
+            };
             const createGroupElement = (group) => {
                 const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
                 el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
@@ -3501,7 +3526,7 @@
             importFileInput.addEventListener('change', (e) => { 
                 const f = e.target.files[0]; 
                 if(!f) return; 
-                showConfirm("Import Data?", `Importing will overwrite your current ${user ? 'guest' : 'cloud'} progress. Are you sure?`, () => { 
+                showConfirm("Import Data?", `Importing will overwrite your current ${user ? 'cloud' : 'guest'} progress. Are you sure?`, () => { 
                     const r = new FileReader(); 
                     r.onload = (e) => { 
                         try {
@@ -3517,6 +3542,9 @@
                                     saveData({ ...importedData, ...{ appData: importedData } }); // Structure for Firebase save
                                 }
                                 // Reload UI to reflect imported data
+                                // FIX: Use location.reload() carefully, as it can be disruptive.
+                                // A full re-render of the component tree would be better if possible.
+                                // For now, reload is the simplest way to ensure all parts of the app pick up changes.
                                 location.reload(); 
                             } else {
                                 alert("Invalid data file. Please ensure it's a valid Procrasti-Nope backup.");
@@ -3581,6 +3609,7 @@
                     errorEl.textContent = 'Error: No user logged in.';
                     return;
                 }
+                lastLoggedInUserEmail = currentUser.email; // Store email for potential future use
 
                 const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
 
@@ -3614,7 +3643,11 @@
 
                 try {
                     // Re-authenticate before updating sensitive info
-                    const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
+                    // Use stored email if currentUser is null (e.g., after page refresh), or current user's email
+                    const emailToVerify = lastLoggedInUserEmail || (currentUser && currentUser.email);
+                    if (!emailToVerify) throw new Error("Cannot verify user. Please re-login.");
+
+                    const credential = window.firebaseSDK.EmailAuthProvider.credential(emailToVerify, password);
                     await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
 
                     // Update email in Firebase Auth
@@ -4141,18 +4174,16 @@
                 showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data. Are you absolutely sure?', async () => {
                     try {
                         // For Google users, re-authentication isn't needed via password
-                        const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
+                        const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
                         
                         if (!isGoogleUser) { // For email/password users, require password confirmation
-                           const password = document.getElementById('reauth-password').value; // Get password from manage account form
-                           // If the user hasn't re-authenticated yet, prompt them or ensure they do
-                           if (!password) { 
-                                // Show error, or better, force re-authentication by showing re-auth form first
-                                alert("Please re-enter your password to confirm deletion."); // Simple alert for now
-                                return;
-                           }
-                           const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
-                           await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
+                           // FIX: Ensure re-authentication happens before attempting deletion
+                           const reauthContainer = manageAccountModal.querySelector('#reauth-container');
+                           const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
+                           reauthContainer.style.display = 'block';
+                           manageFormsContainer.style.display = 'none';
+                           openModal(manageAccountModal); // Re-open if it was closed
+                           return; // Stop here, user needs to re-authenticate first
                         }
 
                         // Get username before deleting user doc, necessary for deleting from 'usernames' collection
@@ -4192,12 +4223,24 @@
 
             // --- Main App Initialization Flow ---
             async function loadUserSession() {
-                await initialLoad(); // Load data from Firestore or localStorage
-                await updateUserUI(); // Update UI based on login status and user data
-                await promptForUsernameIfNeeded(); // Prompt for username if necessary
-                await updateUserUI(); // Update UI again in case username was set
-                checkDailyReset(); // Check for daily resets (e.g., new day)
-                resumeTimers(); // Resume any active timers after page load/refresh
+                // FIX: Ensure loader overlay remains visible while loading
+                loaderOverlay.style.display = 'flex'; 
+                try {
+                    await initialLoad(); // Load data from Firestore or localStorage
+                    await updateUserUI(); // Update UI based on login status and user data
+                    await promptForUsernameIfNeeded(); // Prompt for username if necessary
+                    await updateUserUI(); // Update UI again in case username was set
+                    checkDailyReset(); // Check for daily resets (e.g., new day)
+                    resumeTimers(); // Resume any active timers after page load/refresh
+                } catch (error) {
+                    console.error("Error during user session loading:", error);
+                    // Display a user-friendly error message if loading fails
+                    loaderOverlay.innerHTML = `<p style="color: var(--text);">Oops! Something went wrong while loading your data. Please try refreshing the page.</p>`;
+                } finally {
+                    // FIX: Ensure loader overlay is hidden once loading is complete (or has failed)
+                    loaderOverlay.style.display = 'none'; 
+                    appWrapper.style.display = 'block'; // Show the app wrapper
+                }
             }
             
             // Function to run one-time setup tasks
@@ -4219,6 +4262,7 @@
                      if (unsubscribeFromFirestore) unsubscribeFromFirestore(); // Cleanup Firestore listener
                      if (unsubscribeFromFriends) unsubscribeFromFriends(); // Cleanup friends listener
                      // Remove global listeners if any were added
+                     window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', applySettings); // Remove listener
                 },
                 updateUser: async (newUser) => { // Method to handle user switching (e.g., login/logout)
                     user = newUser;
