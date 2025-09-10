@@ -591,6 +591,7 @@ async function initializeAppLogic(initialUser) {
                 if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
                 else if (!task.completedToday) task.streak = 0;
                 task.completedToday = false;
+                delete task.timerFinished; // Clear timer finished state on reset
             });
             localStorage.setItem('lastVisitDate', today);
             saveState();
@@ -737,7 +738,20 @@ async function initializeAppLogic(initialUser) {
         if (allTasksDone) createFullScreenConfetti(true);
         else if (allDailiesDone) createFullScreenConfetti(false);
     };
-    const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
+    const uncompleteDailyTask = (id) => {
+        const task = dailyTasks.find(t => t.id === id);
+        if (task && task.completedToday) {
+            task.completedToday = false;
+            delete task.timerFinished; // Clear timer finished state on undo
+            if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
+                task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
+            }
+            addXp(-XP_PER_TASK);
+            playSound('delete');
+            saveState();
+            renderAllLists();
+        }
+    };
     const editTask = (id, text, goal) => {
         const { task, type } = findTaskAndContext(id);
         if (task) {
