@@ -639,6 +639,10 @@ async function initializeAppLogic(initialUser) {
                 if (ring) {
                     const r = 10;
                     const c = r * 2 * Math.PI;
+                    // --- BUG FIX ---
+                    // The variable 'p' was not defined, causing a ReferenceError that
+                    // would break rendering whenever a timer was started.
+                    const p = remaining / task.timerDuration;
                     ring.style.strokeDashoffset = c - (p * c);
                 }
             }
@@ -696,7 +700,16 @@ async function initializeAppLogic(initialUser) {
     };
     function finishTimer(id) {
         playSound('timerUp');
-        stopTimer(id, false);
+        
+        // --- BUG FIX ---
+        // Refactored to handle state directly instead of calling stopTimer.
+        // This is cleaner and prevents potential bugs if stopTimer's logic changes,
+        // as stopTimer is meant for user cancellation, not natural completion.
+        if (activeTimers[id]) {
+            clearInterval(activeTimers[id]);
+            delete activeTimers[id];
+        }
+
         const { task } = findTaskAndContext(id);
         if (task) {
             task.timerFinished = true;
