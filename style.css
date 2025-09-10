@@ -490,6 +490,7 @@ FRIENDS FEATURE & MOBILE NAV
 */
 #friends-btn-desktop {
     display: none; 
+    position: relative;
 }
 @media (min-width: 1024px) {
     #friends-btn-desktop {
@@ -501,6 +502,25 @@ FRIENDS FEATURE & MOBILE NAV
         width: 20px;
         height: 20px;
     }
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: var(--accent-red);
+    color: var(--text-on-accent);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 2px var(--accent-red);
+    display: none; /* Hidden by default */
 }
 
 #mobile-nav {
@@ -1008,7 +1028,110 @@ body.is-dragging .main-quest-group {
     box-shadow: 4px 4px 0 var(--shadow);
     flex-shrink: 0; /* Prevent from shrinking */
 }
+/*
+==========================================================================
+SHARED QUESTS
+==========================================================================
+*/
+.shared-quests-container {
+    margin-bottom: 1rem;
+}
 
+.task-item.shared-quest {
+    border-style: double;
+    border-width: 4px;
+    padding: 0.75rem 1rem;
+    max-height: 120px; /* Allow more height */
+}
+
+.shared-quest-info {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: var(--border-width) dashed var(--border);
+    font-size: 0.9em;
+}
+
+.shared-with-tag {
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+.shared-status-indicators {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-indicator {
+    width: 20px;
+    height: 20px;
+    border: var(--border-width) solid var(--border);
+    border-radius: 50%;
+    background-color: var(--surface);
+    transition: background-color 0.3s ease;
+    position: relative;
+}
+
+.status-indicator.completed {
+    background-color: var(--accent-green);
+}
+
+.status-indicator.completed::after {
+    content: '✔';
+    color: var(--text-on-accent);
+    font-weight: 900;
+    font-size: 12px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.task-item.friend-completed-pulse {
+    animation: friendCompletedPulse 0.8s ease-in-out;
+}
+
+.task-item.shared-quest-finished {
+    animation: sharedQuestFinish 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
+}
+
+#share-quest-modal .modal-content {
+    max-width: 400px;
+}
+.share-quest-friend-list {
+     max-height: 300px;
+     overflow-y: auto;
+     border: var(--border-width) solid var(--border);
+     border-radius: var(--radius);
+     padding: 0.5rem;
+}
+.share-friend-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    gap: 1rem;
+    cursor: pointer;
+    border-radius: calc(var(--radius) / 2);
+    transition: background-color var(--transition-speed) ease;
+}
+.share-friend-item:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+.dark-mode .share-friend-item:hover {
+    background-color: rgba(255,255,255,0.05);
+}
+.share-friend-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: transparent;
+}
+.share-friend-item .btn {
+    margin-left: auto;
+}
 /*
 ==========================================================================
 TIMER CLOCK BUTTON
@@ -1067,6 +1190,12 @@ BUTTONS & CONTROLS
 .btn:active {
     transform: translate(2px, 2px);
     box-shadow: 2px 2px 0 var(--shadow-color);
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 4px 4px 0 var(--shadow-color);
 }
 
 #settings-btn {
@@ -1259,7 +1388,7 @@ MODALS & PANELS (ADD TASK, SETTINGS)
     color: var(--text);
 }
 .form-group {
-     margin-bottom: 1rem;
+     margin-bottom: 1.5rem;
 }
 
 #new-task-input:focus, #new-group-input:focus, .form-group input:focus, #edit-task-input:focus, #new-username-input:focus, #search-username-input:focus {
@@ -1463,6 +1592,7 @@ input[type="range"]::-moz-range-track {
     border: var(--border-width) solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    position: relative;
 }
 .toggle-btn {
     flex: 1;
@@ -1475,12 +1605,22 @@ input[type="range"]::-moz-range-track {
     border: none;
     color: var(--text);
     transition: all var(--transition-speed) ease;
+    position: relative;
 }
 .toggle-btn.active {
     background-color: var(--accent);
     color: var(--text-on-accent);
     box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
 }
+.toggle-btn .notification-badge {
+    top: 50%;
+    transform: translateY(-50%);
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+}
+
 
 /* FIX: Neobrutalism for Auth forms */
 .auth-form .form-group {
@@ -1662,7 +1802,7 @@ ANIMATIONS
     to {
         opacity: 1;
         transform: translateY(0);
-        max-height: 100px; /* Base height */
+        max-height: 120px; /* Base height */
         margin-bottom: 1.5rem;
         padding-top: 1rem;
         padding-bottom: 1rem;
@@ -1673,7 +1813,7 @@ ANIMATIONS
     from {
         opacity: 1;
         transform: translateX(0);
-        max-height: 100px;
+        max-height: 120px;
     }
     to {
         opacity: 0;
@@ -1698,4 +1838,16 @@ ANIMATIONS
         margin-bottom: 0;
         border-width: 0;
     }
+}
+
+@keyframes friendCompletedPulse {
+    0% { box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color); }
+    50% { box-shadow: var(--shadow-offset) var(--shadow-offset) 15px var(--accent-green); }
+    100% { box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color); }
+}
+
+@keyframes sharedQuestFinish {
+    0% { transform: scale(1) rotate(0); opacity: 1; }
+    30% { transform: scale(1.1) rotate(-5deg); }
+    100% { transform: scale(0) rotate(180deg); opacity: 0; max-height: 0; padding: 0; margin: 0; }
 }

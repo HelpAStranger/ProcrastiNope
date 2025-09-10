@@ -75,6 +75,7 @@
                 <button id="friends-btn-desktop" class="btn" aria-label="Open Friends Menu">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     <span>Friends</span>
+                    <span id="friend-request-count" class="notification-badge"></span>
                 </button>
                 <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -97,6 +98,9 @@
                         <h2>Daily Quests</h2>
                         <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
                     </header>
+                    <div id="shared-quests-container" class="shared-quests-container">
+                        <!-- Shared quests will be dynamically inserted here -->
+                    </div>
                     <ul id="daily-task-list"></ul>
                     <div id="no-daily-tasks-message" style="display: none; text-align: center; padding: 2rem; opacity: 0.7;">
                         <p>No daily quests yet. Add one to start your day!</p>
@@ -134,6 +138,7 @@
             <button class="mobile-nav-btn" data-section="friends" aria-label="Friends">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                 <span>Friends</span>
+                 <span id="friend-request-count-mobile" class="notification-badge"></span>
             </button>
         </div>
     </nav>
@@ -222,7 +227,7 @@
             </div>
             <div class="form-toggle">
                 <button class="toggle-btn active" data-tab="my-friends">Friends</button>
-                <button class="toggle-btn" data-tab="requests">Requests <span id="friend-request-count"></span></button>
+                <button class="toggle-btn" data-tab="requests">Requests <span id="friend-request-count-modal" class="notification-badge"></span></button>
                 <button class="toggle-btn" data-tab="add-friend">Add</button>
             </div>
             
@@ -246,6 +251,19 @@
             </div>
             
             <div class="modal-actions"><button class="btn" data-close-modal="friends-modal">Close</button></div>
+        </div>
+    </div>
+    
+    <div id="share-quest-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Share Quest With...</h2>
+            <input type="hidden" id="share-quest-id-input">
+            <div id="share-quest-friend-list" class="share-quest-friend-list">
+                <!-- Friend list will be populated here -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn" data-close-modal="share-quest-modal">Cancel</button>
+            </div>
         </div>
     </div>
 

@@ -36,15 +36,9 @@ import {
 
 
 // --- NOTE ON SECURITY & PERMISSIONS ERRORS ---
-// The error log shows "Permission Denied! Check your Firestore Security Rules."
-// This is not a bug in the client-side code, but a misconfiguration
-// in your Firebase project's security settings. For this app's features
-// (especially the friends system) to work, you MUST update your
+// This update adds a new 'sharedQuests' collection. To enable this
+// feature, you MUST add the new rules section to your
 // Firestore Security Rules in the Firebase Console.
-//
-// The client-side code is written to perform actions like one user updating
-// another user's document (e.g., sending a friend request). The rules below
-// are designed to allow these specific actions.
 //
 // ==> Copy and paste the following rules into your Firebase Console <==
 // ==> (Firestore Database -> Rules tab)                               <==
@@ -62,23 +56,21 @@ import {
 //
 //     // User data collection.
 //     match /users/{userId} {
-//       // Any logged-in user can read profiles (for friends list).
 //       allow read: if request.auth != null;
-//
-//       // A user can create their own document.
 //       allow create: if request.auth != null && request.auth.uid == userId;
-//
-//       // IMPORTANT: This rule allows the client-side friend logic to work.
-//       // A user can update their OWN document fully.
-//       // They can ALSO update ANOTHER user's document.
-//       // This is required for actions like sending/accepting a friend request or
-//       // removing a friend, where one user's action must update multiple documents.
-//       // For a production app with higher security needs, these multi-document
-//       // updates should be handled by a more secure backend (e.g., Cloud Functions).
 //       allow update: if request.auth != null;
-//
-//       // Only the owner can delete their account data.
 //       allow delete: if request.auth != null && request.auth.uid == userId;
+//     }
+//
+//     // NEW: Rules for shared quests collection
+//     match /sharedQuests/{questId} {
+//       // Only the two users involved in the quest can interact with it.
+//       allow read, update, delete: if request.auth != null && 
+//                                     (request.auth.uid == resource.data.ownerUid || 
+//                                      request.auth.uid == resource.data.friendUid);
+//       // The owner is the one who creates the shared quest document.
+//       allow create: if request.auth != null && 
+//                       request.auth.uid == request.resource.data.ownerUid;
 //     }
 //   }
 // }
@@ -101,6 +93,7 @@ let app, auth, db;
 let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriends = null;
+let unsubscribeFromSharedQuests = null; 
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -131,6 +124,9 @@ function playSound(type) {
         case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
         case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
         case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
+        case 'share': o.type = 'sine'; o.frequency.setValueAtTime(523.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(659.25, audioCtx.currentTime + 0.15); d=0.2; break;
+        case 'friendComplete': o.type = 'triangle'; o.frequency.setValueAtTime(659.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2); d=0.25; v *= 0.8; break;
+        case 'sharedQuestFinish': o.type = 'sawtooth'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.5); d = 0.6; v *= 1.3; break;
     }
     g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
     o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
@@ -170,6 +166,10 @@ try {
         if (unsubscribeFromFriends) {
             unsubscribeFromFriends();
             unsubscribeFromFriends = null;
+        }
+        if (unsubscribeFromSharedQuests) {
+            unsubscribeFromSharedQuests();
+            unsubscribeFromSharedQuests = null;
         }
         
         currentUser = user;
@@ -277,12 +277,13 @@ async function initializeAppLogic(initialUser) {
     
     let lastSection = 'daily';
     
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
+    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
     let actionsTimeoutId = null;
     
+    const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
     const standaloneTaskListContainer = document.getElementById('standalone-task-list');
     const generalTaskListContainer = document.getElementById('general-task-list-container');
@@ -354,9 +355,15 @@ async function initializeAppLogic(initialUser) {
     const searchUsernameInput = document.getElementById('search-username-input');
     const friendStatusMessage = friendsModal.querySelector('.friend-status-message');
     const friendRequestCountBadge = document.getElementById('friend-request-count');
+    const friendRequestCountBadgeMobile = document.getElementById('friend-request-count-mobile');
+    const friendRequestCountBadgeModal = document.getElementById('friend-request-count-modal');
     const friendsListContainer = friendsModal.querySelector('.friends-list-container');
     const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
     const deleteAccountBtn = document.getElementById('delete-account-btn');
+
+    const shareQuestModal = document.getElementById('share-quest-modal');
+    const shareQuestFriendList = document.getElementById('share-quest-friend-list');
+    const shareQuestIdInput = document.getElementById('share-quest-id-input');
 
 
     async function promptForUsernameIfNeeded() {
@@ -515,6 +522,7 @@ async function initializeAppLogic(initialUser) {
             }
             
             listenForFriendRequests();
+            listenForSharedQuests();
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
@@ -572,6 +580,7 @@ async function initializeAppLogic(initialUser) {
         }
     }
     const XP_PER_TASK = 35;
+    const XP_PER_SHARED_QUEST = 50;
     const XP_PER_TIMER_MINUTE = 2;
     const getXpForNextLevel = (level) => 50 + (level * 50);
     const quotes = ["The secret of getting ahead is getting started.", "A year from now you may wish you had started today.", "The future depends on what you do today."];
@@ -588,6 +597,7 @@ async function initializeAppLogic(initialUser) {
         if (today !== lastVisit) {
             const yesterday = new Date(Date.now() - 86400000).toDateString();
             dailyTasks.forEach(task => {
+                if(task.shared) return; // Don't reset shared tasks automatically
                 if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
                 else if (!task.completedToday) task.streak = 0;
                 task.completedToday = false;
@@ -624,17 +634,18 @@ async function initializeAppLogic(initialUser) {
         const now = Date.now();
         [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(task => {
             const taskEl = document.querySelector(`.task-item[data-id="${task.id}"]`);
-            if (!taskEl || task.completedToday) return;
+            if (!taskEl || task.completedToday || task.shared) return;
             taskEl.classList.toggle('overdue', (now - task.createdAt) > 86400000);
         });
     }
     function checkAllTasksCompleted() {
-        const allDailiesDone = dailyTasks.length > 0 && dailyTasks.every(t => t.completedToday);
+        const allDailiesDone = dailyTasks.length > 0 && dailyTasks.every(t => t.completedToday || t.shared);
         const noStandaloneQuests = standaloneMainQuests.length === 0;
         const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.length === 0);
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
+    const renderSharedQuests = () => { sharedQuestsContainer.innerHTML = ''; sharedQuests.forEach(task => sharedQuestsContainer.appendChild(createTaskElement(task, 'shared'))); };
     const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
     const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
     const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
@@ -645,15 +656,46 @@ async function initializeAppLogic(initialUser) {
     };
     const createTaskElement = (task, type) => {
         const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
+        
+        // Shared Quest specific rendering
+        if(task.shared || type === 'shared') {
+            li.classList.add('shared-quest');
+            li.dataset.id = task.questId || task.id; // Use questId for friend's view
+            
+            const isOwner = (task.ownerUid && task.ownerUid === user.uid) || (!task.ownerUid);
+            const ownerCompleted = task.shared ? task.shared.ownerCompleted : task.ownerCompleted;
+            const friendCompleted = task.shared ? task.shared.friendCompleted : task.friendCompleted;
+            const friendUsername = task.shared ? task.shared.withUsername : task.ownerUsername;
+            
+            li.innerHTML = `
+                <button class="complete-btn"></button>
+                <div class="task-content"><span class="task-text">${task.text}</span></div>
+                <div class="shared-quest-info">
+                    <span class="shared-with-tag">with ${isOwner ? friendUsername : 'You'}</span>
+                    <div class="shared-status-indicators" title="You | ${isOwner ? friendUsername : 'Owner'}">
+                        <div class="status-indicator ${ownerCompleted ? 'completed' : ''}"></div>
+                        <div class="status-indicator ${friendCompleted ? 'completed' : ''}"></div>
+                    </div>
+                </div>`;
+            const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
+            if(myPartCompleted) {
+                 li.querySelector('.complete-btn').classList.add('checked');
+                 li.classList.add('daily-completed');
+            }
+            return li;
+        }
+
+        // Regular task rendering
         let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
         li.innerHTML = `<button class="complete-btn"></button>
             <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
             <div class="task-buttons-wrapper">
-                <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                 <div class="task-actions">
-                    <button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                    <button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                    <button class="btn icon-btn share-btn" aria-label="Share Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                    <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                    <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                 </div>
             </div>`;
         if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
@@ -667,9 +709,6 @@ async function initializeAppLogic(initialUser) {
                 if (ring) {
                     const r = 10;
                     const c = r * 2 * Math.PI;
-                    // --- BUG FIX ---
-                    // The variable 'p' was not defined, causing a ReferenceError that
-                    // would break rendering whenever a timer was started.
                     const p = remaining / task.timerDuration;
                     ring.style.strokeDashoffset = c - (p * c);
                 }
@@ -697,13 +736,20 @@ async function initializeAppLogic(initialUser) {
     const findTaskAndContext = (id) => {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
-        for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } return {};
+        for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } 
+        task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
+        return {};
     };
     const deleteTask = (id) => { stopTimer(id, false); const {list} = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
     const completeTask = (id) => {
-        stopTimer(id, false); // This now handles removing the timerFinished flag
+        stopTimer(id, false);
         const { task, type } = findTaskAndContext(id);
         if (!task) return;
+
+        if(task.shared || type === 'shared') {
+            completeSharedQuestPart(task);
+            return;
+        }
 
         addXp(XP_PER_TASK);
         playSound('complete');
@@ -739,10 +785,16 @@ async function initializeAppLogic(initialUser) {
         else if (allDailiesDone) createFullScreenConfetti(false);
     };
     const uncompleteDailyTask = (id) => {
-        const task = dailyTasks.find(t => t.id === id);
-        if (task && task.completedToday) {
+        const { task } = findTaskAndContext(id);
+        if (task && (task.shared || task.completedToday)) {
+            
+            if(task.shared) { // Un-complete shared task part
+                completeSharedQuestPart(task, true); // `true` to un-complete
+                return;
+            }
+
             task.completedToday = false;
-            delete task.timerFinished; // Clear timer finished state on undo
+            delete task.timerFinished;
             if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
                 task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
             }
@@ -893,19 +945,16 @@ async function initializeAppLogic(initialUser) {
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
             
-            // On mobile, expand only on icon click. On desktop, expand on header click (excluding buttons).
             const shouldExpand = isExpandClick || (window.innerWidth > 1023 && !isAddClick && !isDeleteClick);
 
             if (shouldExpand) {
                 if (g) {
-                    g.isExpanded = !g.isExpanded; // 1. Update the in-memory state
-                    // 2. Animate on the DOM directly. Do not save state, as it's a view-only change and would cancel the animation.
+                    g.isExpanded = !g.isExpanded; 
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
                 }
                 return;
             }
 
-            // --- Logic for other buttons ---
             if (isAddClick) {
                 currentListToAdd = groupId; 
                 weeklyGoalContainer.style.display = 'none'; 
@@ -919,8 +968,6 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            // --- Logic for mobile actions overlay ---
-            // This runs on mobile if no button was clicked
             if (window.innerWidth <= 1023) {
                 handleMobileActions(groupHeader);
             }
@@ -929,7 +976,16 @@ async function initializeAppLogic(initialUser) {
 
         if (taskItem) {
             const id = taskItem.dataset.id;
-            if (taskItem.classList.contains('daily-completed')) {
+            const { task, type } = findTaskAndContext(id);
+
+            const isMyPartCompleted = () => {
+                if(!task || (!task.shared && type !== 'shared')) return task.completedToday;
+                const questData = type === 'shared' ? task : task.shared;
+                const isOwner = type === 'shared' ? (questData.ownerUid === user.uid) : true;
+                return isOwner ? questData.ownerCompleted : questData.friendCompleted;
+            }
+            
+            if (isMyPartCompleted()) {
                 uncompleteDailyTask(id);
                 return;
             }
@@ -940,9 +996,9 @@ async function initializeAppLogic(initialUser) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.complete-btn')) completeTask(id);
                 else if (e.target.closest('.delete-btn')) deleteTask(id);
+                else if (e.target.closest('.share-btn')) openShareModal(id);
                 else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
                 else if (e.target.closest('.edit-btn')) {
-                    const { task, type } = findTaskAndContext(id);
                     if (task) {
                         editTaskIdInput.value = task.id;
                         editTaskInput.value = task.text;
@@ -995,7 +1051,7 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal].forEach(m => { 
+    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal].forEach(m => { 
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                 closeModal(m); 
@@ -1256,7 +1312,7 @@ async function initializeAppLogic(initialUser) {
         }
         if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
     }
-    const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); resumeTimers(); };
+    const renderAllLists = () => { renderSharedQuests(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); resumeTimers(); };
     
     settingsLoginBtn.addEventListener('click', () => {
         const accountModalContent = accountModal.querySelector('.modal-content');
@@ -1284,12 +1340,16 @@ async function initializeAppLogic(initialUser) {
         unsubscribeFromFriends = onSnapshot(userDocRef, (doc) => {
             if (doc.exists()) {
                 const requests = doc.data().friendRequests || [];
-                if (requests.length > 0) {
-                    friendRequestCountBadge.textContent = requests.length;
-                    friendRequestCountBadge.style.display = 'inline';
-                } else {
-                    friendRequestCountBadge.style.display = 'none';
-                }
+                const requestCount = requests.length;
+                const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile, friendRequestCountBadgeModal];
+                badges.forEach(badge => {
+                     if (requestCount > 0) {
+                        badge.textContent = requestCount;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                });
             }
         }, (error) => {
             console.error("Error listening to friend requests: ", getCoolErrorMessage(error));
@@ -1456,12 +1516,9 @@ async function initializeAppLogic(initialUser) {
         button.classList.add('active');
 
         if (section === 'friends') {
-            // --- FIX START ---
-            // Explicitly hide other sections to prevent blank page on close
             document.querySelectorAll('.task-group').forEach(group => {
                 group.classList.remove('mobile-visible');
             });
-            // --- FIX END ---
             openModal(friendsModal);
             renderFriendsAndRequests();
         } else {
@@ -1518,6 +1575,192 @@ async function initializeAppLogic(initialUser) {
         resumeTimers();
     }
     
+    // --- SHARED QUESTS LOGIC ---
+    
+    function listenForSharedQuests() {
+        if (!user) return;
+        if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
+
+        const q = query(collection(db, "sharedQuests"), where("participants", "array-contains", user.uid));
+        
+        unsubscribeFromSharedQuests = onSnapshot(q, (querySnapshot) => {
+            const newSharedQuests = [];
+            querySnapshot.forEach((doc) => {
+                newSharedQuests.push({ ...doc.data(), id: doc.id, questId: doc.id });
+            });
+            
+            // Check for updates
+            newSharedQuests.forEach(newQuest => {
+                const oldQuest = sharedQuests.find(q => q.id === newQuest.id);
+                if (oldQuest) {
+                    const friendJustCompleted = (newQuest.friendUid === user.uid && !oldQuest.ownerCompleted && newQuest.ownerCompleted) || (newQuest.ownerUid === user.uid && !oldQuest.friendCompleted && newQuest.friendCompleted);
+                    if (friendJustCompleted) {
+                        const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
+                        if(taskEl) {
+                           taskEl.classList.add('friend-completed-pulse');
+                           taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
+                           playSound('friendComplete');
+                        }
+                    }
+                }
+            });
+
+            sharedQuests = newSharedQuests;
+            renderAllLists();
+        }, (error) => {
+            console.error("Error listening for shared quests:", getCoolErrorMessage(error));
+        });
+    }
+
+    async function openShareModal(questId) {
+        const { task } = findTaskAndContext(questId);
+        if (!task || task.shared) {
+            console.error("Task is not sharable or already shared.");
+            return;
+        }
+
+        shareQuestIdInput.value = questId;
+        shareQuestFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
+        openModal(shareQuestModal);
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const friendUIDs = userDoc.data().friends || [];
+        
+        if (friendUIDs.length === 0) {
+            shareQuestFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share quests with!</p>';
+            return;
+        }
+
+        shareQuestFriendList.innerHTML = '';
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        const friendDocs = await getDocs(friendsQuery);
+
+        friendDocs.forEach(friendDoc => {
+            const friendData = friendDoc.data();
+            const friendEl = document.createElement('div');
+            friendEl.className = 'share-friend-item';
+            friendEl.innerHTML = `
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+                <span class="friend-name">${friendData.username}</span>
+                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+            `;
+            shareQuestFriendList.appendChild(friendEl);
+        });
+    }
+
+    shareQuestFriendList.addEventListener('click', async (e) => {
+        const button = e.target.closest('.share-btn-action');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Sharing...';
+            const questId = shareQuestIdInput.value;
+            const friendUid = button.dataset.uid;
+            const friendUsername = button.dataset.username;
+
+            await shareQuest(questId, friendUid, friendUsername);
+            
+            closeModal(shareQuestModal);
+        }
+    });
+
+    async function shareQuest(questId, friendUid, friendUsername) {
+        const { task, list } = findTaskAndContext(questId);
+        if (!task || !list) return;
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const ownerUsername = userDoc.data().username;
+
+        // 1. Create the shared quest document in the new collection
+        const sharedQuestData = {
+            originalQuestId: questId,
+            text: task.text,
+            ownerUid: user.uid,
+            ownerUsername: ownerUsername,
+            friendUid: friendUid,
+            friendUsername: friendUsername,
+            ownerCompleted: false,
+            friendCompleted: false,
+            createdAt: Date.now(),
+            participants: [user.uid, friendUid] // For easier querying
+        };
+
+        const sharedQuestRef = doc(db, "sharedQuests", questId);
+        await setDoc(sharedQuestRef, sharedQuestData);
+
+        // 2. Update the local task object to mark it as shared
+        task.shared = {
+            withUid: friendUid,
+            withUsername: friendUsername,
+            ownerCompleted: false,
+            friendCompleted: false
+        };
+
+        // 3. Save the owner's updated task list and re-render
+        playSound('share');
+        saveState();
+        renderAllLists();
+    }
+    
+    async function completeSharedQuestPart(task, uncompleting = false) {
+        const questId = task.questId || task.id;
+        const sharedQuestRef = doc(db, "sharedQuests", questId);
+        const isOwner = sharedQuests.find(q => q.id === questId)?.ownerUid === user.uid;
+        
+        const updateData = {};
+        if (isOwner) {
+            updateData.ownerCompleted = !uncompleting;
+        } else {
+            updateData.friendCompleted = !uncompleting;
+        }
+        
+        await updateDoc(sharedQuestRef, updateData);
+        
+        if (!uncompleting) {
+            playSound('complete');
+            addXp(XP_PER_SHARED_QUEST / 2); // Award half XP for completing your part
+        } else {
+            playSound('delete');
+             addXp(-(XP_PER_SHARED_QUEST / 2));
+        }
+
+        const updatedDoc = await getDoc(sharedQuestRef);
+        if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
+            finishSharedQuest(updatedDoc.data());
+        } else {
+            renderAllLists();
+        }
+    }
+    
+    async function finishSharedQuest(questData) {
+        playSound('sharedQuestFinish');
+        
+        // Visual effect on both clients
+        const taskEl = document.querySelector(`.task-item[data-id="${questData.originalQuestId}"]`);
+        if (taskEl) {
+            taskEl.classList.add('shared-quest-finished');
+            createConfetti(taskEl);
+            taskEl.addEventListener('animationend', async () => {
+                // Remove from owner's local list
+                const { list } = findTaskAndContext(questData.originalQuestId);
+                if (list) {
+                    const index = list.findIndex(t => t.id === questData.originalQuestId);
+                    if (index > -1) list.splice(index, 1);
+                }
+                saveState();
+                
+                // Delete from Firestore
+                await deleteDoc(doc(db, "sharedQuests", questData.originalQuestId));
+                
+                // Final re-render after animation
+                renderAllLists();
+
+            }, { once: true });
+        } else {
+            await deleteDoc(doc(db, "sharedQuests", questData.originalQuestId));
+        }
+    }
+
+
     const initOnce = () => {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
         showRandomQuote();
@@ -1540,6 +1783,7 @@ async function initializeAppLogic(initialUser) {
         shutdown: () => {
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
              if (unsubscribeFromFriends) unsubscribeFromFriends();
+             if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
         },
         updateUser: async (newUser) => {
             user = newUser;
