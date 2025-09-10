@@ -1388,10 +1388,10 @@ async function initializeAppLogic(initialUser) {
                     }
                 });
 
-                // --- FIX: If the friends modal is open, refresh its content ---
-                if (friendsModal.classList.contains('visible')) {
-                    renderFriendsAndRequests();
-                }
+                // FIX: Always re-render friends and requests when the snapshot updates
+                // This ensures the list is fresh if the modal is open, or will be fresh
+                // when the modal is next opened.
+                renderFriendsAndRequests();
             }
         }, (error) => {
             console.error("Error listening to friend requests: ", getCoolErrorMessage(error));
@@ -1432,7 +1432,7 @@ async function initializeAppLogic(initialUser) {
             const requestsQuery = query(collection(db, "users"), where(documentId(), 'in', requestUIDs));
             const requestDocs = await getDocs(requestsQuery);
             requestDocs.forEach(doc => {
-                const requestUser = requestDoc.data();
+                const requestUser = doc.data(); // FIX: Changed requestDoc to doc
                 const requestEl = document.createElement('div');
                 requestEl.className = 'friend-request-item';
                 requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
@@ -1449,8 +1449,11 @@ async function initializeAppLogic(initialUser) {
         if (!user || !usernameToFind) return;
 
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
-        if (currentUserDoc.exists() && usernameToFind === currentUserDoc.data().username) {
-            friendStatusMessage.textContent = "You can't add yourself!";
+        const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
+
+        // FIX: Prevent sending friend request to self
+        if (currentUsername && usernameToFind === currentUsername) {
+            friendStatusMessage.textContent = "You can't send a friend request to yourself!";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
