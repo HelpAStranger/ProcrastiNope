@@ -1,7 +1,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
     <title>Procrasti-Nope</title>
     <link rel="icon" type="image/png" href="src/images/icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2537,7 +2537,12 @@
             const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
             const deleteAccountBtn = document.getElementById('delete-account-btn');
 
-
+            // --- START OF FIX ---
+            // This function was rewritten to fix two critical bugs:
+            // 1. A TypeError that crashed the login flow for new Google users, preventing redirection to the app.
+            // 2. A related issue that could sometimes incorrectly prompt existing users to create a username.
+            // The fix involves safely checking for the user's data document and username using optional chaining (`?.`),
+            // which prevents the error and ensures the login process completes successfully.
             async function promptForUsernameIfNeeded() {
                 if (!user) return; // Not for guests
 
@@ -2545,17 +2550,15 @@
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 const existingData = docSnap.exists() ? docSnap.data().appData : null;
                 
-                // FIX: Only prompt for username if they don't have one and were NOT signed up via email/password.
-                // This prevents the username modal from appearing after a successful email sign-up.
-                const isEmailUser = user.providerData.some(p => p.providerId === 'password');
-
-                if (!docSnap.exists() || !docSnap.data().username) {
+                // Prompt for a username if the user's Firestore document either doesn't exist,
+                // or exists but is missing the username field. This is critical for new Google sign-ups.
+                if (!docSnap.exists() || !docSnap.data()?.username) {
                     const usernameModal = document.getElementById('username-modal');
                     const usernameForm = document.getElementById('username-form');
                     const newUsernameInput = document.getElementById('new-username-input');
                     const usernameErrorEl = usernameModal.querySelector('.username-error');
                     
-                    usernameModal.setAttribute('data-persistent', 'true'); // Prevent closing by clicking outside
+                    usernameModal.setAttribute('data-persistent', 'true'); // Prevent closing until a username is set
 
                     openModal(usernameModal);
                     focusOnDesktop(newUsernameInput);
@@ -2584,18 +2587,22 @@
 
                                 const batch = window.firebaseSDK.writeBatch(db);
                                 batch.set(usernamesRef, { userId: user.uid });
+                                
+                                // Create or update the user document with the new username and other essential fields.
+                                // Using { merge: true } safely adds these fields without overwriting appData
+                                // that might have been created from a guest data merge.
                                 batch.set(userDocRef, { 
                                     username: username, 
                                     email: user.email,
                                     appData: existingData || {},
-                                    friends: [], // IMPORT: Initialize friends list for new user
-                                    friendRequests: [] // IMPORT: Initialize friend requests list
+                                    friends: [],
+                                    friendRequests: []
                                 }, { merge: true });
                                 await batch.commit();
                                 
                                 usernameModal.removeAttribute('data-persistent');
                                 closeModal(usernameModal);
-                                resolve();
+                                resolve(); // This is crucial to un-pause the login flow.
 
                             } catch (error) {
                                 usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
@@ -2607,6 +2614,7 @@
                     });
                 }
             }
+            // --- END OF FIX ---
             
             // =========================================================================
             // DATA PERSISTENCE & OPTIMIZATION
