@@ -29,13 +29,14 @@ import {
     arrayUnion,
     arrayRemove,
     deleteDoc,
-    documentId
+    documentId,
+    serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
 // --- NOTE ON SECURITY & PERMISSIONS ERRORS ---
-// This update adds a new 'sharedQuests' collection. To enable this
-// feature, you MUST add the new rules section to your
+// This update adds new 'sharedQuests' and 'sharedGroups' collections. To enable these
+// features, you MUST add the new rules sections to your
 // Firestore Security Rules in the Firebase Console.
 //
 // ==> Copy and paste the following rules into your Firebase Console <==
@@ -60,7 +61,7 @@ import {
 //       allow delete: if request.auth != null && request.auth.uid == userId;
 //     }
 //
-//     // NEW: Rules for shared quests collection
+//     // Rules for shared quests collection
 //     match /sharedQuests/{questId} {
 //       // Only the two users involved in the quest can interact with it.
 //       allow read, update, delete: if request.auth != null && 
@@ -69,6 +70,21 @@ import {
 //       // The owner is the one who creates the shared quest document.
 //       allow create: if request.auth != null && 
 //                       request.auth.uid == request.resource.data.ownerUid;
+//     }
+//
+//     // NEW: Rules for shared groups collection
+//     match /sharedGroups/{groupId} {
+//       allow read: if request.auth != null &&
+//                       (request.auth.uid == resource.data.ownerUid ||
+//                        request.auth.uid == resource.data.recipientUid);
+//       allow create: if request.auth != null &&
+//                       request.auth.uid == request.resource.data.ownerUid;
+//       allow update: if request.auth != null &&
+//                       (request.auth.uid == resource.data.ownerUid ||
+//                        request.auth.uid == resource.data.recipientUid);
+//       allow delete: if request.auth != null &&
+//                       (request.auth.uid == resource.data.ownerUid ||
+//                        request.auth.uid == resource.data.recipientUid);
 //     }
 //   }
 // }
@@ -92,6 +108,7 @@ let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriends = null;
 let unsubscribeFromSharedQuests = null; 
+let unsubscribeFromSharedGroupsOffers = null; // NEW: Listener for shared group offers
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -125,6 +142,8 @@ function playSound(type) {
         case 'share': o.type = 'sine'; o.frequency.setValueAtTime(523.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(659.25, audioCtx.currentTime + 0.15); d=0.2; break;
         case 'friendComplete': o.type = 'triangle'; o.frequency.setValueAtTime(659.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2); d=0.25; v *= 0.8; break;
         case 'sharedQuestFinish': o.type = 'sawtooth'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.5); d = 0.6; v *= 1.3; break;
+        case 'accept': o.type = 'sine'; o.frequency.setValueAtTime(600, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.1); d = 0.15; break; // NEW
+        case 'decline': o.type = 'square'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.1); d = 0.15; break; // NEW
     }
     g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
     o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
@@ -168,6 +187,11 @@ try {
         if (unsubscribeFromSharedQuests) {
             unsubscribeFromSharedQuests();
             unsubscribeFromSharedQuests = null;
+        }
+        // NEW: Cleanup for shared group offers listener
+        if (unsubscribeFromSharedGroupsOffers) {
+            unsubscribeFromSharedGroupsOffers();
+            unsubscribeFromSharedGroupsOffers = null;
         }
         
         currentUser = user;
@@ -276,6 +300,7 @@ async function initializeAppLogic(initialUser) {
     let lastSection = 'daily';
     
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [];
+    let sharedGroupsOffers = []; // NEW: Array to hold incoming shared group offers
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
@@ -362,6 +387,17 @@ async function initializeAppLogic(initialUser) {
     const shareQuestModal = document.getElementById('share-quest-modal');
     const shareQuestFriendList = document.getElementById('share-quest-friend-list');
     const shareQuestIdInput = document.getElementById('share-quest-id-input');
+
+    // NEW: DOM elements for shared groups feature
+    const shareGroupModal = document.getElementById('share-group-modal');
+    const shareGroupIdInput = document.getElementById('share-group-id-input');
+    const shareGroupFriendList = document.getElementById('share-group-friend-list');
+    const sharedGroupsCountBadgeModal = document.getElementById('shared-groups-count-modal');
+    const sharedGroupsListContainer = friendsModal.querySelector('#shared-groups-tab .shared-groups-list-container');
+    const viewSharedGroupsModal = document.getElementById('view-shared-groups-modal');
+    const viewSharedGroupsTitle = document.getElementById('view-shared-groups-title');
+    const viewSharedGroupsFriendUid = document.getElementById('view-shared-groups-friend-uid');
+    const friendSharedGroupsList = document.getElementById('friend-shared-groups-list');
 
 
     async function promptForUsernameIfNeeded() {
@@ -522,6 +558,7 @@ async function initializeAppLogic(initialUser) {
             
             listenForFriendRequests();
             listenForSharedQuests();
+            listenForSharedGroupsOffers(); // NEW: Listen for shared group offers
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
@@ -650,7 +687,7 @@ async function initializeAppLogic(initialUser) {
     const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); if (group.tasks) group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); return el;
     };
     const createTaskElement = (task, type) => {
@@ -959,7 +996,8 @@ async function initializeAppLogic(initialUser) {
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
-            const isEditClick = e.target.closest('.edit-group-btn'); // Added for consistency
+            const isEditClick = e.target.closest('.edit-group-btn');
+            const isShareGroupClick = e.target.closest('.share-group-btn'); // NEW: Share group button
 
             if (isExpandClick) {
                 if (g) {
@@ -996,8 +1034,13 @@ async function initializeAppLogic(initialUser) {
                 // If there's an edit group modal, open it here.
                 // For now, just let the click fall through to toggleTaskActions.
             }
+            // NEW: Handle share group click
+            if (isShareGroupClick) {
+                openShareGroupModal(groupId);
+                return;
+            }
             
-            // If the click was not on any specific button (expand, add, delete, edit),
+            // If the click was not on any specific button (expand, add, delete, edit, share),
             // toggle the actions overlay.
             if (!e.target.closest('button')) {
                 toggleTaskActions(groupHeader);
@@ -1088,7 +1131,7 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal].forEach(m => { 
+    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal, viewSharedGroupsModal].forEach(m => { 
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                 closeModal(m); 
@@ -1525,6 +1568,7 @@ async function initializeAppLogic(initialUser) {
     friendsBtnDesktop.addEventListener('click', () => {
         openModal(friendsModal);
         renderFriendsAndRequests();
+        renderFriendsWithSharedGroups(); // NEW: Render shared groups offers when friends modal opens
     });
     
     addFriendForm.addEventListener('submit', handleAddFriend);
@@ -1544,6 +1588,13 @@ async function initializeAppLogic(initialUser) {
             friendsModal.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
             e.target.classList.add('active');
             friendsModal.querySelectorAll('.tab-content').forEach(form => form.classList.toggle('active', form.id === `${tab}-tab`));
+            
+            // NEW: Re-render specific content when tabs are switched
+            if (tab === 'my-friends' || tab === 'requests') {
+                renderFriendsAndRequests();
+            } else if (tab === 'shared-groups') {
+                renderFriendsWithSharedGroups();
+            }
         }
     });
 
@@ -1566,6 +1617,7 @@ async function initializeAppLogic(initialUser) {
             });
             openModal(friendsModal);
             renderFriendsAndRequests();
+            renderFriendsWithSharedGroups(); // NEW: Render shared groups offers when friends modal opens
         } else {
             document.querySelectorAll('.task-group').forEach(group => {
                 group.classList.toggle('mobile-visible', group.dataset.section === section);
@@ -1595,6 +1647,17 @@ async function initializeAppLogic(initialUser) {
                     const usernameDocRef = doc(db, "usernames", username);
                     batch.delete(usernameDocRef);
                 }
+
+                // NEW: Attempt to delete shared quests and groups where the user is involved
+                // Note: For full cleanup, a Cloud Function is recommended to handle documents
+                // where the user is only a participant (not owner) or if rules prevent direct deletion.
+                const sharedQuestsQuery = query(collection(db, "sharedQuests"), where("participants", "array-contains", currentUser.uid));
+                const sharedQuestsSnap = await getDocs(sharedQuestsQuery);
+                sharedQuestsSnap.forEach(doc => batch.delete(doc.ref));
+
+                const sharedGroupsQuery = query(collection(db, "sharedGroups"), where("participants", "array-contains", currentUser.uid));
+                const sharedGroupsSnap = await getDocs(sharedGroupsQuery);
+                sharedGroupsSnap.forEach(doc => batch.delete(doc.ref));
 
                 await deleteUser(currentUser);
                 
@@ -1716,17 +1779,14 @@ async function initializeAppLogic(initialUser) {
     });
 
     async function shareQuest(questId, friendUid, friendUsername) {
-        // --- FIX: Refactored shared quest logic ---
         const { task, list } = findTaskAndContext(questId);
         if (!task || !list) return;
 
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const ownerUsername = userDoc.data().username;
         
-        // 1. Let Firestore generate a new, unique ID for the shared quest
         const sharedQuestRef = doc(collection(db, "sharedQuests"));
 
-        // 2. Create the shared quest document in the new collection
         const sharedQuestData = {
             text: task.text,
             ownerUid: user.uid,
@@ -1740,17 +1800,14 @@ async function initializeAppLogic(initialUser) {
         };
         await setDoc(sharedQuestRef, sharedQuestData);
 
-        // 3. Remove the original local task, as it's now a cloud-synced quest
         const taskIndex = list.findIndex(t => t.id === questId);
         if (taskIndex > -1) {
             list.splice(taskIndex, 1);
         }
 
-        // 4. Save the owner's updated task list. The `onSnapshot` listener
-        // will add the new shared quest to the UI for both players.
         playSound('share');
         saveState();
-        renderAllLists(); // Re-render immediately for the owner
+        renderAllLists();
     }
     
     async function completeSharedQuestPart(task, uncompleting = false) {
@@ -1784,7 +1841,6 @@ async function initializeAppLogic(initialUser) {
     }
     
     async function finishSharedQuest(questData) {
-        // --- FIX: Simplified to just delete the doc, letting the listener handle UI ---
         playSound('sharedQuestFinish');
         
         const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
@@ -1799,6 +1855,302 @@ async function initializeAppLogic(initialUser) {
             // If the element isn't visible for some reason, just delete the doc immediately.
             await deleteDoc(doc(db, "sharedQuests", questData.id));
         }
+    }
+
+    // --- NEW: SHARED GROUPS LOGIC ---
+
+    /**
+     * Listens for incoming shared group offers for the current user.
+     */
+    function listenForSharedGroupsOffers() {
+        if (!user) return;
+        if (unsubscribeFromSharedGroupsOffers) unsubscribeFromSharedGroupsOffers();
+
+        const q = query(collection(db, "sharedGroups"), where("recipientUid", "==", user.uid));
+        
+        unsubscribeFromSharedGroupsOffers = onSnapshot(q, (querySnapshot) => {
+            const newSharedGroupsOffers = [];
+            querySnapshot.forEach((doc) => {
+                newSharedGroupsOffers.push({ ...doc.data(), id: doc.id });
+            });
+            sharedGroupsOffers = newSharedGroupsOffers;
+            
+            // Update badge count
+            const offerCount = sharedGroupsOffers.length;
+            if (offerCount > 0) {
+                sharedGroupsCountBadgeModal.textContent = offerCount;
+                sharedGroupsCountBadgeModal.style.display = 'flex';
+            } else {
+                sharedGroupsCountBadgeModal.style.display = 'none';
+            }
+
+            renderFriendsWithSharedGroups(); // Re-render the shared groups tab
+        }, (error) => {
+            console.error("Error listening for shared group offers:", getCoolErrorMessage(error));
+        });
+    }
+
+    /**
+     * Opens the modal to share a group with friends.
+     * @param {string} groupId The ID of the group to share.
+     */
+    async function openShareGroupModal(groupId) {
+        if (!user) {
+            alert("You must be logged in to share groups.");
+            return;
+        }
+
+        const groupToShare = generalTaskGroups.find(g => g.id === groupId);
+        if (!groupToShare) {
+            console.error("Group not found for sharing:", groupId);
+            return;
+        }
+
+        shareGroupIdInput.value = groupId;
+        shareGroupFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
+        openModal(shareGroupModal);
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const friendUIDs = userDoc.data().friends || [];
+        
+        if (friendUIDs.length === 0) {
+            shareGroupFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share groups with!</p>';
+            return;
+        }
+
+        shareGroupFriendList.innerHTML = '';
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        const friendDocs = await getDocs(friendsQuery);
+
+        friendDocs.forEach(friendDoc => {
+            const friendData = friendDoc.data();
+            const friendEl = document.createElement('div');
+            friendEl.className = 'share-friend-item';
+            friendEl.innerHTML = `
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+                <span class="friend-name">${friendData.username}</span>
+                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+            `;
+            shareGroupFriendList.appendChild(friendEl);
+        });
+    }
+
+    /**
+     * Handles the click event for sharing a group with a specific friend.
+     */
+    shareGroupFriendList.addEventListener('click', async (e) => {
+        const button = e.target.closest('.share-btn-action');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Sharing...';
+            const groupId = shareGroupIdInput.value;
+            const friendUid = button.dataset.uid;
+            const friendUsername = button.dataset.username;
+
+            try {
+                await shareGroup(groupId, friendUid, friendUsername);
+            } catch (error) {
+                console.error("Failed to share group:", error);
+                // Optionally, add a user-facing error message here
+                button.disabled = false;
+                button.textContent = 'Share';
+            } finally {
+                closeModal(shareGroupModal);
+            }
+        }
+    });
+
+    /**
+     * Shares a group with a specified friend by creating a document in Firestore.
+     * @param {string} groupId The ID of the group to share.
+     * @param {string} friendUid The UID of the friend to share with.
+     * @param {string} friendUsername The username of the friend.
+     */
+    async function shareGroup(groupId, friendUid, friendUsername) {
+        if (!user) return;
+
+        const groupToShare = generalTaskGroups.find(g => g.id === groupId);
+        if (!groupToShare) {
+            console.error("Group not found for sharing.");
+            return;
+        }
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const ownerUsername = userDoc.data().username;
+
+        // Create a copy of the group's tasks to store in the shared document
+        const tasksCopy = groupToShare.tasks ? groupToShare.tasks.map(task => ({ ...task })) : [];
+
+        const sharedGroupRef = doc(collection(db, "sharedGroups"));
+        const sharedGroupData = {
+            name: groupToShare.name,
+            tasks: tasksCopy,
+            ownerUid: user.uid,
+            ownerUsername: ownerUsername,
+            recipientUid: friendUid,
+            recipientUsername: friendUsername,
+            status: 'pending', // 'pending', 'accepted', 'declined'
+            createdAt: serverTimestamp(),
+            participants: [user.uid, friendUid]
+        };
+        await setDoc(sharedGroupRef, sharedGroupData);
+        playSound('share');
+        // The original group remains with the owner. No local state change for the owner.
+    }
+
+    /**
+     * Renders the list of friends who have shared groups with the current user.
+     */
+    async function renderFriendsWithSharedGroups() {
+        if (!user) return;
+
+        sharedGroupsListContainer.innerHTML = '';
+
+        if (sharedGroupsOffers.length === 0) {
+            sharedGroupsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No shared group offers.</p>`;
+            return;
+        }
+
+        // Get unique UIDs of friends who sent offers
+        const uniqueFriendUids = [...new Set(sharedGroupsOffers.map(offer => offer.ownerUid))];
+        
+        if (uniqueFriendUids.length === 0) {
+            sharedGroupsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No shared group offers.</p>`;
+            return;
+        }
+
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', uniqueFriendUids));
+        const friendDocs = await getDocs(friendsQuery);
+        const friendMap = new Map();
+        friendDocs.forEach(doc => friendMap.set(doc.id, doc.data()));
+
+        uniqueFriendUids.forEach(friendUid => {
+            const friendData = friendMap.get(friendUid);
+            if (friendData) {
+                const offersFromFriend = sharedGroupsOffers.filter(offer => offer.ownerUid === friendUid);
+                const friendEl = document.createElement('div');
+                friendEl.className = 'friend-item shared-group-friend-item';
+                friendEl.dataset.uid = friendUid;
+                friendEl.innerHTML = `
+                    <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+                    <span class="friend-name">${friendData.username}</span>
+                    <div class="friend-item-actions">
+                        <span class="notification-badge">${offersFromFriend.length}</span>
+                        <button class="btn icon-btn view-shared-groups-btn" aria-label="View shared groups">&#x1F4C1;</button>
+                    </div>
+                `;
+                sharedGroupsListContainer.appendChild(friendEl);
+            }
+        });
+    }
+
+    /**
+     * Opens the modal to view shared groups from a specific friend.
+     * @param {string} friendUid The UID of the friend who shared groups.
+     * @param {string} friendUsername The username of the friend.
+     */
+    async function openViewSharedGroupsModal(friendUid, friendUsername) {
+        viewSharedGroupsTitle.textContent = `Groups from ${friendUsername}`;
+        viewSharedGroupsFriendUid.value = friendUid;
+        friendSharedGroupsList.innerHTML = '';
+
+        const offersFromFriend = sharedGroupsOffers.filter(offer => offer.ownerUid === friendUid);
+
+        if (offersFromFriend.length === 0) {
+            friendSharedGroupsList.innerHTML = `<p style="text-align: center; padding: 1rem;">No groups shared by ${friendUsername}.</p>`;
+        } else {
+            offersFromFriend.forEach(groupOffer => {
+                const groupEl = document.createElement('div');
+                groupEl.className = 'shared-group-offer-item';
+                groupEl.dataset.id = groupOffer.id;
+                groupEl.innerHTML = `
+                    <div class="group-offer-content">
+                        <h4>${groupOffer.name}</h4>
+                        <p>${groupOffer.tasks.length} task${groupOffer.tasks.length === 1 ? '' : 's'}</p>
+                    </div>
+                    <div class="group-offer-actions">
+                        <button class="btn icon-btn accept-group-btn" aria-label="Accept group">&#10003;</button>
+                        <button class="btn icon-btn decline-group-btn" aria-label="Decline group">&times;</button>
+                    </div>
+                `;
+                friendSharedGroupsList.appendChild(groupEl);
+            });
+        }
+        openModal(viewSharedGroupsModal);
+    }
+
+    /**
+     * Handles clicks within the shared groups list to view offers.
+     */
+    sharedGroupsListContainer.addEventListener('click', async (e) => {
+        const friendItem = e.target.closest('.shared-group-friend-item');
+        if (friendItem) {
+            const friendUid = friendItem.dataset.uid;
+            const friendNameEl = friendItem.querySelector('.friend-name');
+            const friendUsername = friendNameEl ? friendNameEl.textContent : 'Unknown';
+            openViewSharedGroupsModal(friendUid, friendUsername);
+        }
+    });
+
+    /**
+     * Handles accepting or declining a shared group offer.
+     */
+    friendSharedGroupsList.addEventListener('click', async (e) => {
+        const button = e.target.closest('button');
+        if (!button) return;
+
+        const groupOfferItem = button.closest('.shared-group-offer-item');
+        if (!groupOfferItem) return;
+
+        const sharedGroupId = groupOfferItem.dataset.id;
+        const groupOffer = sharedGroupsOffers.find(offer => offer.id === sharedGroupId);
+
+        if (!groupOffer) {
+            console.error("Shared group offer not found:", sharedGroupId);
+            return;
+        }
+
+        if (button.classList.contains('accept-group-btn')) {
+            await acceptSharedGroup(groupOffer);
+        } else if (button.classList.contains('decline-group-btn')) {
+            await declineSharedGroup(groupOffer);
+        }
+    });
+
+    /**
+     * Accepts a shared group offer, adding it to the user's general task groups.
+     * @param {object} groupOffer The shared group offer data.
+     */
+    async function acceptSharedGroup(groupOffer) {
+        if (!user) return;
+
+        // Create a new local group from the shared offer
+        const newLocalGroup = {
+            id: 'group_' + Date.now(), // Generate a new local ID
+            name: groupOffer.name,
+            tasks: groupOffer.tasks.map(task => ({ ...task, id: Date.now().toString() + Math.random().toString(36).substring(2, 9) })), // Generate new IDs for tasks
+            isExpanded: false
+        };
+        generalTaskGroups.push(newLocalGroup);
+        saveState();
+        renderAllLists();
+        playSound('accept');
+
+        // Delete the shared group offer from Firestore
+        await deleteDoc(doc(db, "sharedGroups", groupOffer.id));
+        closeModal(viewSharedGroupsModal);
+    }
+
+    /**
+     * Declines a shared group offer, removing it from Firestore.
+     * @param {object} groupOffer The shared group offer data.
+     */
+    async function declineSharedGroup(groupOffer) {
+        if (!user) return;
+
+        await deleteDoc(doc(db, "sharedGroups", groupOffer.id));
+        playSound('decline');
+        closeModal(viewSharedGroupsModal);
     }
 
 
@@ -1825,6 +2177,7 @@ async function initializeAppLogic(initialUser) {
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
              if (unsubscribeFromFriends) unsubscribeFromFriends();
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
+             if (unsubscribeFromSharedGroupsOffers) unsubscribeFromSharedGroupsOffers(); // NEW: Shutdown shared groups listener
         },
         updateUser: async (newUser) => {
             user = newUser;

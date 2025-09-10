@@ -228,6 +228,7 @@
             <div class="form-toggle">
                 <button class="toggle-btn active" data-tab="my-friends">Friends</button>
                 <button class="toggle-btn" data-tab="requests">Requests <span id="friend-request-count-modal" class="notification-badge"></span></button>
+                <button class="toggle-btn" data-tab="shared-groups">Shared Groups <span id="shared-groups-count-modal" class="notification-badge"></span></button>
                 <button class="toggle-btn" data-tab="add-friend">Add</button>
             </div>
             
@@ -239,6 +240,14 @@
             <div id="requests-tab" class="tab-content">
                 <h3>Friend Requests</h3>
                 <div class="friend-requests-container"></div>
+            </div>
+
+            <!-- New tab for shared groups offers -->
+            <div id="shared-groups-tab" class="tab-content">
+                <h3>Shared Groups Offers</h3>
+                <div class="shared-groups-list-container">
+                    <!-- Friends who shared groups will be listed here -->
+                </div>
             </div>
 
             <div id="add-friend-tab" class="tab-content">
@@ -263,6 +272,34 @@
             </div>
             <div class="modal-actions">
                 <button class="btn" data-close-modal="share-quest-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New modal for sharing groups -->
+    <div id="share-group-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Share Group With...</h2>
+            <input type="hidden" id="share-group-id-input">
+            <div id="share-group-friend-list" class="share-quest-friend-list">
+                <!-- Friend list will be populated here -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn" data-close-modal="share-group-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New modal for viewing shared groups from a specific friend -->
+    <div id="view-shared-groups-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="view-shared-groups-title">Groups from [Friend Name]</h2>
+            <input type="hidden" id="view-shared-groups-friend-uid">
+            <div id="friend-shared-groups-list" class="shared-groups-list-container">
+                <!-- Groups shared by this friend will be listed here -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn" data-close-modal="view-shared-groups-modal">Close</button>
             </div>
         </div>
     </div>

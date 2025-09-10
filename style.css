@@ -625,7 +625,7 @@ FRIENDS FEATURE & MOBILE NAV
     font-weight: 900;
 }
 
-.friends-list-container, .friend-requests-container {
+.friends-list-container, .friend-requests-container, .shared-groups-list-container {
     max-height: 300px;
     overflow-y: auto;
     border: var(--border-width) solid var(--border);
@@ -650,7 +650,7 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 
-.friend-item:not(:last-child), .friend-request-item:not(:last-child) {
+.friend-item:not(:last-child), .friend-request-item:not(:last-child), .shared-group-friend-item:not(:last-child) {
     border-bottom: var(--border-width) dashed var(--border);
 }
 
@@ -694,6 +694,41 @@ FRIENDS FEATURE & MOBILE NAV
     font-weight: 700;
     text-align: center;
     min-height: 1.2em;
+}
+
+/* NEW: Shared Group Offer Item */
+.shared-group-offer-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    gap: 0.75rem;
+}
+.shared-group-offer-item:not(:last-child) {
+    border-bottom: var(--border-width) dashed var(--border);
+}
+.group-offer-content {
+    flex-grow: 1;
+}
+.group-offer-content h4 {
+    font-weight: 900;
+    font-size: 1.1rem;
+}
+.group-offer-content p {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+.group-offer-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+.group-offer-actions .accept-group-btn {
+    --shadow-color: var(--accent-green);
+}
+.group-offer-actions .decline-group-btn {
+    --shadow-color: var(--accent-red);
 }
 
 
@@ -1068,7 +1103,7 @@ SHARED QUESTS
     animation: sharedQuestFinish 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
 }
 
-#share-quest-modal .modal-content {
+#share-quest-modal .modal-content, #share-group-modal .modal-content {
     max-width: 400px;
 }
 .share-quest-friend-list {
@@ -1091,7 +1126,7 @@ SHARED QUESTS
     background-color: rgba(0,0,0,0.05);
 }
 .dark-mode .share-friend-item:hover {
-    background-color: rgba(255,255,255,0.05);
+    background-color: rgba(255,255,255,0.04);
 }
 .share-friend-item.disabled {
     opacity: 0.5;
@@ -1338,7 +1373,7 @@ MODALS & PANELS (ADD TASK, SETTINGS)
     overflow-y: auto;
 }
 
-#account-modal .modal-content, #username-modal .modal-content, #manage-account-modal .modal-content {
+#account-modal .modal-content, #username-modal .modal-content, #manage-account-modal .modal-content, #view-shared-groups-modal .modal-content {
     max-width: 400px;
     padding: 1.5rem;
 }
