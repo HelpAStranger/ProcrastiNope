@@ -234,21 +234,6 @@ main.container {
         margin-bottom: 0; /* Remove bottom margin as 'gap' handles spacing */
     }
 
-    /* Hover effects for action buttons on desktop */
-    .task-buttons-wrapper,
-    .main-quest-group-header .group-actions {
-        opacity: 0;
-        transition: opacity var(--transition-speed) ease;
-        pointer-events: none;
-    }
-
-    .task-item:hover .task-buttons-wrapper,
-    .main-quest-group:hover .main-quest-group-header .group-actions,
-    .task-item.timer-active .task-buttons-wrapper {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
     /* FIX: Allow completed quest text to wrap correctly on wide screens */
     .task-item.daily-completed .task-content {
         flex-grow: 1; /* Let the content area grow to fill space */
@@ -1259,36 +1244,77 @@ BUTTONS & CONTROLS
 
 /*
 ==========================================================================
-MOBILE-SPECIFIC TASK INTERACTIONS
+TASK INTERACTIONS (REFACTORED)
 ==========================================================================
 */
-@media (max-width: 1023px) {
-    /* On mobile, action buttons are hidden until tap */
-    .task-buttons-wrapper,
-    .main-quest-group-header .group-actions { /* FIX: Apply overlay to group actions as well */
-        opacity: 0;
+
+/* Base style for action button wrappers: a hidden overlay */
+.task-buttons-wrapper,
+.main-quest-group-header .group-actions {
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(var(--surface-rgb), 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 5;
+    transition: opacity var(--transition-speed) ease;
+    border-radius: calc(var(--radius) - var(--border-width));
+}
+
+/* EXCEPTION: If a timer is active, the wrapper becomes a normal flex container again */
+.task-item.timer-active .task-buttons-wrapper {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: static;
+    width: auto;
+    height: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    z-index: auto;
+    margin-left: auto;
+    border-radius: 0;
+}
+
+
+/* --- Desktop Hover Interactions --- */
+@media (min-width: 1024px) {
+    /* When a task or group is hovered, show the action buttons overlay */
+    .task-item:hover .task-buttons-wrapper,
+    .main-quest-group:hover .main-quest-group-header .group-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    
+    /* And blur the content behind the overlay */
+    .task-item:hover .task-content,
+    .task-item:hover .complete-btn,
+    .main-quest-group:hover .main-quest-group-header .group-title-container {
+        filter: blur(3px);
+        transition: filter var(--transition-speed) ease;
         pointer-events: none;
-        
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        justify-content: center;
-        align-items: center;
-        
-        background-color: rgba(var(--surface-rgb), 0.7);
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
-        z-index: 5;
-        transition: opacity var(--transition-speed) ease;
-        /* FIX: Add border radius to match parent container */
-        border-radius: calc(var(--radius) - var(--border-width));
     }
 
-    /* When a task or group is tapped, show the action buttons */
+    /* If a timer is active, DON'T blur the content on hover */
+    .task-item.timer-active:hover .task-content,
+    .task-item.timer-active:hover .complete-btn {
+        filter: none;
+        pointer-events: auto;
+    }
+}
+
+/* --- Mobile Tap Interactions --- */
+@media (max-width: 1023px) {
+    /* When a task or group is tapped (gets .actions-visible), show the overlay */
     .task-item.actions-visible .task-buttons-wrapper,
-    .main-quest-group-header.actions-visible .group-actions { /* FIX: Show group actions */
+    .main-quest-group-header.actions-visible .group-actions {
         opacity: 1;
         pointer-events: auto;
     }
@@ -1296,27 +1322,13 @@ MOBILE-SPECIFIC TASK INTERACTIONS
     /* And blur the content behind the overlay */
     .task-item.actions-visible .task-content,
     .task-item.actions-visible .complete-btn,
-    .main-quest-group-header.actions-visible .group-title-container { /* FIX: Blur group title */
+    .main-quest-group-header.actions-visible .group-title-container {
         filter: blur(3px);
         transition: filter var(--transition-speed) ease;
-        pointer-events: none; /* Prevent clicking blurred items */
-    }
-    
-    /* EXCEPTION: If a timer is active, keep its button visible and not part of the overlay */
-    .task-item.timer-active .task-buttons-wrapper {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        position: static;
-        width: auto;
-        height: auto;
-        background: transparent;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-        z-index: auto;
-        margin-left: auto;
-        border-radius: 0; /* Reset radius for this case */
+        pointer-events: none;
     }
 }
+
 
 /*
 ==========================================================================
