@@ -1032,7 +1032,7 @@ async function initializeAppLogic(initialUser) {
             }
             
             // If the click is on a button, perform the button action.
-            // Otherwise, toggle the task actions menu.
+            // Otherwise, toggle the task actions menu (only on mobile).
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.complete-btn')) completeTask(id);
@@ -1057,8 +1057,10 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
-                // If not a button click, toggle the actions menu for the task item
-                toggleTaskActions(taskItem);
+                // Only toggle actions on mobile devices
+                if (window.innerWidth <= 1023) {
+                    toggleTaskActions(taskItem);
+                }
             }
         } 
     });
@@ -1872,7 +1874,7 @@ function setupAuthForms(container, onAuthSuccess) {
 
     const toggleBtns = container.querySelectorAll('.toggle-btn');
     const signupForm = container.querySelector('[data-form="signup"]');
-    const loginForm = container.querySelector('[data-form="login"]');
+    const loginForm = container.querySelector('[data-form="login']');
     const googleBtnContainer = container.querySelector('.google-signin-btn-container');
 
     const googleBtn = document.createElement('button');

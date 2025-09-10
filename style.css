@@ -1305,9 +1305,7 @@ TASK INTERACTIONS (REFACTORED)
         filter: none !important;
     }
 
-    /* REMOVED: Hover-based visibility for task items on desktop.
-       Now, task actions on desktop will also be toggled by the 'actions-visible' class via JS click. */
-    /*
+    /* Re-introduce hover-based visibility for task items on desktop. */
     .task-item:hover .task-buttons-wrapper:not(.timer-active):not(.daily-completed) {
         opacity: 1;
         pointer-events: auto;
@@ -1318,7 +1316,6 @@ TASK INTERACTIONS (REFACTORED)
         transition: filter var(--transition-speed) ease;
         pointer-events: none;
     }
-    */
 }
 
 
