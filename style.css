@@ -919,24 +919,6 @@ body.is-dragging .main-quest-group {
     display: none;
 }
 
-/* Weekly goal met style */
-.task-item.weekly-goal-met {
-    border-style: dashed;
-    opacity: 0.8;
-}
-.task-item.weekly-goal-met::after {
-    content: 'GOAL MET!';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-10deg);
-    font-size: 2rem;
-    font-weight: 900;
-    color: var(--accent);
-    opacity: 0.1;
-    pointer-events: none;
-}
-
 /* Hide edit/delete when timer is active on any screen size */
 .task-item.timer-active .task-actions {
     display: none;
@@ -1306,6 +1288,8 @@ TASK INTERACTIONS (REFACTORED)
 @media (min-width: 1024px) {
     /* On desktop, change group actions to be inline instead of a full overlay */
     .main-quest-group-header .group-actions {
+        opacity: 1; /* Make group actions always visible on desktop */
+        pointer-events: auto; /* Make group actions always clickable on desktop */
         position: static;
         width: auto;
         height: auto;
@@ -1313,7 +1297,25 @@ TASK INTERACTIONS (REFACTORED)
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         z-index: auto;
-        /* The opacity is controlled by the global .actions-visible class */
+        filter: none !important; /* Remove blur if it was applied by .actions-visible */
+    }
+
+    /* Ensure group title container is not blurred on desktop hover */
+    .main-quest-group-header:hover .group-title-container {
+        filter: none !important;
+    }
+
+    /* NEW: Show task buttons wrapper on hover for desktop */
+    .task-item:hover .task-buttons-wrapper:not(.timer-active):not(.daily-completed) {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    /* NEW: Blur task content on hover for desktop, unless timer is active or task is completed */
+    .task-item:hover .task-content:not(.timer-active):not(.daily-completed),
+    .task-item:hover .complete-btn:not(.timer-active):not(.daily-completed) {
+        filter: blur(3px);
+        transition: filter var(--transition-speed) ease;
+        pointer-events: none;
     }
 }
 

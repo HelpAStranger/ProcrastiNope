@@ -368,7 +368,7 @@ async function initializeAppLogic(initialUser) {
         if (!user) return;
 
         const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userDocRef);
+        const docSnap = await getGoc(userDocRef);
         const existingData = docSnap.exists() ? docSnap.data().appData : null;
         
         // Check if username is missing or if the user document itself doesn't exist
@@ -695,11 +695,9 @@ async function initializeAppLogic(initialUser) {
             <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
             <div class="task-buttons-wrapper">
                 <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
-                <div class="task-actions">
-                    <button class="btn icon-btn share-btn" aria-label="Share Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
-                    <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                    <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-                </div>
+                <button class="btn icon-btn share-btn" aria-label="Share Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             </div>`;
         if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
         if (task.timerFinished) li.classList.add('timer-finished');
@@ -994,7 +992,10 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            handleMobileActions(taskItem);
+            // Only handle mobile actions if on a mobile screen size
+            if (window.innerWidth <= 1023) {
+                handleMobileActions(taskItem);
+            }
 
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
@@ -1278,8 +1279,8 @@ async function initializeAppLogic(initialUser) {
 
         const commonTaskOptions = {
             animation: 150,
-            delay: 500,
-            delayOnTouchOnly: true,
+            delay: 500, // Apply a delay to prevent accidental drags on quick clicks
+            delayOnTouchOnly: false, // Ensure delay applies to both touch and mouse
             onStart: () => document.body.classList.add('is-dragging'),
             onEnd: onTaskDrop 
         };
@@ -1292,8 +1293,8 @@ async function initializeAppLogic(initialUser) {
         new Sortable(generalTaskListContainer, {
             animation: 150,
             handle: '.main-quest-group-header',
-            delay: 500,
-            delayOnTouchOnly: true,
+            delay: 500, // Apply delay for group dragging as well
+            delayOnTouchOnly: false, // Ensure delay applies to both touch and mouse
             onStart: () => document.body.classList.add('is-dragging'),
             onEnd: (e) => {
                 document.body.classList.remove('is-dragging');
@@ -1399,7 +1400,7 @@ async function initializeAppLogic(initialUser) {
             const requestsQuery = query(collection(db, "users"), where(documentId(), 'in', requestUIDs));
             const requestDocs = await getDocs(requestsQuery);
             requestDocs.forEach(doc => {
-                const requestUser = doc.data();
+                const requestUser = requestDoc.data();
                 const requestEl = document.createElement('div');
                 requestEl.className = 'friend-request-item';
                 requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
