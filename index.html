@@ -2142,7 +2142,7 @@
     <div id="username-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Choose your Username</h2>
-            <p style="margin-bottom: 1.5rem;">This will be your unique name. It cannot be changed later!</p>
+            <p style="margin-bottom: 1.5rem;">This will be your unique public name for login and adding friends.</p>
             <form id="username-form">
                 <input type="text" id="new-username-input" placeholder="e.g., QuestMaster" required minlength="3" maxlength="15">
                 <p class="error-message username-error"></p>
@@ -2344,6 +2344,11 @@
                 
                 if (user) {
                     // A user is logged in.
+                    // *** FIX: HIDE LOADER FIRST to prevent it covering the username modal. ***
+                    loaderOverlay.style.display = 'none';
+                    landingPage.style.display = 'none';
+                    appWrapper.style.display = 'block';
+
                     // ALWAYS check for guest data to merge upon login.
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     if (guestDataString) {
@@ -2369,18 +2374,14 @@
                         // This handles cases like a user refreshing the page while logged in.
                         await appController.updateUser(user);
                     }
-                    // Show the main app and hide the landing page.
-                    landingPage.style.display = 'none';
-                    appWrapper.style.display = 'block';
-                    loaderOverlay.style.display = 'none';
                 } else { 
                     // No user is logged in.
                     // Check if they are continuing as a guest.
                     if (sessionStorage.getItem('isGuest')) {
-                        if (!appController) appController = await initializeAppLogic(null);
+                        loaderOverlay.style.display = 'none';
                         landingPage.style.display = 'none';
                         appWrapper.style.display = 'block';
-                        loaderOverlay.style.display = 'none';
+                        if (!appController) appController = await initializeAppLogic(null);
                     } else {
                         // The user is fully logged out. Show the landing page.
                         loaderOverlay.style.display = 'none';
