@@ -1874,7 +1874,7 @@ function setupAuthForms(container, onAuthSuccess) {
 
     const toggleBtns = container.querySelectorAll('.toggle-btn');
     const signupForm = container.querySelector('[data-form="signup"]');
-    const loginForm = container.querySelector('[data-form="login']');
+    const loginForm = container.querySelector('[data-form="login"]');
     const googleBtnContainer = container.querySelector('.google-signin-btn-container');
 
     const googleBtn = document.createElement('button');
