@@ -1286,17 +1286,28 @@ TASK INTERACTIONS (REFACTORED)
 
 /* --- Desktop Hover Interactions --- */
 @media (min-width: 1024px) {
-    /* When a task or group is hovered, show the action buttons overlay */
+    /* Change group actions to be inline, not an overlay */
+    .main-quest-group-header .group-actions {
+        position: static;
+        width: auto;
+        height: auto;
+        background-color: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        z-index: auto;
+        /* The opacity is still controlled by the hover rule below */
+    }
+
+    /* When a task or group is hovered, show the action buttons */
     .task-item:hover .task-buttons-wrapper,
     .main-quest-group:hover .main-quest-group-header .group-actions {
         opacity: 1;
         pointer-events: auto;
     }
     
-    /* And blur the content behind the overlay */
+    /* And blur the content behind the overlay (FOR TASKS ONLY) */
     .task-item:hover .task-content,
-    .task-item:hover .complete-btn,
-    .main-quest-group:hover .main-quest-group-header .group-title-container {
+    .task-item:hover .complete-btn {
         filter: blur(3px);
         transition: filter var(--transition-speed) ease;
         pointer-events: none;
