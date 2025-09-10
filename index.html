@@ -2218,15 +2218,12 @@
         let app, auth, db;
         let currentUser = null;
         let unsubscribeFromFirestore = null;
+        // IMPORT: Listener for friend requests
         let unsubscribeFromFriends = null;
         let appController = null;
         
-        // --- MODAL UTILITIES (Defined in module scope) ---
-        // These functions will be used by various parts of the app, including setupAuthForms.
-        // initializeAppLogic will provide the actual implementations.
-        let openModal = (modal) => { console.warn("Modal functions not fully initialized yet."); };
-        let closeModal = (modal) => { console.warn("Modal functions not fully initialized yet."); };
-        let isModalBlurred = false; // To track blur state globally if needed
+        // FIX: Moved to module scope to prevent temporal dead zone error on partial app initialization
+        let activeMobileActionsItem = null; 
 
         // --- DOM ELEMENTS FOR STARTUP ---
         const loaderOverlay = document.getElementById('loader-overlay');
@@ -2234,15 +2231,15 @@
         const appWrapper = document.getElementById('app-wrapper');
         const landingChoices = document.getElementById('landing-choices');
         const landingAuthContainer = document.getElementById('landing-auth-container');
-        const googleLoaderModal = document.getElementById('google-signin-loader-modal'); // Cache this element
 
-        // --- Initialize Firebase ---
+        // --- Initialize Firebase and start the auth flow ---
         try {
             app = window.firebaseSDK.initializeApp(firebaseConfig);
             auth = window.firebaseSDK.getAuth(app);
             db = window.firebaseSDK.getFirestore(app);
             
-            // Set up the onAuthStateChanged listener. This is the primary handler for user state changes.
+            // BUGFIX: onAuthStateChanged is the single source of truth for the user's state.
+            // All UI updates related to auth status (login, logout, initial load) are handled here.
             window.firebaseSDK.onAuthStateChanged(auth, async (user) => {
                 // Cleanup previous user's data listeners to prevent memory leaks.
                 if (unsubscribeFromFirestore) {
@@ -2254,60 +2251,55 @@
                     unsubscribeFromFriends = null;
                 }
                 
-                currentUser = user; // Update the current user reference
-
-                if (user) { // User is logged in
-                    // If guest data exists, attempt to merge it with the logged-in user's cloud data.
+                currentUser = user;
+                
+                if (user) {
+                    // A user is logged in.
+                    // ALWAYS check for guest data to merge upon login.
                     const guestDataString = localStorage.getItem('anonymousUserData');
                     if (guestDataString) {
                         try {
-                            // Ensure appController is initialized before trying to merge data
-                            if (!appController) {
-                                appController = await initializeAppLogic(null); // Initialize with null user first
-                            }
                             const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                             const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                             const cloudData = docSnap.exists() && docSnap.data().appData ? docSnap.data().appData : {};
                             const mergedData = mergeGuestDataWithCloud(cloudData);
                             await window.firebaseSDK.setDoc(userDocRef, { appData: mergedData }, { merge: true });
                             localStorage.removeItem('anonymousUserData');
-                            sessionStorage.removeItem('isGuest'); // Clear guest session flag
+                            sessionStorage.removeItem('isGuest'); // Also clear guest session flag
                         } catch (mergeError) {
                             console.error("Failed to merge guest data on login:", mergeError);
                         }
                     }
 
-                    // Initialize or update the app controller with the logged-in user.
+                    // If the app isn't running, start it.
+                    // If it is running (e.g. from a guest session), update it with the new user's data.
                     if (!appController) {
-                        appController = await initializeAppLogic(user); // Initialize app logic for the logged-in user
+                        // This handles the transition from guest/logged-out to logged-in.
+                        appController = await initializeAppLogic(user); 
                     } else {
-                        await appController.updateUser(user); // Update existing controller if user changed (e.g. refresh)
+                        // This handles cases like a user refreshing the page while logged in.
+                        await appController.updateUser(user);
                     }
-                    
-                    // Transition from landing page to the main app.
+                    // Show the main app and hide the landing page.
                     landingPage.style.display = 'none';
                     appWrapper.style.display = 'block';
                     loaderOverlay.style.display = 'none';
-
-                } else { // No user is logged in
-                    // Check if the user is continuing as a guest.
+                } else { 
+                    // No user is logged in.
+                    // Check if they are continuing as a guest.
                     if (sessionStorage.getItem('isGuest')) {
-                        if (!appController) {
-                            appController = await initializeAppLogic(null); // Initialize app logic for guest
-                        }
-                        // Transition from landing page to the main app for guest.
+                        if (!appController) appController = await initializeAppLogic(null);
                         landingPage.style.display = 'none';
                         appWrapper.style.display = 'block';
                         loaderOverlay.style.display = 'none';
                     } else {
-                        // User is fully logged out. Show the landing page.
+                        // The user is fully logged out. Show the landing page.
                         loaderOverlay.style.display = 'none';
                         landingPage.style.display = 'flex';
                         appWrapper.style.display = 'none';
                         // Shut down the app controller to clear all data and stop listeners.
                         if(appController) appController.shutdown();
                         appController = null;
-                        currentUser = null; // Ensure currentUser is null when logged out
                     }
                 }
             });
@@ -2320,39 +2312,35 @@
         function showLandingPage() {
             landingAuthContainer.style.display = 'none';
             landingChoices.style.display = 'block';
-            // Clear any auth-specific error messages from the container
-            landingAuthContainer.innerHTML = ''; 
         }
         
         document.getElementById('landing-guest-btn').addEventListener('click', async () => {
             sessionStorage.setItem('isGuest', 'true');
             loaderOverlay.style.display = 'flex';
-            // Ensure appController is initialized for guests. This call also updates the module-level modal functions.
             if (!appController) {
                 appController = await initializeAppLogic(null);
             }
-            // Once initialized, transition to the app view.
             landingPage.style.display = 'none';
             appWrapper.style.display = 'block';
             loaderOverlay.style.display = 'none';
         });
 
-        // This function is called when the "Login / Sign Up" button is clicked on the landing page.
-        // It needs to set up the authentication UI and handlers.
-        async function handleLoginButtonClick() { 
+        document.getElementById('landing-login-btn').addEventListener('click', () => {
+            showAuthFormsOnLanding('login');
+        });
+
+        function showAuthFormsOnLanding(initialTab) {
             landingChoices.style.display = 'none';
             landingAuthContainer.style.display = 'block';
             
             const onAuthSuccess = () => {
-                // The onAuthStateChanged listener handles the actual redirection/UI update.
-                // This callback is primarily for cleanup or specific actions after auth success.
+                // The onAuthStateChanged listener will handle redirection automatically.
             };
             
-            // Call setupAuthForms. It uses the module-scoped openModal/closeModal,
-            // which should now be defined by initializeAppLogic (or at least placeholders if it hasn't run yet).
             setupAuthForms(landingAuthContainer, onAuthSuccess);
             
-            // Add the "Back" button if it doesn't exist.
+            landingAuthContainer.querySelector(`.toggle-btn[data-tab="${initialTab}"]`).click();
+            
             if (!landingAuthContainer.querySelector('#landing-back-btn')) {
                 const backBtn = document.createElement('button');
                 backBtn.id = 'landing-back-btn';
@@ -2362,70 +2350,68 @@
                 landingAuthContainer.appendChild(backBtn);
             }
         }
-
-        document.getElementById('landing-login-btn').addEventListener('click', handleLoginButtonClick);
-
+        
         // --- MAIN APPLICATION LOGIC ---
-        // This function initializes the core application state and logic.
-        // It also provides the specific implementations for openModal and closeModal.
         async function initializeAppLogic(initialUser) {
-            
-            // PLAY SOUND FUNCTION needs to be available for modal/UI interactions
-            // Moved playSound definition outside initializeAppLogic to be accessible by setupAuthForms too.
-            
-            // Helper function to only focus on non-touch devices to prevent mobile keyboard auto-opening
+
+            // FIX: Helper function to only focus on non-touch devices to prevent mobile keyboard auto-opening
             const focusOnDesktop = (el) => {
                 if (!window.matchMedia('(pointer: coarse)').matches && el) {
                     el.focus();
                 }
             };
 
-            // --- MODAL UTILITIES (Provide actual implementations) ---
-            // These update the module-scoped openModal and closeModal functions.
-            const openModalImpl = (modal) => { 
+            // FIX: Define shared variables and functions first to avoid initialization errors.
+            let user = initialUser;
+            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+            const audioCtx = window.AudioContext ? new AudioContext() : null;
+            
+            function playSound(type) {
+                if (!audioCtx || settings.volume === 0) return;
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.connect(g); g.connect(audioCtx.destination);
+                let v = settings.volume, d = 0.2;
+                switch (type) {
+                    case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
+                    case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
+                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
+                    case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
+                    case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
+                    case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
+                    case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
+                    case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
+                    case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
+                }
+                g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
+                o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
+            }
+
+            let lastSection = 'daily';
+            const openModal = (modal) => {
                 if(modal) {
-                    // Ensure any active mobile task action menus are closed
-                    if (activeMobileActionsItem) { 
+                    if (activeMobileActionsItem) {
                         activeMobileActionsItem.classList.remove('actions-visible');
                         activeMobileActionsItem = null;
                     }
-                    // Blur the background app content
                     appWrapper.classList.add('blur-background');
                     modal.classList.add('visible');
-                    playSound('open'); // Use the module-scoped playSound
+                    playSound('open');
                 }
             };
-            const closeModalImpl = (modal) => { 
+            const closeModal = (modal) => {
                 if(modal) {
                     appWrapper.classList.remove('blur-background');
                     modal.classList.remove('visible');
-                    playSound('close'); // Use the module-scoped playSound
+                    playSound('close');
                 }
             };
             
-            // Update the module-scoped functions with these implementations.
-            openModal = openModalImpl;
-            closeModal = closeModalImpl;
-
-            // --- APPLICATION STATE VARIABLES ---
-            let user = initialUser; // Current logged-in user or null for guest/logged out
-            // Default settings, will be overwritten by loaded data
-            let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 }; 
-            const audioCtx = window.AudioContext ? new AudioContext() : null; // Audio context for sound effects
+            let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [];
+            let playerData = { level: 1, xp: 0 };
+            let currentListToAdd = null, currentEditingTaskId = null;
+            const activeTimers = {};
+            let actionsTimeoutId = null;
             
-            // Sound playback function (moved outside initializeAppLogic)
-            // It will be used by modal functions and other parts of the app.
-            
-            let lastSection = 'daily'; // Tracks the last viewed section in mobile nav
-            let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = []; // Task data
-            let playerData = { level: 1, xp: 0 }; // Player stats
-            let currentListToAdd = null, currentEditingTaskId = null; // State for modals
-            const activeTimers = {}; // Stores interval IDs for active timers
-            let actionsTimeoutId = null; // Timeout for mobile task action visibility
-            let activeMobileActionsItem = null; // Tracks which task item has actions visible on mobile
-            
-            // --- DOM ELEMENT REFERENCES ---
-            // These are obtained within initializeAppLogic as they are specific to the main app view.
             const dailyTaskListContainer = document.getElementById('daily-task-list');
             const standaloneTaskListContainer = document.getElementById('standalone-task-list');
             const generalTaskListContainer = document.getElementById('general-task-list-container');
@@ -2488,9 +2474,9 @@
             const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
             const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
             const quoteEl = document.getElementById('quote-of-the-day');
-            let confirmCallback = null; // Callback for the confirmation modal
+            let confirmCallback = null;
             
-            // Friends feature DOM elements
+            // IMPORT: Friends feature DOM elements
             const friendsBtnDesktop = document.getElementById('friends-btn-desktop');
             const friendsModal = document.getElementById('friends-modal');
             const mobileNav = document.getElementById('mobile-nav');
@@ -2500,45 +2486,20 @@
             const friendRequestCountBadge = document.getElementById('friend-request-count');
             const friendsListContainer = friendsModal.querySelector('.friends-list-container');
             const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
-            const deleteAccountBtn = document.getElementById('delete-account-btn'); // For manage account modal
+            const deleteAccountBtn = document.getElementById('delete-account-btn');
 
 
-            // =========================================================================
-            // SOUND UTILITIES (Moved outside initializeAppLogic for broader scope)
-            // =========================================================================
-            function playSound(type) {
-                if (!audioCtx || settings.volume === 0) return; // Don't play if audio is disabled or muted
-                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-                o.connect(g); g.connect(audioCtx.destination);
-                let v = settings.volume, d = 0.2; // Default duration and volume multiplier
-                switch (type) {
-                    case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
-                    case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break; // Louder and longer for level up
-                    case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break; // Longer timer alert
-                    case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
-                    case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
-                    case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break; // Quiet hover sound
-                    case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break; // For toggling states
-                    case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break; // Modal open sound
-                    case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break; // Modal close sound
-                }
-                g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01); // Fade in gain
-                o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); // Fade out gain
-                o.stop(audioCtx.currentTime + d); // Stop oscillator after duration
-            }
-
-            // Prompt for username if the user doesn't have one yet (only for signed-in users)
             async function promptForUsernameIfNeeded() {
-                if (!user) return; // Skip for guests
+                if (!user) return; // Not for guests
 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const docSnap = await window.firebaseSDK.getDoc(userDocRef);
                 const existingData = docSnap.exists() ? docSnap.data().appData : null;
                 
-                // Check if the user signed up with email/password or via a provider that doesn't require a username prompt
+                // FIX: Only prompt for username if they don't have one and were NOT signed up via email/password.
+                // This prevents the username modal from appearing after a successful email sign-up.
                 const isEmailUser = user.providerData.some(p => p.providerId === 'password');
-                // If it's a new user OR they don't have a username AND they signed up via email/password (where username is part of signup)
-                // OR if it's a provider that requires a username setup step.
+
                 if (!docSnap.exists() || !docSnap.data().username) {
                     const usernameModal = document.getElementById('username-modal');
                     const usernameForm = document.getElementById('username-form');
@@ -2547,7 +2508,7 @@
                     
                     usernameModal.setAttribute('data-persistent', 'true'); // Prevent closing by clicking outside
 
-                    openModal(usernameModal); // Use the module-scoped openModal
+                    openModal(usernameModal);
                     focusOnDesktop(newUsernameInput);
 
                     return new Promise((resolve) => {
@@ -2565,7 +2526,6 @@
                             submitButton.textContent = 'Saving...';
                             
                             try {
-                                // Check if username is available
                                 const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
                                 const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
@@ -2573,21 +2533,20 @@
                                     throw new Error('This username is already taken.');
                                 }
 
-                                // Use batch write for atomicity: create username entry and user profile
                                 const batch = window.firebaseSDK.writeBatch(db);
                                 batch.set(usernamesRef, { userId: user.uid });
                                 batch.set(userDocRef, { 
                                     username: username, 
-                                    email: user.email, // Store email as well for auth
-                                    appData: existingData || {}, // Preserve existing app data if any
-                                    friends: [], // Initialize friends list
-                                    friendRequests: [] // Initialize friend requests list
-                                }, { merge: true }); // Use merge to avoid overwriting other fields if they exist
+                                    email: user.email,
+                                    appData: existingData || {},
+                                    friends: [], // IMPORT: Initialize friends list for new user
+                                    friendRequests: [] // IMPORT: Initialize friend requests list
+                                }, { merge: true });
                                 await batch.commit();
                                 
-                                usernameModal.removeAttribute('data-persistent'); // Allow closing modal
-                                closeModal(usernameModal); // Use module-scoped closeModal
-                                resolve(); // Resolve the promise, indicating username setup is complete
+                                usernameModal.removeAttribute('data-persistent');
+                                closeModal(usernameModal);
+                                resolve();
 
                             } catch (error) {
                                 usernameErrorEl.textContent = error.message || getCoolErrorMessage(error);
@@ -2621,7 +2580,7 @@
                 };
             }
 
-            // This function handles saving data to localStorage (for guests) or Firestore (for logged-in users).
+            // This is the actual function that writes data to localStorage or Firestore.
             async function saveData(data) {
                 // Also save theme to a simple key for faster pre-load on app start
                 if (data.settings && data.settings.theme) {
@@ -2646,23 +2605,17 @@
             // It will wait 1500ms (1.5 seconds) after the last action before saving to Firestore.
             const debouncedSaveData = debounce(saveData, 1500);
 
-            // This function is called after any state change in the application that needs saving.
+            // This function is called after any state change in the application.
             const saveState = () => {
-                const dataToSave = { 
-                    dailyTasks, 
-                    standaloneMainQuests, 
-                    generalTaskGroups, 
-                    playerData, 
-                    settings 
-                };
+                const data = { dailyTasks, standaloneMainQuests, generalTaskGroups, playerData, settings };
                 
                 // OPTIMIZATION:
                 // - For guests, save instantly to localStorage (it's free and fast).
                 // - For logged-in users, use the debounced function to avoid excessive Firestore writes.
                 if (!user) {
-                    saveData(dataToSave);
+                    saveData(data);
                 } else {
-                    debouncedSaveData(dataToSave);
+                    debouncedSaveData(data);
                 }
             };
             
@@ -2670,55 +2623,48 @@
             // END OF DATA PERSISTENCE & OPTIMIZATION
             // =========================================================================
 
-            // Function to load and display data from a given source (local or cloud).
+
             function loadAndDisplayData(data) {
                 dailyTasks = data.dailyTasks || [];
                 standaloneMainQuests = data.standaloneMainQuests || [];
                 generalTaskGroups = data.generalTaskGroups || [];
                 playerData = data.playerData || { level: 1, xp: 0 };
-                // Overwrite default settings with loaded data, preserving defaults if not found.
+                // Overwrite the default settings with loaded data
                 settings = { ...settings, ...(data.settings || {}) }; 
-                
-                // Ensure default state for new properties (e.g., group expansion)
                 generalTaskGroups.forEach(group => {
                     if (typeof group.isExpanded === 'undefined') group.isExpanded = false;
                 });
-
-                applySettings(); // Apply theme and accent color settings
-                renderAllLists(); // Render all tasks and groups
-                updateProgressUI(); // Update XP bar and level display
+                applySettings();
+                renderAllLists();
+                updateProgressUI();
             }
 
-            // Handles the initial loading of data when the app starts or the user logs in/out.
             async function initialLoad() {
                 return new Promise((resolve) => {
-                    if (!user) { // Guest user or logged out state
+                    if (!user) {
                         const localData = JSON.parse(localStorage.getItem('anonymousUserData')) || {};
                         loadAndDisplayData(localData);
-                        resolve(); // Data loaded from local storage
+                        resolve();
                         return;
                     }
                     
-                    // Logged-in user: Set up real-time listener for Firestore data.
-                    listenForFriendRequests(); // Start listening for friend requests
+                    // IMPORT: Listen for friend requests in real-time
+                    listenForFriendRequests();
 
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                    let isFirstLoad = true; // Flag to ensure resolve is called only once
-                    
+                    let isFirstLoad = true;
                     unsubscribeFromFirestore = window.firebaseSDK.onSnapshot(userDocRef, (docSnap) => {
                         if (docSnap.exists() && docSnap.data().appData) {
-                            loadAndDisplayData(docSnap.data().appData); // Load data from Firestore
+                            loadAndDisplayData(docSnap.data().appData);
                         } else {
-                            loadAndDisplayData({}); // Load empty state if user document or appData is missing (new user)
+                            loadAndDisplayData({}); // Load empty state for new user
                         }
-                        // Resolve the promise only after the first successful data load.
                         if (isFirstLoad) {
                             isFirstLoad = false;
                             resolve();
                         }
                     }, (error) => {
                         console.error("Error listening to Firestore:", getCoolErrorMessage(error));
-                        // If there's an error during the first load, still resolve to allow app to start.
                         if (isFirstLoad) {
                              isFirstLoad = false;
                              resolve();
@@ -2727,156 +2673,101 @@
                 });
             }
 
-            // Updates the UI elements related to the user's logged-in status (e.g., settings menu).
             async function updateUserUI() {
-                if (user) { // User is logged in
+                if (user) {
                     settingsLoginBtn.style.display = 'none';
                     logoutBtn.style.display = 'inline-flex';
-                    manageAccountBtn.style.display = 'inline-flex'; // Show manage account button
+                    // Show manage account button for BOTH password and google users
+                    manageAccountBtn.style.display = 'inline-flex';
 
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const docSnap = await window.firebaseSDK.getDoc(userDocRef);
-                    // Display username if available, otherwise fall back to email.
                     const username = docSnap.exists() && docSnap.data().username ? docSnap.data().username : user.email;
 
                     userDisplay.textContent = `Logged in as: ${username}`;
                     userDisplay.style.display = 'flex';
-                    dataManagementHeading.textContent = "Cloud Data"; // Change heading for logged-in users
-                    exportDataBtn.style.display = 'none'; // Hide guest data export
-                    importDataBtn.style.display = 'none'; // Hide guest data import
-                    resetProgressBtn.textContent = 'Reset Cloud Data'; // Adjust button text
+                    dataManagementHeading.textContent = "Cloud Data";
+                    exportDataBtn.style.display = 'none';
+                    importDataBtn.style.display = 'none';
+                    resetProgressBtn.textContent = 'Reset Cloud Data';
                     
-                    // Show friends-related UI elements for logged-in users
+                    // IMPORT: Show friends buttons for logged-in users
                     friendsBtnDesktop.style.display = 'flex';
                     mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
 
-                } else { // User is logged out or viewing as guest
+
+                } else {
                     settingsLoginBtn.style.display = 'inline-flex';
                     logoutBtn.style.display = 'none';
                     manageAccountBtn.style.display = 'none';
                     userDisplay.textContent = 'Playing as Guest';
                     userDisplay.style.display = 'flex';
-                    dataManagementHeading.textContent = "Guest Data (Local)"; // Change heading for guests
-                    exportDataBtn.style.display = 'inline-flex'; // Show guest data export
-                    importDataBtn.style.display = 'inline-flex'; // Show guest data import
-                    resetProgressBtn.textContent = 'Reset Progress'; // Reset button text for guests
+                    dataManagementHeading.textContent = "Guest Data (Local)";
+                    exportDataBtn.style.display = 'inline-flex';
+                    importDataBtn.style.display = 'inline-flex';
+                    resetProgressBtn.textContent = 'Reset Progress';
                     
-                    // Hide friends-related UI elements for guests
+                    // IMPORT: Hide friends buttons for guests
                     friendsBtnDesktop.style.display = 'none';
                     mobileNav.querySelector('[data-section="friends"]').style.display = 'none';
                 }
             }
-
-            // Constants for XP calculation
             const XP_PER_TASK = 35;
             const XP_PER_TIMER_MINUTE = 2;
-            // Function to calculate XP needed for the next level
             const getXpForNextLevel = (level) => 50 + (level * 50);
-
-            // Array of motivational quotes
-            const quotes = [
-                "The secret of getting ahead is getting started.", 
-                "A year from now you may wish you had started today.", 
-                "The future depends on what you do today.",
-                "It always seems impossible until it's done.",
-                "Don't watch the clock; do what it does. Keep going."
-            ];
-            // Function to display a random quote in the header
+            const quotes = ["The secret of getting ahead is getting started.", "A year from now you may wish you had started today.", "The future depends on what you do today."];
             function showRandomQuote() { quoteEl.textContent = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`; }
-            
-            // Helper to get the start of the current week (Monday)
-            const getStartOfWeek = (date) => {
+            function getStartOfWeek(date) {
                 const d = new Date(date);
-                const day = d.getDay(); // Sunday - 0, Monday - 1, ... Saturday - 6
-                // Adjust date to the most recent Monday (or Sunday if day is 0, then subtract 6 days)
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
-                return new Date(d.setDate(diff)).setHours(0, 0, 0, 0); // Set time to midnight
-            };
-
-            // Checks if it's a new day and resets daily quests, updating streaks.
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                return new Date(d.setDate(diff)).setHours(0, 0, 0, 0);
+            }
             const checkDailyReset = () => {
                 const today = new Date().toDateString();
                 const lastVisit = localStorage.getItem('lastVisitDate');
-                
-                if (today !== lastVisit) { // It's a new day
-                    const yesterday = new Date(Date.now() - 86400000).toDateString(); // Get yesterday's date string
+                if (today !== lastVisit) {
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
                     dailyTasks.forEach(task => {
-                        // If task was completed yesterday, increment streak. Otherwise, reset streak.
-                        if (task.completedToday && task.lastCompleted === yesterday) {
-                            task.streak = (task.streak || 0) + 1;
-                        } else if (!task.completedToday) { // Only reset streak if not completed today (meaning it wasn't completed yesterday either)
-                            task.streak = 0;
-                        }
-                        // Reset completion status for today
+                        if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
+                        else if (!task.completedToday) task.streak = 0;
                         task.completedToday = false;
-                        task.lastCompleted = null; 
-                        // Reset weekly goal completions if the week has changed
-                        if (task.weeklyGoal > 0) {
-                            const now = new Date();
-                            if (task.weekStartDate < getStartOfWeek(now)) {
-                                task.weekStartDate = getStartOfWeek(now);
-                                task.weeklyCompletions = 0;
-                            }
-                        }
                     });
-                    localStorage.setItem('lastVisitDate', today); // Update last visit date
-                    saveState(); // Save the reset state
+                    localStorage.setItem('lastVisitDate', today);
+                    saveState();
                 }
             };
-
-            // Adds XP to the player, handling level ups.
             function addXp(amount) {
                 playerData.xp += Math.round(amount);
-                if (playerData.xp < 0) playerData.xp = 0; // Ensure XP doesn't go below zero
-                
+                if (playerData.xp < 0) playerData.xp = 0;
                 const requiredXp = getXpForNextLevel(playerData.level);
-                if (playerData.xp >= requiredXp) {
-                    levelUp(requiredXp); // Trigger level up if enough XP
-                }
-                updateProgressUI(); // Update XP bar visually
+                if (playerData.xp >= requiredXp) levelUp(requiredXp);
+                updateProgressUI();
             }
-
-            // Handles the level up process.
             function levelUp(requiredXp) {
                 playerData.level++;
-                playerData.xp -= requiredXp; // Subtract XP used for level up
-                playSound('levelUp'); // Play level up sound
-                levelDisplayEl.classList.add('level-up'); // Add class for animation
-                // Remove animation class after it finishes
+                playerData.xp -= requiredXp;
+                playSound('levelUp');
+                levelDisplayEl.classList.add('level-up');
                 levelDisplayEl.addEventListener('animationend', () => levelDisplayEl.classList.remove('level-up'), { once: true });
-                
-                // Check if the player leveled up multiple times with the gained XP
                 const newRequiredXp = getXpForNextLevel(playerData.level);
-                if (playerData.xp >= newRequiredXp) {
-                    levelUp(newRequiredXp); // Recursive call for multiple level ups
-                }
+                if (playerData.xp >= newRequiredXp) levelUp(newRequiredXp);
             }
-
-            // Updates the XP bar and level text in the UI.
             function updateProgressUI() {
                 const requiredXp = getXpForNextLevel(playerData.level);
-                // Calculate progress percentage, capping at 100%
                 const progressPercent = Math.min((playerData.xp / requiredXp) * 100, 100);
                 playerLevelEl.textContent = playerData.level;
                 xpTextEl.textContent = `${Math.floor(playerData.xp)} / ${requiredXp} XP`;
                 xpBarEl.style.width = `${progressPercent}%`;
             }
-
-            // Checks tasks for overdue status and applies styling.
             function checkOverdueTasks() {
                 const now = Date.now();
-                const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
-                
-                allTasks.forEach(task => {
+                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(task => {
                     const taskEl = document.querySelector(`.task-item[data-id="${task.id}"]`);
-                    if (!taskEl || task.completedToday) return; // Skip if element not found or task is completed today
-                    
-                    // Mark as overdue if task creation time was more than 24 hours ago
+                    if (!taskEl || task.completedToday) return;
                     taskEl.classList.toggle('overdue', (now - task.createdAt) > 86400000);
                 });
             }
-
-            // Checks if all daily tasks are completed and if all tasks in the app are done.
             function checkAllTasksCompleted() {
                 const allDailiesDone = dailyTasks.length > 0 && dailyTasks.every(t => t.completedToday);
                 const noStandaloneQuests = standaloneMainQuests.length === 0;
@@ -2884,117 +2775,29 @@
                 return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
             }
             
-            // --- RENDERING FUNCTIONS ---
-            // Renders the list of daily tasks.
-            const renderDailyTasks = () => { 
-                dailyTaskListContainer.innerHTML = ''; // Clear existing list
-                noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; // Show message if list is empty
-                dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); // Append each task element
-            };
-            // Renders the list of standalone main quests.
-            const renderStandaloneTasks = () => { 
-                standaloneTaskListContainer.innerHTML = ''; 
-                standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
-            };
-            // Renders all general task groups.
-            const renderGeneralTasks = () => { 
-                generalTaskListContainer.innerHTML = ''; 
-                generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); 
-                // Show message if there are no standalone quests and no general groups
-                noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; 
-            };
-            
-            // Creates the HTML element for a task group.
+            const renderDailyTasks = () => { dailyTaskListContainer.innerHTML = ''; noDailyTasksMessage.style.display = dailyTasks.length === 0 ? 'block' : 'none'; dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); };
+            const renderStandaloneTasks = () => { standaloneTaskListContainer.innerHTML = ''; standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); };
+            const renderGeneralTasks = () => { generalTaskListContainer.innerHTML = ''; generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); noGeneralTasksMessage.style.display = (standaloneMainQuests.length === 0 && generalTaskGroups.length === 0) ? 'block' : 'none'; };
             const createGroupElement = (group) => {
-                const el = document.createElement('div'); 
-                el.className = 'main-quest-group'; 
-                if (group.isExpanded) el.classList.add('expanded'); // Add expanded class if group is expanded
-                el.dataset.groupId = group.id; // Set data attribute for group ID
-                
-                el.innerHTML = `
-                    <header class="main-quest-group-header">
-                        <div class="group-title-container">
-                            <svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
-                            <h3>${group.name}</h3>
-                        </div>
-                        <div class="group-actions">
-                            <button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                            <button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-                            <button class="btn add-task-to-group-btn" aria-label="Add task">+</button>
-                        </div>
-                    </header>
-                    <ul class="task-list-group" data-group-id="${group.id}"></ul>
-                `;
-                const ul = el.querySelector('ul'); // Get the unordered list for tasks
-                if (group.tasks) { // If the group has tasks, render them
-                    group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group')));
-                }
-                return el; // Return the created group element
+                const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
+                el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+                const ul = el.querySelector('ul'); if (group.tasks) group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); return el;
             };
-            
-            // Creates the HTML element for a single task item.
             const createTaskElement = (task, type) => {
-                const li = document.createElement('li'); 
-                li.className = 'task-item'; 
-                li.dataset.id = task.id; // Set data attribute for task ID
-                if (type === 'standalone') li.classList.add('standalone-quest'); // Style standalone quests differently
-
-                // Generate streak counter HTML if it's a daily task with a streak > 0
-                let streakHTML = ''; 
-                if (type === 'daily' && task.streak > 0) {
-                    streakHTML = `
-                        <div class="streak-counter" title="Current Streak: ${task.streak}">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg>
-                            <span>${task.streak}</span>
-                        </div>
-                    `;
-                }
-
-                // Generate weekly goal tag HTML if applicable
-                let goalHTML = ''; 
-                if (type === 'daily' && task.weeklyGoal > 0) {
-                    goalHTML = `
-                        <div class="weekly-goal-tag" title="Weekly Goal Progress">
-                            <span>${task.weeklyCompletions}/${task.weeklyGoal}</span>
-                        </div>
-                    `;
-                    // Add 'weekly-goal-met' class if the goal is achieved
-                    if (task.weeklyCompletions >= task.weeklyGoal) {
-                        li.classList.add('weekly-goal-met'); 
-                    }
-                }
-
-                // Set the inner HTML for the task item
-                li.innerHTML = `
-                    <button class="complete-btn"></button> 
-                    <div class="task-content">
-                        ${streakHTML} 
-                        <span class="task-text">${task.text}</span>
-                        ${goalHTML}
-                    </div>
+                const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
+                let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
+                let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
+                li.innerHTML = `<button class="complete-btn"></button>
+                    <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
                     <div class="task-buttons-wrapper">
-                        <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            <svg class="progress-ring" viewBox="0 0 24 24">
-                                <circle class="progress-ring-circle" r="10" cx="12" cy="12"/>
-                            </svg>
-                        </button>
+                        <button class="btn icon-btn timer-clock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                         <div class="task-actions">
-                            <button class="btn icon-btn edit-btn" aria-label="Edit Task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                            <button class="btn icon-btn delete-btn" aria-label="Delete Task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                            <button class="btn icon-btn edit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                            <button class="btn icon-btn delete-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                         </div>
-                    </div>
-                `;
-
-                // Apply specific styles based on task state
-                if (task.completedToday) { 
-                    li.classList.add('daily-completed'); 
-                    li.querySelector('.complete-btn').classList.add('checked'); 
-                }
-                if (task.timerFinished) { 
-                    li.classList.add('timer-finished'); 
-                }
-                // Handle active timers visually
+                    </div>`;
+                if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
+                if (task.timerFinished) li.classList.add('timer-finished');
                 if (task.timerStartTime && task.timerDuration) {
                     const elapsed = (Date.now() - task.timerStartTime) / 1000;
                     const remaining = Math.max(0, task.timerDuration - elapsed);
@@ -3002,263 +2805,125 @@
                         li.classList.add('timer-active');
                         const ring = li.querySelector('.progress-ring-circle');
                         if (ring) {
-                            const r = ring.r.baseVal.value; // Get the radius of the circle element
-                            if (r > 0) {
-                                const c = r * 2 * Math.PI; // Circumference
-                                const p = remaining / task.timerDuration; // Progress percentage
-                                ring.style.strokeDashoffset = c - (p * c); // Set offset for progress indicator
-                            }
+                            const r = 10;
+                            const c = r * 2 * Math.PI;
+                            ring.style.strokeDashoffset = c - (p * c);
                         }
                     }
                 }
-                return li; // Return the created task list item element
+                return li;
             };
             
-            // --- TASK MANAGEMENT FUNCTIONS ---
-
-            // Adds a new task to the specified list ('daily', 'standalone', or a group ID).
             const addTask = (text, list, goal) => {
-                const common = { id: Date.now().toString(), text, createdAt: Date.now() }; // Common properties for all tasks
-                if (list === 'daily') {
-                    dailyTasks.push({ 
-                        ...common, 
-                        completedToday: false, 
-                        lastCompleted: null, 
-                        streak: 0, 
-                        weeklyGoal: goal || 0, 
-                        weeklyCompletions: 0, 
-                        weekStartDate: getStartOfWeek(new Date()) // Record the start of the week
-                    });
-                } else if (list === 'standalone') {
-                    standaloneMainQuests.push({ ...common });
-                } else { // Adding to a specific group
-                    const g = generalTaskGroups.find(g => g.id === list); 
-                    if (g) { 
-                        if (!g.tasks) g.tasks = []; // Initialize tasks array if it doesn't exist
-                        g.tasks.push({ ...common }); 
-                    }
-                }
-                renderAllLists(); // Re-render all lists to show the new task
-                saveState(); // Save the updated state
-                playSound('add'); // Play sound effect
+                const common = { id: Date.now().toString(), text, createdAt: Date.now() };
+                if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()) });
+                else if (list === 'standalone') standaloneMainQuests.push({ ...common });
+                else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common }); } }
+                renderAllLists();
+                saveState(); 
+                playSound('add');
             };
-
-            // Adds a new task group.
             const addGroup = (name) => { 
-                generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); // New group properties
+                generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); 
                 renderAllLists();
                 saveState(); 
                 playSound('addGroup'); 
             };
-
-            // Deletes a task group and all its tasks.
-            const deleteGroup = (id) => { 
-                const groupNameToDelete = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; // Get group name for confirmation
-                showConfirm(`Delete "${groupNameToDelete}"?`, 'All tasks within this group will also be deleted.', () => { 
-                    generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); // Filter out the group to delete
-                    renderAllLists(); 
-                    saveState(); 
-                    playSound('delete'); 
-                });
-            };
-
-            // Finds a task and its context (list, group) by its ID.
+            const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
             const findTaskAndContext = (id) => {
-                let task = dailyTasks.find(t => t && t.id === id); 
-                if (task) return { task, list: dailyTasks, type: 'daily' };
-                
-                task = standaloneMainQuests.find(t => t && t.id === id); 
-                if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
-                
-                for (const g of generalTaskGroups) { 
-                    if (g && g.tasks) { 
-                        const i = g.tasks.findIndex(t => t && t.id === id); 
-                        if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; 
-                    } 
-                } 
-                return {}; // Return empty object if task not found
+                let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
+                task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
+                for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } return {};
             };
-
-            // Deletes a task.
-            const deleteTask = (id) => { 
-                stopTimer(id, false); // Stop any running timer for this task
-                const { list } = findTaskAndContext(id); // Find the list the task belongs to
-                if (list) { 
-                    const i = list.findIndex(t => t.id === id); 
-                    if(i > -1) list.splice(i, 1); // Remove task from its list
-                }
-                // If the task was in a group and the group is now empty, consider removing the group.
-                const { group } = findTaskAndContext(id);
-                if (group && group.tasks && group.tasks.length === 0) {
-                    const groupIndex = generalTaskGroups.findIndex(g => g.id === group.id);
-                    if (groupIndex > -1) {
-                        generalTaskGroups.splice(groupIndex, 1); // Remove empty group
-                    }
-                }
-                renderAllLists(); 
-                saveState(); 
-                playSound('delete'); 
-            };
-
-            // Marks a task as completed.
+            const deleteTask = (id) => { stopTimer(id, false); const {list} = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if(i > -1) list.splice(i, 1); } renderAllLists(); saveState(); playSound('delete'); };
             const completeTask = (id) => {
-                stopTimer(id, false); // Stop timer if running
-                const { task, type } = findTaskAndContext(id); 
-                if (!task) return; // Exit if task not found
-
-                if (task.timerFinished) delete task.timerFinished; // Remove timer finished state
-
-                addXp(XP_PER_TASK); // Award XP for task completion
-                playSound('complete'); // Play completion sound
-
+                stopTimer(id, false); const { task, type } = findTaskAndContext(id); if (!task) return;
+                if (task.timerFinished) delete task.timerFinished;
+                addXp(XP_PER_TASK); playSound('complete');
                 if (type === 'daily') {
-                    if (task.completedToday) return; // Already completed today, do nothing
-                    task.completedToday = true; // Mark as completed today
-                    task.lastCompleted = new Date().toDateString(); // Record completion date
-                    // Update weekly goal progress
-                    if (task.weeklyGoal > 0) {
-                        const now = new Date();
-                        if (task.weekStartDate < getStartOfWeek(now)) { // If week has reset
-                            task.weekStartDate = getStartOfWeek(now); // Update week start date
-                            task.weeklyCompletions = 1; // Reset completions for the new week
-                        } else {
-                            task.weeklyCompletions = (task.weeklyCompletions || 0) + 1; // Increment weekly completions
-                        }
-                    }
-                } else { // For non-daily tasks (standalone or group tasks)
-                    createConfetti(document.querySelector(`.task-item[data-id="${id}"]`)); // Trigger confetti effect
-                    const { list, group } = findTaskAndContext(id); // Find task's list and group
-                    if (list) { 
-                        const i = list.findIndex(t => t.id === id); 
-                        if(i > -1) list.splice(i, 1); // Remove task from its list
-                    }
-                    // If completing a task makes its group empty, remove the group
-                    if (group && (!group.tasks || group.tasks.length === 0)) {
-                        const groupIndex = generalTaskGroups.findIndex(g => g.id === group.id);
-                        if (groupIndex > -1) {
-                            generalTaskGroups.splice(groupIndex, 1);
-                        }
-                    }
+                    if(task.completedToday) return; task.completedToday = true; task.lastCompleted = new Date().toDateString();
+                    if (task.weeklyGoal > 0) { const now = new Date(); if (task.weekStartDate < getStartOfWeek(now)) { task.weekStartDate = getStartOfWeek(now); task.weeklyCompletions = 1; } else { task.weeklyCompletions = (task.weeklyCompletions || 0) + 1; } }
+                } else {
+                    createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
+                    const { list, group } = findTaskAndContext(id); if (list) { const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); }
+                    if (group && (!group.tasks || group.tasks.length === 0)) { const i = generalTaskGroups.findIndex(g => g.id === group.id); if(i > -1) generalTaskGroups.splice(i, 1); }
                 }
-                saveState(); // Save changes
-                renderAllLists(); // Re-render lists to reflect changes
-
-                // Check for overall completion celebration
-                const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); 
-                if (allTasksDone) { 
-                    createFullScreenConfetti(true); // Full party mode if everything is done
-                } else if (allDailiesDone) { 
-                    createFullScreenConfetti(false); // Confetti if only dailies are done
-                }
+                saveState();
+                renderAllLists();
+                const { allDailiesDone, allTasksDone } = checkAllTasksCompleted(); if (allTasksDone) createFullScreenConfetti(true); else if (allDailiesDone) createFullScreenConfetti(false);
             };
-
-            // Unmarks a daily task as completed.
-            const uncompleteDailyTask = (id) => { 
-                const task = dailyTasks.find(t => t.id === id); 
-                if (task && task.completedToday) { 
-                    task.completedToday = false; // Unmark completion
-                    // Decrement weekly completion count if it was marked for today
-                    if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
-                        task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); 
-                    }
-                    addXp(-XP_PER_TASK); // Remove XP gained from completing this task
-                    playSound('delete'); // Play sound effect
-                    saveState(); 
-                    renderAllLists(); 
-                } 
-            };
-
-            // Edits an existing task's text and weekly goal.
+            const uncompleteDailyTask = (id) => { const task = dailyTasks.find(t => t.id === id); if (task && task.completedToday) { task.completedToday = false; if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1); addXp(-XP_PER_TASK); playSound('delete'); saveState(); renderAllLists(); } };
             const editTask = (id, text, goal) => {
-                const { task, type } = findTaskAndContext(id); // Find the task
+                const { task, type } = findTaskAndContext(id);
                 if (task) {
-                    task.text = text; // Update task text
-                    if (type === 'daily') {
-                        task.weeklyGoal = goal; // Update weekly goal only for daily tasks
-                    }
-                    saveState(); 
-                    renderAllLists(); 
+                    task.text = text;
+                    if (type === 'daily') task.weeklyGoal = goal;
+                    saveState();
+                    renderAllLists();
                 }
             };
-
-            // Function called when a timer successfully finishes.
             function finishTimer(id) {
-                playSound('timerUp'); // Play timer finished sound
-                stopTimer(id, false); // Stop the timer interval (don't re-render yet)
+                playSound('timerUp');
+                stopTimer(id, false); // Stop interval without re-rendering
                 const { task } = findTaskAndContext(id);
                 if (task) {
-                    task.timerFinished = true; // Mark timer as finished
-                    delete task.timerStartTime; // Clean up timer start time
-                    delete task.timerDuration; // Clean up timer duration
-                    saveState(); // Save the state change
-                    renderAllLists(); // Re-render to show the finished timer state
-                }
-            }
-
-            // Starts a timer for a specific task.
-            function startTimer(id, durationInMinutes) {
-                stopTimer(id, false); // Stop any existing timer for this task
-                const { task } = findTaskAndContext(id); // Find the task
-                if (!task) return; // Exit if task not found
-
-                task.timerStartTime = Date.now(); // Record when timer started
-                task.timerDuration = durationInMinutes * 60; // Store duration in seconds
-                delete task.timerFinished; // Remove timer finished state if it was previously set
-                
-                saveState(); // Save the state with timer active
-                renderAllLists(); // Re-render to show the active timer
-            }
-
-            // Stops a running timer for a task.
-            function stopTimer(id, shouldRender = true) { // `shouldRender` flag to control immediate UI update
-                if (activeTimers[id]) {
-                    clearInterval(activeTimers[id]); // Clear the interval
-                    delete activeTimers[id]; // Remove from active timers map
-                }
-                const { task } = findTaskAndContext(id);
-                if (task) {
-                    // Clean up timer properties from the task object
+                    task.timerFinished = true;
                     delete task.timerStartTime;
                     delete task.timerDuration;
-                    if (shouldRender) { // Re-render if requested
+                    saveState();
+                    renderAllLists();
+                }
+            }
+            function startTimer(id, mins) {
+                stopTimer(id, false);
+                const { task } = findTaskAndContext(id);
+                if (!task) return;
+
+                task.timerStartTime = Date.now();
+                task.timerDuration = mins * 60;
+                delete task.timerFinished;
+                
+                saveState();
+                renderAllLists();
+            }
+            function stopTimer(id, shouldRender = true) {
+                if (activeTimers[id]) {
+                    clearInterval(activeTimers[id]);
+                    delete activeTimers[id];
+                }
+                const { task } = findTaskAndContext(id);
+                if (task) {
+                    delete task.timerStartTime;
+                    delete task.timerDuration;
+                    if (shouldRender) {
                         saveState();
                         renderAllLists();
                     }
                 }
             }
-
-            // Resumes all active timers when the app loads or reloads.
             function resumeTimers() {
-                // Clear any existing timer intervals before resuming
                 Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-                activeTimers = {}; // Reset the active timers map
-                
-                let needsSaveAndRender = false; // Flag to indicate if state needs saving/rendering after resuming
-                // Iterate through all tasks to find active timers
-                const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
-                
-                allTasks.forEach(t => {
-                    if (t && t.timerStartTime && t.timerDuration) { // Check if timer properties exist
+                let needsSaveAndRender = false;
+                [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                    if (t && t.timerStartTime && t.timerDuration) {
                         const elapsed = (Date.now() - t.timerStartTime) / 1000;
                         const remainingSeconds = t.timerDuration - elapsed;
                         
-                        if (remainingSeconds > 0) { // If timer is still running
-                             // Set up a new interval for this timer
+                        if (remainingSeconds > 0) {
                              activeTimers[t.id] = setInterval(() => {
                                 const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
                                 const currentRemaining = (t.timerDuration || 0) - currentElapsed;
                                 
                                 const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
-                                // If the task element is no longer on the page or the timer was stopped externally, clear the interval
                                 if (!taskEl || !activeTimers[t.id]) {
                                     clearInterval(activeTimers[t.id]);
                                     delete activeTimers[t.id];
                                     return;
                                 }
 
-                                if (currentRemaining > 0) { // If time is still remaining
+                                if (currentRemaining > 0) {
                                     const ring = taskEl.querySelector('.progress-ring-circle');
-                                    if (ring) { // Update the visual progress ring
+                                    if (ring) {
                                         const r = ring.r.baseVal.value;
                                         if (r > 0) {
                                             const c = r * 2 * Math.PI;
@@ -3266,277 +2931,163 @@
                                             ring.style.strokeDashoffset = c - (p * c);
                                         }
                                     }
-                                } else { // Timer has run out
-                                    finishTimer(t.id); // Trigger the finish timer logic
+                                } else {
+                                    finishTimer(t.id);
                                 }
-                            }, 1000); // Update every second
-                        } else { // Timer has already run out before resumeTimers was called
-                            if (!t.timerFinished) { // Only process if not already marked as finished
-                                t.timerFinished = true; // Mark as finished
-                                delete t.timerStartTime; // Clean up properties
+                            }, 1000);
+                        } else {
+                            if (!t.timerFinished) {
+                                t.timerFinished = true;
+                                delete t.timerStartTime;
                                 delete t.timerDuration;
-                                needsSaveAndRender = true; // Mark that a save and re-render is needed
+                                needsSaveAndRender = true;
                             }
                         }
                     }
                 });
-                // Save and re-render if any timers were found to be expired upon resume
                 if (needsSaveAndRender) {
                     saveState();
                     renderAllLists();
                 }
             }
             
-            // --- EVENT HANDLERS ---
-
-            // Click handler for the main quests layout (tasks, groups, headers).
             document.querySelector('.quests-layout').addEventListener('click', (e) => {
                 const taskItem = e.target.closest('.task-item');
                 const groupHeader = e.target.closest('.main-quest-group-header');
 
-                // Handler for showing/hiding action buttons on mobile
                 function handleMobileActions(element) {
-                     if (window.innerWidth > 1023) return; // Only for mobile screens
-                     // If a button inside the actions wrapper was clicked, don't toggle actions visibility
+                     if (window.innerWidth > 1023) return;
                      if (e.target.closest('button')) { 
                          clearTimeout(actionsTimeoutId);
                          return;
                      }
-                     clearTimeout(actionsTimeoutId); // Clear previous timeout
-                     
+                     clearTimeout(actionsTimeoutId);
+                     if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+                         activeMobileActionsItem.classList.remove('actions-visible');
+                     }
                      const wasVisible = element.classList.contains('actions-visible');
-                     // Toggle the 'actions-visible' class
                      element.classList.toggle('actions-visible');
-
-                     if (!wasVisible) { // If actions were just made visible
-                         activeMobileActionsItem = element; // Track the currently active item
-                         // Set a timeout to automatically hide actions after a few seconds
+                     if (!wasVisible) {
+                         activeMobileActionsItem = element;
                          actionsTimeoutId = setTimeout(() => {
                              if(element.classList.contains('actions-visible')) {
                                  element.classList.remove('actions-visible');
-                                 activeMobileActionsItem = null; // Reset tracker
+                                 activeMobileActionsItem = null;
                              }
-                         }, 3000); // Hide after 3 seconds
-                     } else { // If actions were hidden by clicking again
-                         activeMobileActionsItem = null; // Reset tracker
+                         }, 3000);
+                     } else {
+                         activeMobileActionsItem = null;
                      }
                 }
                 
-                // Handle clicks on group headers
                 if (groupHeader) { 
                     const groupId = groupHeader.parentElement.dataset.groupId;
-                    const g = generalTaskGroups.find(g => g.id === groupId); // Find the group object
+                    const g = generalTaskGroups.find(g => g.id === groupId);
 
-                    // Handle tap on expand icon specifically on mobile
+                    // Phone: expand icon is a separate action
                     if (window.innerWidth <= 1023 && e.target.closest('.expand-icon')) {
-                        if (g) g.isExpanded = !g.isExpanded; // Toggle group expansion
+                        if (g) g.isExpanded = !g.isExpanded; 
                         saveState(); 
                         renderAllLists();
-                        return; // Prevent the mobile actions menu from opening
+                        return; // Prevent action menu from opening
                     }
                     
-                    const isButton = e.target.closest('button'); // Check if a button was clicked
+                    const isButton = e.target.closest('button');
                     if (isButton) {
-                        // Handle specific button actions within group header
-                        if (e.target.closest('.add-task-to-group-btn')) { // Add task to this group
-                            currentListToAdd = groupId; 
-                            weeklyGoalContainer.style.display = 'none'; // Weekly goals only for daily tasks
-                            addTaskModalTitle.textContent = `Add to "${g.name}"`; 
-                            openModal(addTaskModal); 
-                            focusOnDesktop(newTaskInput); 
-                        } else if (e.target.closest('.delete-group-btn')) { // Delete group
-                            deleteGroup(groupId);
-                        }
-                    } else { // If the header itself was clicked (not a button)
-                         if (window.innerWidth <= 1023) { // On mobile, toggle action menu
+                        if (e.target.closest('.add-task-to-group-btn')) { currentListToAdd = groupId; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = `Add to "${g.name}"`; openModal(addTaskModal); focusOnDesktop(newTaskInput); } 
+                        else if (e.target.closest('.delete-group-btn')) deleteGroup(groupId);
+                    } else {
+                         if (window.innerWidth <= 1023) {
                              handleMobileActions(groupHeader);
-                         } else { // On desktop, toggle group expansion
+                         } else {
                             if (g) g.isExpanded = !g.isExpanded; 
                             saveState(); 
                             renderAllLists();
                          }
                     }
-                    return; // Exit after handling group header click
+                    return; 
                 }
 
-                // Handle clicks on task items
                 if (taskItem) {
-                    const id = taskItem.dataset.id; // Get task ID
-                    
-                    // Handle tapping a completed daily task to uncomplete it
+                    const id = taskItem.dataset.id;
                     if (taskItem.classList.contains('daily-completed')) {
                         uncompleteDailyTask(id);
-                        return; // Task handled, exit
+                        return;
                     }
                     
-                    handleMobileActions(taskItem); // Manage mobile action visibility
+                    handleMobileActions(taskItem);
 
-                    // Handle clicks on buttons within the task item
                     if(e.target.closest('button')) {
-                        currentEditingTaskId = id; // Store task ID for potential edits/timers
-                        if (e.target.closest('.complete-btn')) { // Complete task button
-                            completeTask(id);
-                        } else if (e.target.closest('.delete-btn')) { // Delete task button
-                            deleteTask(id);
-                        } else if (e.target.closest('.timer-clock-btn')) { // Timer button
-                            const { task } = findTaskAndContext(id); 
-                            if (task && task.timerStartTime) { // If timer is already active
-                                openModal(timerMenuModal); // Show menu to cancel timer
-                            } else {
-                                openModal(timerModal); // Show modal to set timer duration
-                            }
-                        } else if (e.target.closest('.edit-btn')) { // Edit task button
+                        currentEditingTaskId = id;
+                        if (e.target.closest('.complete-btn')) completeTask(id);
+                        else if (e.target.closest('.delete-btn')) deleteTask(id);
+                        else if (e.target.closest('.timer-clock-btn')) { const { task } = findTaskAndContext(id); if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); }
+                        else if (e.target.closest('.edit-btn')) {
                             const { task, type } = findTaskAndContext(id);
                             if (task) {
-                                editTaskIdInput.value = task.id; // Set hidden input for task ID
-                                editTaskInput.value = task.text; // Populate input field with current text
-                                // Update modal title and weekly goal UI based on task type
+                                editTaskIdInput.value = task.id;
+                                editTaskInput.value = task.text;
                                 editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
                                 if (type === 'daily') {
                                     const goal = task.weeklyGoal || 0;
-                                    editWeeklyGoalSlider.value = goal; // Set slider value
-                                    updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay); // Update display text
-                                    editWeeklyGoalContainer.style.display = 'block'; // Show weekly goal controls
+                                    editWeeklyGoalSlider.value = goal;
+                                    editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
+                                    editWeeklyGoalContainer.style.display = 'block';
                                 } else {
-                                    editWeeklyGoalContainer.style.display = 'none'; // Hide weekly goal controls
+                                    editWeeklyGoalContainer.style.display = 'none';
                                 }
-                                openModal(editTaskModal); // Open the edit task modal
-                                focusOnDesktop(editTaskInput); // Focus input field on desktop
+                                openModal(editTaskModal);
+                                focusOnDesktop(editTaskInput);
                             }
                         }
                     }
                 } 
             });
 
-            // Form submission handlers
             addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
             editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
-            timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; // Calculate duration in minutes based on selected unit switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
+            timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
             timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
+            timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
+            timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
             addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
             
-            // Event listeners for modal triggers
-            timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value); // Update duration display as slider moves
-            timerUnitSelector.addEventListener('click', (e) => { // Handle unit selection for timer
-                const t = e.target.closest('.timer-unit-btn');
-                if (t) {
-                    timerUnitSelector.querySelector('.selected').classList.remove('selected'); // Remove 'selected' from current button
-                    t.classList.add('selected'); // Add 'selected' to the clicked button
-                    playSound('toggle'); 
-                } 
-            });
-            addTaskTriggerBtnDaily.addEventListener('click', () => { // Open modal for adding daily tasks
-                currentListToAdd = 'daily'; 
-                weeklyGoalContainer.style.display = 'block'; // Show weekly goal controls
-                addTaskModalTitle.textContent = 'Add Daily Quest'; 
-                openModal(addTaskModal); 
-                focusOnDesktop(newTaskInput); 
-            });
-            addStandaloneTaskBtn.addEventListener('click', () => { // Open modal for adding standalone tasks
-                currentListToAdd = 'standalone'; 
-                weeklyGoalContainer.style.display = 'none'; // Hide weekly goal controls
-                addTaskModalTitle.textContent = 'Add Main Quest'; 
-                openModal(addTaskModal); 
-                focusOnDesktop(newTaskInput); 
-            });
-            addGroupBtn.addEventListener('click', () => { // Open modal for adding task groups
-                openModal(addGroupModal); 
-                focusOnDesktop(newGroupInput); 
-            });
-            settingsBtn.addEventListener('click', () => openModal(settingsModal)); // Open settings modal
-
-            // Generic modal close button handler
+            addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+            addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
+            settingsBtn.addEventListener('click', () => openModal(settingsModal));
             document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', (e) => {
                 const modalId = e.currentTarget.dataset.closeModal;
                 const modal = document.getElementById(modalId);
-                // Prevent closing persistent modals (like username setup) by clicking outside
                 if (modal.getAttribute('data-persistent') !== 'true') {
-                    closeModal(modal); // Use module-scoped closeModal
-                    // Special handling for friends modal closing to restore mobile nav state
+                    closeModal(modal);
                     if (modalId === 'friends-modal') {
+                        // FIX: Restore the active mobile nav button
                         const activeBtn = mobileNav.querySelector(`.mobile-nav-btn.active`);
-                        const prevSection = activeBtn ? activeBtn.dataset.section : 'daily'; // Default to daily if somehow no button is active
-                        // Re-apply visibility based on the previously active mobile nav section
+                        const prevSection = activeBtn.dataset.section;
+                        // Trigger the show section logic
                         document.querySelectorAll('.task-group').forEach(group => {
                             group.classList.toggle('mobile-visible', group.dataset.section === prevSection);
                         });
                     }
                 }
             }));
+            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal].forEach(m => { 
+                if (m) m.addEventListener('click', (e) => { 
+                    if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
+                        closeModal(m); 
+                    }
+                }); 
+            });
+            function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
+            confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
+            confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
+            const applySettings = () => { document.documentElement.style.setProperty('--accent', settings.accentColor); document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); if(typeof settings.volume==='undefined') settings.volume=0.3; volumeSlider.value = settings.volume; const d = window.matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.classList.toggle('dark-mode', settings.theme === 'dark' || (settings.theme === 'system' && d)); document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected')); const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`); if(s)s.classList.add('selected'); };
+            themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(); playSound('toggle'); } });
+            colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
+            volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
+            volumeSlider.addEventListener('change', () => playSound('toggle'));
             
-            // Add click-outside-to-close functionality to modals (except persistent ones)
-            [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), googleLoaderModal, friendsModal].forEach(m => { 
-                if (m) { // Ensure the modal element exists
-                    m.addEventListener('click', (e) => { 
-                        // Close modal if clicked element is the overlay itself and modal is not persistent
-                        if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
-                            closeModal(m); // Use module-scoped closeModal
-                        }
-                    }); 
-                }
-            });
-
-            // Function to show a confirmation prompt before an action.
-            function showConfirm(title, text, cb) { 
-                confirmTitle.textContent = title; 
-                confirmText.textContent = text; 
-                confirmCallback = cb; // Store the callback function
-                openModal(confirmModal); // Use module-scoped openModal
-            }
-            // Action for confirming the confirmation modal.
-            confirmActionBtn.addEventListener('click', () => { 
-                if (confirmCallback) confirmCallback(); // Execute the stored callback
-                closeModal(confirmModal); // Close the confirmation modal
-            });
-            confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal)); // Close confirmation modal without action
-
-            // Applies theme and accent color settings to the document.
-            const applySettings = () => { 
-                document.documentElement.style.setProperty('--accent', settings.accentColor); // Set accent color CSS variable
-                // Update selected state for color swatches
-                document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); 
-                
-                // Ensure volume slider is set
-                if(typeof settings.volume==='undefined') settings.volume=0.3; // Default volume if not set
-                volumeSlider.value = settings.volume; 
-                
-                // Determine system dark mode preference
-                const d = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                // Add/remove 'dark-mode' class based on theme setting and system preference
-                document.documentElement.classList.toggle('dark-mode', settings.theme === 'dark' || (settings.theme === 'system' && d)); 
-                
-                // Update selected state for theme buttons
-                document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
-                const selectedThemeBtn = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
-                if(selectedThemeBtn) selectedThemeBtn.classList.add('selected');
-            };
-
-            // Event listener for theme selection buttons.
-            themeOptionsButtons.addEventListener('click', (e) => { 
-                const t = e.target.closest('.theme-btn');
-                if (t) { 
-                    settings.theme = t.dataset.theme; // Update theme setting
-                    saveState(); // Save the setting
-                    applySettings(); // Apply the theme immediately
-                    playSound('toggle'); 
-                } 
-            });
-            // Event listener for accent color selection.
-            colorOptions.addEventListener('click', (e) => { 
-                if(e.target.classList.contains('color-swatch')) {
-                    settings.accentColor = e.target.dataset.color; // Update accent color setting
-                    saveState(); // Save the setting
-                    applySettings(); // Apply the color immediately
-                } 
-            });
-            // Event listener for volume slider.
-            volumeSlider.addEventListener('input', () => { 
-                settings.volume = parseFloat(volumeSlider.value); // Update volume setting
-                saveState(); // Save the setting
-            });
-            volumeSlider.addEventListener('change', () => playSound('toggle')); // Play sound when volume changes significantly
-            
-            // Helper to update the display text for the weekly goal slider.
             function updateGoalDisplay(slider, display) {
                 const value = slider.value;
                 if (value === '0') {
@@ -3545,99 +3096,43 @@
                     display.textContent = `${value} day${value > 1 ? 's' : ''}`;
                 }
             }
-            // Add listeners for weekly goal sliders in add/edit task modals.
             weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
             editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
             
-            // Reset progress button handler.
-            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone. All your tasks, progress, and settings will be lost.', () => { 
-                // Reset all state variables to defaults
-                playerData = { level: 1, xp: 0 }; 
-                dailyTasks = []; 
-                standaloneMainQuests = []; 
-                generalTaskGroups = []; 
-                settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 }; // Reset settings too
-                renderAllLists(); 
-                applySettings(); // Re-apply settings after reset
-                saveState(); // Save the reset state
-                playSound('delete'); 
-            }));
-            
-            // Export guest data button handler.
-            exportDataBtn.addEventListener('click', () => { 
-                const d = localStorage.getItem('anonymousUserData'); // Get data from local storage
-                const blob = new Blob([d || '{}'], {type: "application/json"}); // Create blob
-                const url = URL.createObjectURL(blob); // Create object URL
-                const a = document.createElement("a"); 
-                a.href = url; 
-                a.download = `procrasti-nope_guest_backup_${Date.now()}.json`; // Set filename
-                a.click(); // Simulate click to trigger download
-                URL.revokeObjectURL(url); // Clean up object URL
-            });
-            // Import guest data button handler (triggers file input).
+            resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
+            exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
             importDataBtn.addEventListener('click', () => importFileInput.click());
-            // File input change handler for importing guest data.
-            importFileInput.addEventListener('change', (e) => { 
-                const f = e.target.files[0]; 
-                if(!f) return; 
-                showConfirm("Import Guest Data?", "This will overwrite your current guest data. Are you sure?", () => { 
-                    const reader = new FileReader(); 
-                    reader.onload = (event) => { 
-                        try {
-                            localStorage.setItem('anonymousUserData', event.target.result); // Save imported data
-                            // Reload necessary parts of the app after import
-                            const loadedData = JSON.parse(event.target.result);
-                            loadAndDisplayData(loadedData); // Load and display the imported data
-                            saveState(); // Save state to ensure it's debounced/written correctly
-                        } catch (error) {
-                            console.error("Error importing data:", error);
-                            alert("Failed to import data. The file might be corrupted or not valid JSON.");
-                        }
-                    }; 
-                    reader.readAsText(f); // Read the file as text
-                }); 
-                e.target.value = ''; // Clear the file input value to allow re-importing the same file
-            });
-
-            // Play a quiet sound on hover for interactive elements.
-            document.body.addEventListener('mouseover', e => { 
-                const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title, .task-item, .main-quest-group-header'); // Elements that should trigger hover sound
-                if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; // Avoid double triggers or when leaving an element
-                playSound('hover'); 
-            });
+            importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
+            document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
             
-            // --- ACCOUNT MANAGEMENT HANDLERS ---
-            
-            // Opens the manage account modal.
             manageAccountBtn.addEventListener('click', () => {
                 const reauthContainer = manageAccountModal.querySelector('#reauth-container');
                 const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
-                // Check if the user is logged in via Google (they don't need password re-auth for username change).
                 const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
 
-                // Reset form states for security and usability.
+                // Reset form state every time it's opened
                 manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
                 manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
 
                 if (isGoogleUser) {
-                    reauthContainer.style.display = 'none'; // Hide password confirmation
-                    manageFormsContainer.style.display = 'block'; // Show management forms
-                    // For Google users, only username change is directly available without re-auth. Email/password changes require re-auth.
+                    reauthContainer.style.display = 'none';
+                    manageFormsContainer.style.display = 'block';
+                    // Hide options not applicable to Google users
                     manageAccountModal.querySelector('#update-email-form').style.display = 'none';
                     manageAccountModal.querySelector('#update-password-form').style.display = 'none';
                     manageAccountModal.querySelector('#update-username-form').style.display = 'block';
-                } else { // For email/password users
-                    reauthContainer.style.display = 'block'; // Show password confirmation
-                    manageFormsContainer.style.display = 'none'; // Hide management forms until re-authenticated
+                } else {
+                    reauthContainer.style.display = 'block';
+                    manageFormsContainer.style.display = 'none';
                     // Ensure all forms are potentially visible after re-auth
                     manageAccountModal.querySelector('#update-email-form').style.display = 'block';
                     manageAccountModal.querySelector('#update-password-form').style.display = 'block';
                     manageAccountModal.querySelector('#update-username-form').style.display = 'block';
                 }
-                openModal(manageAccountModal); // Open the manage account modal
+                openModal(manageAccountModal);
             });
 
-            // Form handler for re-authenticating the user with their password.
+
             const reauthForm = document.getElementById('reauth-form');
             reauthForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
@@ -3645,95 +3140,90 @@
                 const errorEl = document.getElementById('reauth-error');
                 errorEl.textContent = '';
 
-                if (!currentUser || !currentUser.email) { // Should not happen if called correctly, but safety check
+                if (!currentUser || !currentUser.email) {
                     errorEl.textContent = 'No user is currently logged in.';
                     return;
                 }
 
-                // Create Firebase credential object
                 const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
 
                 try {
                     await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
-                    // On successful re-authentication, show the account management forms.
+                    // On success, hide re-auth and show management forms
                     document.getElementById('reauth-container').style.display = 'none';
                     document.getElementById('manage-forms-container').style.display = 'block';
                 } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error); // Display error message
+                    errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Form handler for updating the user's email address.
             const updateEmailForm = document.getElementById('update-email-form');
             updateEmailForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const newEmail = document.getElementById('update-email-input').value;
-                const password = document.getElementById('update-email-password').value; // Current password required for update
+                const password = document.getElementById('update-email-password').value;
                 const errorEl = document.getElementById('update-email-error');
                 const successEl = document.getElementById('update-email-success');
-                errorEl.textContent = ''; // Clear previous errors
-                successEl.textContent = ''; // Clear previous success messages
+                errorEl.textContent = '';
+                successEl.textContent = '';
 
-                if (!password) { // Password is required for email/password updates
+                if (!password) {
                     errorEl.textContent = 'Please enter your current password.';
                     return;
                 }
 
                 try {
-                    // Re-authenticate before performing the sensitive update operation.
+                    // Re-authenticate before sensitive operation
                     const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
                     await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
 
-                    // Update email in Firebase Authentication service.
+                    // Update email in Firebase Auth
                     await window.firebaseSDK.updateEmail(currentUser, newEmail);
                     
-                    // Update email in Firestore user document as well.
+                    // Update email in Firestore
                     const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
                     await window.firebaseSDK.updateDoc(userDocRef, { email: newEmail });
 
-                    successEl.textContent = 'Email updated successfully!'; // Show success message
-                    updateEmailForm.reset(); // Reset the form fields
+                    successEl.textContent = 'Email updated successfully!';
+                    updateEmailForm.reset();
 
                 } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error); // Display error
+                    errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Form handler for updating the user's password.
             const updatePasswordForm = document.getElementById('update-password-form');
             updatePasswordForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
                 const newPassword = document.getElementById('update-password-input').value;
                 const errorEl = document.getElementById('update-password-error');
                 const successEl = document.getElementById('update-password-success');
-                errorEl.textContent = ''; // Clear errors
-                successEl.textContent = ''; // Clear success messages
+                errorEl.textContent = '';
+                successEl.textContent = '';
 
                 try {
                     await window.firebaseSDK.updatePassword(currentUser, newPassword);
-                    successEl.textContent = 'Password updated successfully!'; // Show success
-                    updatePasswordForm.reset(); // Reset form
+                    successEl.textContent = 'Password updated successfully!';
+                    updatePasswordForm.reset();
                 } catch (error) {
-                     errorEl.textContent = getCoolErrorMessage(error); // Display error
+                     errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Form handler for updating the user's username.
             const updateUsernameForm = document.getElementById('update-username-form');
             updateUsernameForm.addEventListener('submit', async(e) => {
                 e.preventDefault();
                 const newUsername = document.getElementById('update-username-input').value.trim().toLowerCase();
                 const errorEl = document.getElementById('update-username-error');
                 const successEl = document.getElementById('update-username-success');
-                errorEl.textContent = ''; // Clear errors
-                successEl.textContent = ''; // Clear success messages
+                errorEl.textContent = '';
+                successEl.textContent = '';
 
-                if (!currentUser) { // Safety check
+                if (!currentUser) {
                     errorEl.textContent = "You must be logged in.";
                     return;
                 }
                 
-                // Basic username validation
                 if (!newUsername || newUsername.length < 3) {
                     errorEl.textContent = 'Username must be at least 3 characters.';
                     return;
@@ -3742,15 +3232,13 @@
                 try {
                     const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
                     const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
-                    const currentUsername = userDocSnap.exists() ? userDocSnap.data().username : null;
+                    const currentUsername = userDocSnap.data().username;
 
-                    // If username hasn't changed, do nothing.
                     if (newUsername === currentUsername) {
                         errorEl.textContent = "This is already your username.";
                         return;
                     }
                     
-                    // Check if the new username is already taken.
                     const newUsernameRef = window.firebaseSDK.doc(db, "usernames", newUsername);
                     const newUsernameSnap = await window.firebaseSDK.getDoc(newUsernameRef);
                     
@@ -3759,204 +3247,138 @@
                         return;
                     }
 
-                    // Use a batch write to atomically update username and delete the old username entry.
-                    const batch = window.firebaseSDK.writeBatch(db);
-                    // Delete the old username entry if it exists.
-                    if (currentUsername) {
-                        const oldUsernameRef = window.firebaseSDK.doc(db, "usernames", currentUsername);
-                        batch.delete(oldUsernameRef);
-                    }
-                    // Add the new username entry.
-                    batch.set(newUsernameRef, { userId: currentUser.uid });
-                    // Update the user's document with the new username.
-                    batch.update(userDocRef, { username: newUsername });
-                    await batch.commit(); // Commit the batch operation
+                    const oldUsernameRef = window.firebaseSDK.doc(db, "usernames", currentUsername);
 
-                    successEl.textContent = "Username updated successfully!"; // Show success message
-                    updateUserUI(); // Refresh the user display in settings and potentially elsewhere
-                    updateUsernameForm.reset(); // Reset the form
+                    const batch = window.firebaseSDK.writeBatch(db);
+                    batch.delete(oldUsernameRef);
+                    batch.set(newUsernameRef, { userId: currentUser.uid });
+                    batch.update(userDocRef, { username: newUsername });
+                    await batch.commit();
+
+                    successEl.textContent = "Username updated successfully!";
+                    updateUserUI(); // To refresh the display name in settings
+                    updateUsernameForm.reset();
                 } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error); // Display error
+                    errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
             
-            // Initializes SortableJS for drag-and-drop functionality on task lists.
             function initSortable() {
-                // Callback function when a task is dropped in a new location.
                 function onTaskDrop(evt) {
-                    document.body.classList.remove('is-dragging'); // Remove dragging class from body
-                    const taskId = evt.item.dataset.id; // Get the ID of the dragged task item
-                    if (!taskId) return; // If no task ID, exit
-                    
-                    // Find the task and its source list.
+                    document.body.classList.remove('is-dragging');
+                    const taskId = evt.item.dataset.id;
+                    if (!taskId) return;
                     const { task, list: sourceListArray } = findTaskAndContext(taskId);
-                    if (!task || !sourceListArray) return; // Exit if task or list not found
-                    
-                    const originalIndex = sourceListArray.findIndex(t => t.id === taskId); // Find original index
-                    if (originalIndex > -1) sourceListArray.splice(originalIndex, 1); // Remove task from its original position
-                    else return; // Should not happen, but exit if original index not found
+                    if (!task || !sourceListArray) return;
+                    const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
+                    if (originalIndex > -1) sourceListArray.splice(originalIndex, 1);
+                     else return; 
 
-                    const toListEl = evt.to; // The target list element
-                    const toListId = toListEl.id; // ID of the target list (e.g., 'daily-task-list')
-                    const toGroupId = toListEl.dataset.groupId; // Group ID if target is a group's task list
-                    let destListArray; // Array where the task will be placed
+                    const toListEl = evt.to;
+                    const toListId = toListEl.id;
+                    const toGroupId = toListEl.dataset.groupId;
+                    let destListArray;
 
-                    // Determine the destination list array based on the target element
                     if (toListId === 'daily-task-list') destListArray = dailyTasks;
                     else if (toListId === 'standalone-task-list') destListArray = standaloneMainQuests;
-                    else if (toGroupId) { // Target is a task list within a group
+                    else if (toGroupId) {
                         const group = generalTaskGroups.find(g => g.id === toGroupId);
                         if (group) {
-                            if (!group.tasks) group.tasks = []; // Ensure tasks array exists
+                            if (!group.tasks) group.tasks = [];
                             destListArray = group.tasks;
                         }
                     }
 
-                    // If destination list couldn't be determined, put the task back in its original list.
                     if (!destListArray) {
-                        sourceListArray.splice(originalIndex, 0, task); // Re-insert at original index
+                        sourceListArray.splice(originalIndex, 0, task);
                         return;
                     }
                     
-                    // Insert the task into the destination list at the new index.
                     destListArray.splice(evt.newIndex, 0, task);
-                    
-                    saveState(); // Save the new order
-                    renderAllLists(); // Re-render to update UI and potentially remove empty groups
+                    saveState();
+                    renderAllLists();
                 }
 
-                // Common options for SortableJS instances
                 const commonTaskOptions = {
-                    animation: 150, // Animation speed
-                    delay: 500, // Delay before dragging starts
-                    delayOnTouchOnly: true, // Apply delay only on touch devices
-                    onStart: () => document.body.classList.add('is-dragging'), // Add class when dragging starts
-                    onEnd: onTaskDrop // Use the custom drop handler
-                };
-
-                // Initialize Sortable for daily tasks
-                new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'dailyQuests' }); 
-                // Initialize Sortable for standalone tasks
-                new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'mainQuests' });
-                // Initialize Sortable for tasks within each general group
-                document.querySelectorAll('.task-list-group').forEach(listEl => {
-                    new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
-                });
-                // Initialize Sortable for the general task groups themselves (reordering groups)
-                new Sortable(generalTaskListContainer, {
                     animation: 150,
-                    handle: '.main-quest-group-header', // Drag only by the header
                     delay: 500,
                     delayOnTouchOnly: true,
                     onStart: () => document.body.classList.add('is-dragging'),
-                    onEnd: (e) => { // Handler for dropping a group
+                    onEnd: onTaskDrop 
+                };
+
+                new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'dailyQuests' });
+                new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'mainQuests' });
+                document.querySelectorAll('.task-list-group').forEach(listEl => {
+                    new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
+                });
+                new Sortable(generalTaskListContainer, {
+                    animation: 150,
+                    handle: '.main-quest-group-header',
+                    delay: 500,
+                    delayOnTouchOnly: true,
+                    onStart: () => document.body.classList.add('is-dragging'),
+                    onEnd: (e) => {
                         document.body.classList.remove('is-dragging');
-                        // Reorder the generalTaskGroups array based on the drag-and-drop event
-                        const [item] = generalTaskGroups.splice(e.oldIndex, 1); // Remove group from old position
-                        generalTaskGroups.splice(e.newIndex, 0, item); // Insert group at new position
-                        saveState(); // Save the new order
+                        const [item] = generalTaskGroups.splice(e.oldIndex, 1);
+                        generalTaskGroups.splice(e.newIndex, 0, item);
+                        saveState();
                     }
                 });
             }
 
-            // Creates a confetti effect at a specific element's location.
-            function createConfetti(el) { 
-                if(!el) return; // Do nothing if element is null
-                const rect = el.getBoundingClientRect(); // Get element's position and size
-                // Trigger full-screen confetti if 'party' is true, otherwise confetti at element's center.
-                createFullScreenConfetti(false, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }); 
-            }
-
-            // Creates a full-screen confetti effect.
-            function createFullScreenConfetti(party, origin = null) {
-                const numPieces = party ? 200 : 100; // More pieces for 'party mode'
-                for (let i = 0; i < numPieces; i++) {
-                    const c = document.createElement('div'); 
-                    c.className = 'confetti';
-                    // Set initial position: random screen position or from provided origin
-                    const sx = origin ? origin.x : Math.random()*window.innerWidth;
-                    const sy = origin ? origin.y : -20; // Start slightly above the viewport
-                    c.style.left=`${sx}px`; 
-                    c.style.top=`${sy}px`; 
-                    // Assign a random color from the accent palette
-                    c.style.backgroundColor = ['var(--accent-pink)','var(--accent-blue)','var(--accent-green)','var(--accent-orange)','var(--accent-purple)'][Math.floor(Math.random()*5)];
-                    document.body.appendChild(c); // Add confetti element to the body
-
-                    // Animate the confetti piece
-                    const angle = Math.random()*Math.PI*2; // Random angle
-                    const velocity = 50+Math.random()*100; // Random velocity
-                    const exitX = Math.cos(angle)*velocity*(Math.random()*5); // Horizontal exit trajectory
-                    const exitY = (Math.sin(angle)*velocity)+(window.innerHeight-sy); // Vertical exit trajectory (falls downwards)
-                    
-                    c.animate([
-                        {transform:'translate(0,0) rotate(0deg)',opacity:1}, // Start state
-                        {transform:`translate(${exitX}px, ${exitY}px) rotate(${Math.random()*720}deg)`,opacity:0} // End state (fades out and moves)
-                    ],{
-                        duration:3000+Math.random()*2000, // Random duration between 3-5 seconds
-                        easing:'cubic-bezier(0.1,0.5,0.5,1)' // Easing function for realistic fall
-                    }).onfinish = () => c.remove(); // Remove element from DOM after animation finishes
+            function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
+            function createFullScreenConfetti(party, o = null) {
+                // FIX: Ensure confetti elements are properly removed from the DOM.
+                for (let i = 0; i < (party ? 200 : 100); i++) {
+                    const c = document.createElement('div'); c.className = 'confetti';
+                    const sx = o ? o.x : Math.random()*window.innerWidth, sy = o ? o.y : -20;
+                    c.style.left=`${sx}px`; c.style.top=`${sy}px`; c.style.backgroundColor = ['var(--accent-pink)','var(--accent-blue)','var(--accent-green)','var(--accent-orange)','var(--accent-purple)'][Math.floor(Math.random()*5)];
+                    document.body.appendChild(c);
+                    const a = Math.random()*Math.PI*2, v=50+Math.random()*100, ex=Math.cos(a)*v*(Math.random()*5), ey=(Math.sin(a)*v)+(window.innerHeight-sy);
+                    c.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${ex}px, ${ey}px) rotate(${Math.random()*720}deg)`,opacity:0}],{duration:3000+Math.random()*2000,easing:'cubic-bezier(0.1,0.5,0.5,1)'}).onfinish=()=>c.remove();
                 }
-                // If in party mode, add a temporary background overlay animation
-                if(party){
-                    const p = document.createElement('div');
-                    p.className='party-time-overlay';
-                    document.body.appendChild(p);
-                    setTimeout(() => p.remove(), 5000); // Remove overlay after 5 seconds
-                }
+                if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
             }
-
-            // Renders all task lists and groups, then re-initializes sortable and resumes timers.
-            const renderAllLists = () => { 
-                renderDailyTasks(); 
-                renderStandaloneTasks(); 
-                renderGeneralTasks(); 
-                checkOverdueTasks(); // Re-check overdue status after rendering
-                initSortable(); // Re-initialize sortable after DOM updates
-                resumeTimers(); // Ensure timers are running correctly after render
-            };
+            const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); checkOverdueTasks(); initSortable(); resumeTimers(); };
             
-            // Event listener for the "Login / Sign Up" button in the settings modal.
             settingsLoginBtn.addEventListener('click', () => {
                 const accountModalContent = accountModal.querySelector('.modal-content');
-                // Set up the auth forms within the account modal.
                 setupAuthForms(accountModalContent, () => {
-                    closeModal(accountModal); // Close account modal on auth success
-                    closeModal(settingsModal); // Close settings modal too
+                    closeModal(accountModal);
+                    closeModal(settingsModal);
                 });
-                openModal(accountModal); // Open the account modal
+                openModal(accountModal);
             });
 
-            // Event listener for the logout button.
             logoutBtn.addEventListener('click', () => {
-                showConfirm("Logout?", "Are you sure you want to log out? You will be returned to the landing page.", () => {
-                    closeModal(settingsModal); // Close settings modal
-                    sessionStorage.removeItem('isGuest'); // Clear guest session flag
-                    // Sign out from Firebase Auth. Catch potential errors.
+                showConfirm("Logout?", "You will be returned to the landing page.", () => {
+                    closeModal(settingsModal);
+                    sessionStorage.removeItem('isGuest'); 
+                    localStorage.removeItem('userTheme');
                     window.firebaseSDK.signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
                 });
             });
             
             
             // =========================================================================
-            // FRIENDS FEATURE LOGIC
+            // IMPORT: FRIENDS FEATURE LOGIC
             // =========================================================================
 
             /**
              * Sets up a real-time listener for the current user's friend requests.
-             * This is efficient as it only listens to one document for updates.
-             * It updates the UI with a notification badge if there are pending requests.
+             * This is efficient because it only listens to one document.
+             * It updates the UI with a notification badge.
              */
             function listenForFriendRequests() {
-                if (!user) return; // Only run if a user is logged in
-                // Unsubscribe from any previous listener to prevent multiple listeners.
+                if (!user) return;
+                // Unsubscribe from any previous listener to prevent duplicates.
                 if (unsubscribeFromFriends) unsubscribeFromFriends();
                 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                // Set up the snapshot listener.
                 unsubscribeFromFriends = window.firebaseSDK.onSnapshot(userDocRef, (doc) => {
                     if (doc.exists()) {
                         const requests = doc.data().friendRequests || [];
-                        // Update badge visibility and count
                         if (requests.length > 0) {
                             friendRequestCountBadge.textContent = requests.length;
                             friendRequestCountBadge.style.display = 'inline';
@@ -3964,46 +3386,41 @@
                             friendRequestCountBadge.style.display = 'none';
                         }
                     }
-                }, (error) => { // Error handler for the listener
+                }, (error) => {
                     console.error("Error listening to friend requests: ", getCoolErrorMessage(error));
                 });
             }
 
             /**
-             * Fetches and renders the current user's friends list and pending requests.
-             * This is called on-demand when the friends modal is opened.
+             * Fetches and renders the current user's friends list and pending requests
+             * when the friends modal is opened. This is done on-demand to save reads.
              */
             async function renderFriendsAndRequests() {
-                if (!user) return; // Ensure user is logged in
+                if (!user) return;
                 
                 const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
                 const userDoc = await window.firebaseSDK.getDoc(userDocRef);
-                if (!userDoc.exists()) return; // Exit if user document doesn't exist
+                if (!userDoc.exists()) return;
 
                 const userData = userDoc.data();
-                const friendUIDs = userData.friends || []; // Get list of friend UIDs
-                const requestUIDs = userData.friendRequests || []; // Get list of pending request UIDs
+                const friendUIDs = userData.friends || [];
+                const requestUIDs = userData.friendRequests || [];
                 
                 // Render Friends List
                 if (friendUIDs.length === 0) {
                     friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
                 } else {
-                    friendsListContainer.innerHTML = ''; // Clear previous list
-                    // Fetch multiple friend documents efficiently using a 'where in' query
+                    friendsListContainer.innerHTML = '';
+                    // Efficiently fetch multiple user profiles with a 'in' query
                     const friendsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', friendUIDs));
                     const friendDocs = await window.firebaseSDK.getDocs(friendsQuery);
-                    friendDocs.forEach(doc => { // Iterate through friend documents
+                    friendDocs.forEach(doc => {
                          const friend = doc.data();
-                         const level = friend.appData?.playerData?.level || 1; // Get friend's level, default to 1
+                         const level = friend.appData?.playerData?.level || 1;
                          const friendEl = document.createElement('div');
                          friendEl.className = 'friend-item';
-                         friendEl.innerHTML = `
-                            <div class="friend-level-display">LVL ${level}</div>
-                            <span class="friend-name">${friend.username}</span>
-                            <div class="friend-item-actions">
-                                <button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button>
-                            </div>`;
-                         friendsListContainer.appendChild(friendEl); // Add friend item to the list
+                         friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
+                         friendsListContainer.appendChild(friendEl);
                     });
                 }
 
@@ -4011,34 +3428,26 @@
                 if (requestUIDs.length === 0) {
                     friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
                 } else {
-                    friendRequestsContainer.innerHTML = ''; // Clear previous list
-                    // Fetch documents for users who sent requests
+                    friendRequestsContainer.innerHTML = '';
                     const requestsQuery = window.firebaseSDK.query(window.firebaseSDK.collection(db, "users"), window.firebaseSDK.where(window.firebaseSDK.documentId(), 'in', requestUIDs));
                     const requestDocs = await window.firebaseSDK.getDocs(requestsQuery);
-                    requestDocs.forEach(doc => { // Iterate through request documents
+                    requestDocs.forEach(doc => {
                         const requestUser = doc.data();
                         const requestEl = document.createElement('div');
                         requestEl.className = 'friend-request-item';
-                        requestEl.innerHTML = `
-                            <span>${requestUser.username}</span>
-                            <div class="friend-request-actions">
-                                <button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button>
-                                <button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button>
-                            </div>`;
-                        friendRequestsContainer.appendChild(requestEl); // Add request item to the list
+                        requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
+                        friendRequestsContainer.appendChild(requestEl);
                     });
                 }
             }
             
-            /** Handles sending a friend request */
             async function handleAddFriend(e) {
                 e.preventDefault();
                 const usernameToFind = searchUsernameInput.value.trim().toLowerCase();
-                friendStatusMessage.textContent = ''; // Clear previous status messages
+                friendStatusMessage.textContent = '';
                 
-                if (!user || !usernameToFind) return; // Basic validation
+                if (!user || !usernameToFind) return;
 
-                // Get current user's data to check against self-adding
                 const currentUserDoc = await window.firebaseSDK.getDoc(window.firebaseSDK.doc(db, "users", user.uid));
                 if (usernameToFind === currentUserDoc.data().username) {
                     friendStatusMessage.textContent = "You can't add yourself!";
@@ -4046,28 +3455,27 @@
                     return;
                 }
                 
-                // Efficiently check if the username exists using the 'usernames' collection.
+                // Efficiently check if username exists. One read.
                 const usernamesRef = window.firebaseSDK.doc(db, "usernames", usernameToFind);
                 const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
 
-                if (!usernameSnap.exists()) { // If username not found
+                if (!usernameSnap.exists()) {
                     friendStatusMessage.textContent = "User not found.";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
                     return;
                 }
                 
-                const targetUserId = usernameSnap.data().userId; // Get the UID of the target user
+                const targetUserId = usernameSnap.data().userId;
                 const targetUserDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
                 
-                // Use a transaction (or batch write) to safely add the request to the target user's document.
+                // Use a transaction to safely update both users' documents.
                 try {
                     await window.firebaseSDK.updateDoc(targetUserDocRef, {
-                        // Use arrayUnion to add the current user's UID to the target's friendRequests array.
-                        friendRequests: window.firebaseSDK.arrayUnion(user.uid) 
+                        friendRequests: window.firebaseSDK.arrayUnion(user.uid)
                     });
                     friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
                     friendStatusMessage.style.color = 'var(--accent-green-light)';
-                    searchUsernameInput.value = ''; // Clear the input field
+                    searchUsernameInput.value = '';
                 } catch (error) {
                     friendStatusMessage.textContent = "Could not send request.";
                     friendStatusMessage.style.color = 'var(--accent-red-light)';
@@ -4075,197 +3483,172 @@
                 }
             }
             
-            /** Handles accepting or declining a friend request */
             async function handleRequestAction(e, action) {
                 const button = e.target.closest('button');
                 if (!button) return;
 
-                const senderUid = button.dataset.uid; // UID of the user who sent the request
+                const senderUid = button.dataset.uid;
                 const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
                 
-                // Use a batch write for atomic updates.
                 const batch = window.firebaseSDK.writeBatch(db);
-                // Always remove the request from the current user's friendRequests list.
+                // Always remove the request from the current user's list.
                 batch.update(currentUserRef, { friendRequests: window.firebaseSDK.arrayRemove(senderUid) });
 
-                if (action === 'accept') { // If request is accepted
+                if (action === 'accept') {
                     const senderUserRef = window.firebaseSDK.doc(db, "users", senderUid);
-                    // Add each other to their respective 'friends' lists.
+                    // Add each other to the friends list.
                     batch.update(currentUserRef, { friends: window.firebaseSDK.arrayUnion(senderUid) });
                     batch.update(senderUserRef, { friends: window.firebaseSDK.arrayUnion(user.uid) });
                 }
                 
-                await batch.commit(); // Execute the batch write
-                renderFriendsAndRequests(); // Re-render the lists to reflect changes
+                await batch.commit();
+                renderFriendsAndRequests(); // Re-render the lists
             }
             
-            /** Handles removing a friend */
             async function removeFriend(e) {
                 const button = e.target.closest('button');
                 if (!button) return;
-                const friendUidToRemove = button.dataset.uid; // UID of the friend to remove
+                const friendUidToRemove = button.dataset.uid;
                 
-                // Show confirmation dialog before proceeding.
-                showConfirm("Remove Friend?", "Are you sure you want to remove this friend? This action cannot be undone.", async () => {
+                showConfirm("Remove Friend?", "Are you sure you want to remove this friend?", async () => {
                     const currentUserRef = window.firebaseSDK.doc(db, "users", user.uid);
                     const friendUserRef = window.firebaseSDK.doc(db, "users", friendUidToRemove);
                     
-                    // Use batch write to remove each other from friends lists.
                     const batch = window.firebaseSDK.writeBatch(db);
+                    // Remove each other from friends lists
                     batch.update(currentUserRef, { friends: window.firebaseSDK.arrayRemove(friendUidToRemove) });
                     batch.update(friendUserRef, { friends: window.firebaseSDK.arrayRemove(user.uid) });
                     
-                    await batch.commit(); // Execute batch
-                    renderFriendsAndRequests(); // Re-render lists
+                    await batch.commit();
+                    renderFriendsAndRequests();
                 });
             }
 
-            // Event Listeners for Friends Modal interactions
-            friendsBtnDesktop.addEventListener('click', () => { // Click on desktop friends button
-                openModal(friendsModal); // Open the friends modal
-                renderFriendsAndRequests(); // Render the content (friends, requests, add friend form)
+
+            // Event Listeners for Friends Modal
+            friendsBtnDesktop.addEventListener('click', () => {
+                openModal(friendsModal);
+                renderFriendsAndRequests();
             });
             
-            addFriendForm.addEventListener('submit', handleAddFriend); // Handle submitting the add friend form
+            addFriendForm.addEventListener('submit', handleAddFriend);
             
-            // Event delegation for accepting/declining requests in the requests tab.
             friendRequestsContainer.addEventListener('click', e => {
                  if (e.target.closest('.accept-request-btn')) handleRequestAction(e, 'accept');
                  if (e.target.closest('.decline-request-btn')) handleRequestAction(e, 'decline');
             });
             
-            // Event delegation for removing friends in the friends list tab.
             friendsListContainer.addEventListener('click', e => {
                 if (e.target.closest('.remove-friend-btn')) removeFriend(e);
             });
             
-            // Handler for switching tabs within the friends modal.
             friendsModal.querySelector('.form-toggle').addEventListener('click', (e) => {
-                if (e.target.matches('.toggle-btn')) { // If a toggle button was clicked
-                    const tab = e.target.dataset.tab; // Get the target tab ID
-                    // Update active state of buttons
+                if (e.target.matches('.toggle-btn')) {
+                    const tab = e.target.dataset.tab;
                     friendsModal.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
                     e.target.classList.add('active');
-                    // Show/hide tab content panes
                     friendsModal.querySelectorAll('.tab-content').forEach(form => form.classList.toggle('active', form.id === `${tab}-tab`));
                 }
             });
 
             // =========================================================================
-            // MOBILE NAVIGATION LOGIC
+            // IMPORT: MOBILE NAVIGATION LOGIC
             // =========================================================================
             mobileNav.addEventListener('click', (e) => {
-                const button = e.target.closest('.mobile-nav-btn'); // Find the clicked button
-                if (!button) return; // Exit if not a button click
+                const button = e.target.closest('.mobile-nav-btn');
+                if (!button) return;
 
-                const section = button.dataset.section; // Get the section associated with the button
+                const section = button.dataset.section;
                 
-                // Track the last viewed section that is not 'friends', to return to it after closing friends modal.
+                // Keep track of the last selected section that is not friends, so we can return to it.
                 if (section !== 'friends') {
                     lastSection = section;
                 }
 
-                // Update active state of navigation buttons
                 mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
 
-                if (section === 'friends') { // If 'Friends' button is clicked
-                    openModal(friendsModal); // Open the friends modal
-                    renderFriendsAndRequests(); // Render its content
-                } else { // For other sections (Daily, Main)
-                    // Toggle visibility of task groups based on the selected section
+                if (section === 'friends') {
+                    openModal(friendsModal);
+                    renderFriendsAndRequests();
+                } else {
                     document.querySelectorAll('.task-group').forEach(group => {
                         group.classList.toggle('mobile-visible', group.dataset.section === section);
                     });
                 }
-                playSound('toggle'); // Play toggle sound
+                playSound('toggle');
             });
 
             // Account Deletion Logic
             deleteAccountBtn.addEventListener('click', () => {
-                showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data. Are you sure?', async () => {
+                showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data.', async () => {
                     try {
-                        // Check if the user logged in with Google
-                        const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
+                        const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
                         
-                        // If not a Google user, require password re-authentication first.
                         if (!isGoogleUser) {
-                           const password = document.getElementById('reauth-password').value; // Get password from reauth form
-                           if (!password) { // Ensure password was entered
-                                alert("Please re-authenticate with your password before deleting.");
-                                return;
-                           }
+                           const password = document.getElementById('reauth-password').value;
                            const credential = window.firebaseSDK.EmailAuthProvider.credential(currentUser.email, password);
                            await window.firebaseSDK.reauthenticateWithCredential(currentUser, credential);
                         }
 
-                        // Get the username before deleting the user document for potential cleanup.
+                        // Get the username before deleting the user document
                         const userDocRef = window.firebaseSDK.doc(db, "users", currentUser.uid);
                         const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
                         const username = userDocSnap.exists() ? userDocSnap.data().username : null;
 
-                        // Use a batch write to delete user-related data atomically.
+                        // Delete user-related data in a batch write
                         const batch = window.firebaseSDK.writeBatch(db);
-                        batch.delete(userDocRef); // Delete user's main document
-                        if (username) { // If username exists, delete the corresponding entry in 'usernames' collection
+                        batch.delete(userDocRef);
+                        if (username) {
                             const usernameDocRef = window.firebaseSDK.doc(db, "usernames", username);
                             batch.delete(usernameDocRef);
                         }
-                        await batch.commit(); // Commit the batch
 
-                        // Delete the user from Firebase Authentication service.
+                        // Delete user from Firebase Authentication
                         await window.firebaseSDK.deleteUser(currentUser);
                         
-                        closeModal(manageAccountModal); // Close the manage account modal
-                        // Sign out and reload the page to fully reflect the deletion.
+                        await batch.commit();
+
+                        closeModal(manageAccountModal);
+                        // Sign out and reload page to reflect changes
                         window.firebaseSDK.signOut(auth);
                         window.location.reload(); 
                     } catch (error) {
                         console.error("Error deleting account:", error);
-                        // Display error message appropriately (e.g., in the reauth form's error field).
-                        const errorEl = document.getElementById('reauth-error'); // Assuming error occurs during reauth or deletion
-                        if(errorEl) errorEl.textContent = getCoolErrorMessage(error);
-                        else alert(`Error deleting account: ${getCoolErrorMessage(error)}`);
+                        const errorEl = document.getElementById('update-password-error');
+                        errorEl.textContent = getCoolErrorMessage(error);
                     }
                 });
             });
 
 
-            // Main function to load user session data and initialize the UI.
             async function loadUserSession() {
-                await initialLoad(); // Load tasks, player data, settings etc.
-                await updateUserUI(); // Update UI based on logged-in status
-                await promptForUsernameIfNeeded(); // Prompt for username if necessary
-                await updateUserUI(); // Update UI again in case username was set
-                checkDailyReset(); // Perform daily reset logic
-                resumeTimers(); // Ensure timers are running
+                await initialLoad();
+                await updateUserUI();
+                await promptForUsernameIfNeeded();
+                await updateUserUI(); // Update UI again in case username changed
+                checkDailyReset();
+                resumeTimers();
             }
             
-            // One-time initialization tasks.
             const initOnce = () => {
-                // Add listener for system theme changes.
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
-                showRandomQuote(); // Display a random quote on load.
-                // Set interval to check for overdue tasks periodically.
-                setInterval(checkOverdueTasks, 60 * 1000); // Check every minute
+                showRandomQuote();
+                setInterval(checkOverdueTasks, 60 * 1000);
             };
 
-            initOnce(); // Run one-time initializations.
-            await loadUserSession(); // Load user session data and finalize setup.
+            initOnce();
+            await loadUserSession();
 
-            // Return the app controller object with methods to manage the app's state.
             return {
-                isPartial: false, // Indicates full initialization
-                // shutdown function to clean up listeners and intervals when the app is unloaded or user logs out.
+                isPartial: false,
                 shutdown: () => {
-                     Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id])); // Clear all active timers
-                     if (unsubscribeFromFirestore) unsubscribeFromFirestore(); // Clean up Firestore listener
-                     if (unsubscribeFromFriends) unsubscribeFromFriends(); // Clean up friends listener
+                     Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+                     if (unsubscribeFromFriends) unsubscribeFromFriends(); // Cleanup listener
                 },
-                // updateUser function to re-initialize the app logic when the user state changes.
                 updateUser: async (newUser) => {
-                    user = newUser; // Update the user reference
-                    await loadUserSession(); // Reload session data for the new user state
+                    user = newUser;
+                    await loadUserSession();
                 }
             };
         }
@@ -4273,25 +3656,15 @@
         // =========================================================================
         // UTILITY/SHARED AUTH FUNCTIONS
         // =========================================================================
-
-        /**
-         * Provides user-friendly error messages for common Firebase authentication errors.
-         * @param {Error} error The Firebase error object.
-         * @returns {string} A user-friendly error message.
-         */
         function getCoolErrorMessage(error) {
-            const defaultMessage = "An unexpected vortex appeared! Please try again."; // Default generic error
+            const defaultMessage = "An unexpected vortex appeared! Please try again.";
             if (!error) return defaultMessage;
-
-            // Check for specific Firestore permission errors first.
             if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
                 return "Permission Denied! Check your Firestore Security Rules.";
             }
             if (error.code === 'permission-denied') {
                  return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
             }
-
-            // Handle common Firebase Auth error codes.
             switch (error.code) {
                 case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
                 case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
@@ -4304,245 +3677,172 @@
                 case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
                 case 'auth/too-many-requests': return "You have made too many sign-in attempts. Please wait a bit before trying again.";
                 case 'auth/invalid-credential': return "Invalid login credentials. Please check your username and password.";
-                default: // Log unexpected errors to the console for debugging.
+                default:
                     console.error("Firebase/App Error:", error);
                     return "An unexpected error occurred. Check the console for more details.";
             }
         }
         
-        // --- Authentication Form Setup ---
-        // This function dynamically sets up the login/signup forms and their handlers.
-        // It needs access to openModal and closeModal, which are defined in the module scope.
+        // BUGFIX: This function was incomplete, causing a syntax error
         function setupAuthForms(container, onAuthSuccess) {
-            // Clear previous content and clone the template for the auth forms.
-            container.innerHTML = ''; // Clear previous content if any
+            // Clear previous content and clone the template
+            container.innerHTML = '';
             const template = document.getElementById('account-modal-content');
-            const content = template.content.cloneNode(true); // Clone the template content
-            container.appendChild(content); // Append the cloned content to the container
+            const content = template.content.cloneNode(true);
+            container.appendChild(content);
 
-            // Get references to key elements within the auth form container.
+            // Get form elements
             const toggleBtns = container.querySelectorAll('.toggle-btn');
             const signupForm = container.querySelector('[data-form="signup"]');
             const loginForm = container.querySelector('[data-form="login"]');
             const googleBtnContainer = container.querySelector('.google-signin-btn-container');
 
-            // Create and append the custom Google Sign-In button.
+            // Create and append Google Sign-In button
             const googleBtn = document.createElement('button');
-            googleBtn.type = 'button'; // Important: prevent form submission on click
+            googleBtn.type = 'button'; // FIX: Prevents form submission
             googleBtn.className = 'google-btn-custom';
-            // SVG for Google logo and text
             googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
-            if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn); // Add button to its container
+            if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
             
-            // Handle toggling between signup and login forms.
+            // Toggle between login and signup forms
             toggleBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    toggleBtns.forEach(b => b.classList.remove('active')); // Remove active class from all buttons
-                    btn.classList.add('active'); // Add active class to clicked button
-                    const showSignup = btn.dataset.tab === 'signup'; // Determine which form to show
-                    signupForm.style.display = showSignup ? 'block' : 'none'; // Show/hide signup form
-                    loginForm.style.display = showSignup ? 'none' : 'block'; // Show/hide login form
+                    toggleBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const showSignup = btn.dataset.tab === 'signup';
+                    signupForm.style.display = showSignup ? 'block' : 'none';
+                    loginForm.style.display = showSignup ? 'none' : 'block';
                 });
             });
 
-            // Handle sign-up form submission.
+            // Handle sign-up
             signupForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const username = signupForm.querySelector('.signup-username').value.trim().toLowerCase();
                 const email = signupForm.querySelector('.signup-email').value;
                 const password = signupForm.querySelector('.signup-password').value;
                 const errorEl = signupForm.querySelector('.signup-error');
-                errorEl.textContent = ''; // Clear previous errors
+                errorEl.textContent = '';
 
                 try {
-                    // Check if the chosen username is already taken.
+
+                    // Check if username is taken
                     const usernamesRef = window.firebaseSDK.doc(db, "usernames", username);
                     const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
                     if (usernameSnap.exists()) {
                         throw new Error('This username is already taken.');
                     }
 
-                    // Create the user account in Firebase Authentication.
+                    // Create user
                     const userCredential = await window.firebaseSDK.createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user; // Get the newly created user object
+                    const user = userCredential.user;
 
-                    // Use a batch write to create the username entry and the user's document in Firestore simultaneously.
+                    // Save username in Firestore
                     const batch = window.firebaseSDK.writeBatch(db);
-                    batch.set(usernamesRef, { userId: user.uid }); // Link username to user UID
+                    batch.set(usernamesRef, { userId: user.uid });
                     const userDocRef = window.firebaseSDK.doc(db, "users", user.uid);
-                    batch.set(userDocRef, { username, email, friends: [], friendRequests: [] }); // Initialize user document
-                    await batch.commit(); // Execute the batch
+                    batch.set(userDocRef, { username, email, friends: [], friendRequests: [] });
+                    await batch.commit();
 
-                    onAuthSuccess(); // Call success callback (which is usually empty here as onAuthStateChanged handles redirection)
+                    onAuthSuccess();
                 } catch (error) {
-                    errorEl.textContent = error.message || getCoolErrorMessage(error); // Display error message
+                    errorEl.textContent = error.message || getCoolErrorMessage(error);
                 }
             });
 
-            // Handle login form submission.
+            // Handle login
             loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const emailOrUsername = loginForm.querySelector('.login-email').value;
                 const password = loginForm.querySelector('.login-password').value;
                 const errorEl = loginForm.querySelector('.login-error');
-                errorEl.textContent = ''; // Clear previous errors
+                errorEl.textContent = '';
                 
-                let emailToLogin = emailOrUsername; // Assume input is an email initially
                 try {
-                    // Check if the input looks like a username (doesn't contain '@').
+                    let emailToLogin = emailOrUsername;
+                    // Check if it's an email or username
                     if (!emailOrUsername.includes('@')) {
-                        // If it's likely a username, look it up in the 'usernames' collection.
                         const usernamesRef = window.firebaseSDK.doc(db, "usernames", emailOrUsername.toLowerCase());
                         const usernameSnap = await window.firebaseSDK.getDoc(usernamesRef);
-                        if (usernameSnap.exists()) { // If username found
+                        if (usernameSnap.exists()) {
                             const targetUserId = usernameSnap.data().userId;
                             const userDocRef = window.firebaseSDK.doc(db, "users", targetUserId);
                             const userDocSnap = await window.firebaseSDK.getDoc(userDocRef);
                             if(userDocSnap.exists()) {
-                               emailToLogin = userDocSnap.data().email; // Use the associated email for login
-                            } else { throw new Error("User data not found for this username."); } // Handle case where username exists but user doc doesn't
-                        } else { throw { code: 'auth/user-not-found' }; } // Throw error if username doesn't exist
+                               emailToLogin = userDocSnap.data().email;
+                            } else { throw new Error("User data not found for this username."); }
+                        } else { throw { code: 'auth/user-not-found' }; }
                     }
-                    // Attempt to sign in using email and password.
                     await window.firebaseSDK.signInWithEmailAndPassword(auth, emailToLogin, password);
-                    onAuthSuccess(); // Call success callback
+                    onAuthSuccess();
                 } catch (error) {
-                    errorEl.textContent = getCoolErrorMessage(error); // Display error message
+                    errorEl.textContent = getCoolErrorMessage(error);
                 }
             });
 
-            // Handle Google Sign-In button click.
+            // Handle Google Sign-In
             if(googleBtn) {
                 googleBtn.addEventListener('click', async () => {
-                    const provider = new window.firebaseSDK.GoogleAuthProvider(); // Create Google Auth Provider
+                    const provider = new window.firebaseSDK.GoogleAuthProvider();
+                    const googleLoader = document.getElementById('google-signin-loader-modal');
                     try {
-                        openModal(googleLoaderModal); // Show the loading modal (using module-scoped function)
-                        await window.firebaseSDK.signInWithPopup(auth, provider); // Trigger the Google sign-in popup
-                        // onAuthStateChanged listener will handle redirection and UI updates after successful sign-in.
-                        onAuthSuccess(); 
+                        openModal(googleLoader);
+                        await window.firebaseSDK.signInWithPopup(auth, provider);
+                        // onAuthStateChanged will handle the rest
+                        onAuthSuccess();
                     } catch (error) {
                         console.error("Google Sign-In Error: ", error);
-                        // Display error message in the login form.
-                        const errorEl = loginForm.querySelector('.login-error'); 
+                        const errorEl = loginForm.querySelector('.login-error');
                         errorEl.textContent = getCoolErrorMessage(error);
                     } finally {
-                        closeModal(googleLoaderModal); // Hide loading modal (using module-scoped function)
+                        closeModal(googleLoader);
                     }
                 });
             }
         }
 
-        // --- GUEST DATA MERGING ---
-        /**
-         * Merges guest data from local storage with existing cloud data.
-         * This is called when a guest logs in or signs up.
-         * @param {object} cloudData - The existing data from Firestore.
-         * @returns {object} - The merged data object.
-         */
+        // BUGFIX: This function was incomplete, causing a syntax error
         function mergeGuestDataWithCloud(cloudData = {}) {
             const guestDataString = localStorage.getItem('anonymousUserData');
-            if (!guestDataString) return cloudData; // Return cloud data if no guest data exists
-
+            if (!guestDataString) return cloudData;
             try {
                 const guestData = JSON.parse(guestDataString);
-                const mergedData = JSON.parse(JSON.stringify(cloudData)); // Deep clone cloud data
-
-                // Helper function to merge task arrays, avoiding duplicate tasks based on text.
+                const mergedData = JSON.parse(JSON.stringify(cloudData));
                 const mergeTasks = (cloudTasks = [], guestTasks = []) => {
-                    const existingTexts = new Set(cloudTasks.map(t => t.text)); // Get texts of existing tasks
-                    // Filter guest tasks to include only those not already present in cloud tasks.
-                    const newTasks = guestTasks.filter(t => !existingTexts.has(t.text)); 
-                    return [...cloudTasks, ...newTasks]; // Combine existing and new tasks
+                    const existingTexts = new Set(cloudTasks.map(t => t.text));
+                    const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
+                    return [...cloudTasks, ...newTasks];
                 };
-
-                // Merge daily tasks
                 mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
-                // Merge standalone main quests
                 mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
-                
-                // Merge general task groups
                 if (guestData.generalTaskGroups) {
-                    if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = []; // Initialize if doesn't exist
+                    if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
                     guestData.generalTaskGroups.forEach(guestGroup => {
-                        // Find if a group with the same name already exists in the cloud data.
                         const cloudGroup = mergedData.generalTaskGroups.find(cg => cg.name === guestGroup.name);
                         if (cloudGroup) {
-                            // If group exists, merge its tasks.
                             cloudGroup.tasks = mergeTasks(cloudGroup.tasks, guestGroup.tasks);
                         } else {
-                            // If group doesn't exist, add it to the merged data.
                             mergedData.generalTaskGroups.push(guestGroup);
                         }
                     });
                 }
-                
-                // Merge player data (XP and Level)
                 if (guestData.playerData) {
-                    if (!mergedData.playerData) { // If no player data in cloud, use guest data.
+                    if (!mergedData.playerData) {
                         mergedData.playerData = guestData.playerData;
                     } else {
-                        // Combine XP and take the higher level.
+                        // A simple merge: add XP, take the higher level.
                         const newXp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
                         const newLevel = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
                         mergedData.playerData.xp = newXp;
                         mergedData.playerData.level = newLevel;
                     }
                 }
-                return mergedData; // Return the fully merged data object
+                return mergedData;
             } catch (error) {
                 console.error("Failed to merge guest data:", error);
-                return cloudData; // Return original cloud data if merging fails
+                return cloudData; // Return original data on error
             }
         }
-        // =========================================================================
-        // END OF INITIALIZATION AND CORE LOGIC
-        // =========================================================================
-
-
-        // --- INITIALIZATION AND RUN ---
-
-        // Main function to load user session data and initialize the UI.
-        async function loadUserSession() {
-            await initialLoad(); // Load tasks, player data, settings etc.
-            await updateUserUI(); // Update UI based on logged-in status
-            await promptForUsernameIfNeeded(); // Prompt for username if necessary
-            await updateUserUI(); // Update UI again in case username was set
-            checkDailyReset(); // Perform daily reset logic
-            resumeTimers(); // Ensure timers are running
-        }
-        
-        // One-time initialization tasks that should run when the script loads.
-        const initOnce = () => {
-            // Add listener for system theme changes using matchMedia API.
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
-            showRandomQuote(); // Display a random quote in the header.
-            // Set interval to check for overdue tasks periodically (e.g., every minute).
-            setInterval(checkOverdueTasks, 60 * 1000); 
-        };
-
-        // Execute one-time initializations first.
-        initOnce(); 
-        // Then, load the user's session data and finalize the app setup.
-        await loadUserSession(); 
-
-        // Return the app controller object. This object is stored in `appController` 
-        // and provides methods to manage the app's state (like shutdown or updating user).
-        return {
-            isPartial: false, // Indicates full initialization has occurred.
-            // shutdown function to clean up listeners and intervals when the app is unloaded or user logs out.
-            shutdown: () => {
-                 Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id])); // Clear all active timers
-                 if (unsubscribeFromFirestore) unsubscribeFromFirestore(); // Clean up Firestore listener
-                 if (unsubscribeFromFriends) unsubscribeFromFriends(); // Clean up friends listener
-            },
-            // updateUser function to re-initialize the app logic when the user state changes (e.g., login/logout).
-            updateUser: async (newUser) => {
-                user = newUser; // Update the internal user reference
-                await loadUserSession(); // Reload session data based on the new user state
-            }
-        };
-        // Note: The return value of initializeAppLogic is assigned to `appController` in the `onAuthStateChanged` callback.
-    } // End of initializeAppLogic function
     </script>
 </body>
 </html>
