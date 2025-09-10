@@ -990,9 +990,9 @@ async function initializeAppLogic(initialUser) {
             // Only resume timers for non-shared tasks
             if (t && t.timerStartTime && t.timerDuration && !t.isShared) {
                 const elapsed = (Date.now() - t.timerStartTime) / 1000;
-                const remainingSeconds = t.timerDuration - elapsed;
+                const remaining = Math.max(0, t.timerDuration - elapsed);
                 
-                if (remainingSeconds > 0) {
+                if (remaining > 0) {
                      activeTimers[t.id] = setInterval(() => {
                         const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
                         const currentRemaining = (t.timerDuration || 0) - currentElapsed;
@@ -1934,10 +1934,26 @@ async function initializeAppLogic(initialUser) {
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
         
+        // Fetch current state to prevent multiple completions by the same user
+        const currentSharedQuestSnap = await getDoc(sharedQuestRef);
+        if (!currentSharedQuestSnap.exists()) {
+            console.error("Shared quest not found:", questId);
+            return;
+        }
+        const currentSharedQuestData = currentSharedQuestSnap.data();
+
         const updateData = {};
         if (isOwner) {
+            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
+                console.log("Owner already completed their part.");
+                return; // Prevent re-completing
+            }
             updateData.ownerCompleted = !uncompleting;
         } else {
+            if (!uncompleting && currentSharedQuestData.friendCompleted) {
+                console.log("Friend already completed their part.");
+                return; // Prevent re-completing
+            }
             updateData.friendCompleted = !uncompleting;
         }
         
@@ -1951,6 +1967,7 @@ async function initializeAppLogic(initialUser) {
              addXp(-(XP_PER_SHARED_QUEST / 2));
         }
 
+        // Re-fetch the updated document to check for full completion
         const updatedDoc = await getDoc(sharedQuestRef);
         if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
             finishSharedQuest({ ...updatedDoc.data(), id: questId });
@@ -1969,10 +1986,32 @@ async function initializeAppLogic(initialUser) {
             createConfetti(taskEl);
             // After the animation, delete the document. The snapshot listener will then remove the element.
             taskEl.addEventListener('animationend', async () => {
+                // Remove the original task from the owner's local list if it exists
+                if (questData.ownerUid === user.uid && questData.originalTaskId) {
+                    const { list } = findTaskAndContext(questData.originalTaskId);
+                    if (list) {
+                        const index = list.findIndex(t => t.id === questData.originalTaskId);
+                        if (index > -1) {
+                            list.splice(index, 1);
+                            saveState(); // Save the updated local state
+                        }
+                    }
+                }
                 await deleteDoc(doc(db, "sharedQuests", questData.id));
             }, { once: true });
         } else {
             // If the element isn't visible for some reason, just delete the doc immediately.
+            // Also remove the original task from the owner's local list if it exists
+            if (questData.ownerUid === user.uid && questData.originalTaskId) {
+                const { list } = findTaskAndContext(questData.originalTaskId);
+                if (list) {
+                    const index = list.findIndex(t => t.id === questData.originalTaskId);
+                    if (index > -1) {
+                        list.splice(index, 1);
+                        saveState(); // Save the updated local state
+                    }
+                }
+            }
             await deleteDoc(doc(db, "sharedQuests", questData.id));
         }
     }
