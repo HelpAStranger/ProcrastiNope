@@ -1,5 +1,3 @@
-// --- Firebase SDK Imports ---
-// This brings in all the necessary functions from the Firebase SDKs.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { 
     getAuth, 
@@ -658,25 +656,29 @@ async function initializeAppLogic(initialUser) {
         const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
         
         // Shared Quest specific rendering
-        if(task.shared || type === 'shared') {
+        if(type === 'shared') {
             li.classList.add('shared-quest');
-            li.dataset.id = task.questId || task.id; // Use questId for friend's view
+            li.dataset.id = task.questId;
             
-            const isOwner = (task.ownerUid && task.ownerUid === user.uid) || (!task.ownerUid);
-            const ownerCompleted = task.shared ? task.shared.ownerCompleted : task.ownerCompleted;
-            const friendCompleted = task.shared ? task.shared.friendCompleted : task.friendCompleted;
-            const friendUsername = task.shared ? task.shared.withUsername : task.ownerUsername;
+            const isOwner = user && task.ownerUid === user.uid;
+            const ownerCompleted = task.ownerCompleted;
+            const friendCompleted = task.friendCompleted;
+            const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
+
+            const selfIdentifier = isOwner ? 'You' : otherPlayerUsername;
+            const otherIdentifier = isOwner ? otherPlayerUsername : 'Owner';
             
             li.innerHTML = `
                 <button class="complete-btn"></button>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
                 <div class="shared-quest-info">
-                    <span class="shared-with-tag">with ${isOwner ? friendUsername : 'You'}</span>
-                    <div class="shared-status-indicators" title="You | ${isOwner ? friendUsername : 'Owner'}">
+                    <span class="shared-with-tag">with ${otherPlayerUsername}</span>
+                    <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
                         <div class="status-indicator ${ownerCompleted ? 'completed' : ''}"></div>
                         <div class="status-indicator ${friendCompleted ? 'completed' : ''}"></div>
                     </div>
                 </div>`;
+
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
             if(myPartCompleted) {
                  li.querySelector('.complete-btn').classList.add('checked');
@@ -746,7 +748,7 @@ async function initializeAppLogic(initialUser) {
         const { task, type } = findTaskAndContext(id);
         if (!task) return;
 
-        if(task.shared || type === 'shared') {
+        if(type === 'shared') {
             completeSharedQuestPart(task);
             return;
         }
@@ -785,10 +787,10 @@ async function initializeAppLogic(initialUser) {
         else if (allDailiesDone) createFullScreenConfetti(false);
     };
     const uncompleteDailyTask = (id) => {
-        const { task } = findTaskAndContext(id);
-        if (task && (task.shared || task.completedToday)) {
+        const { task, type } = findTaskAndContext(id);
+        if (task && (type === 'shared' || task.completedToday)) {
             
-            if(task.shared) { // Un-complete shared task part
+            if(type === 'shared') { // Un-complete shared task part
                 completeSharedQuestPart(task, true); // `true` to un-complete
                 return;
             }
@@ -979,10 +981,11 @@ async function initializeAppLogic(initialUser) {
             const { task, type } = findTaskAndContext(id);
 
             const isMyPartCompleted = () => {
-                if(!task || (!task.shared && type !== 'shared')) return task.completedToday;
-                const questData = type === 'shared' ? task : task.shared;
-                const isOwner = type === 'shared' ? (questData.ownerUid === user.uid) : true;
-                return isOwner ? questData.ownerCompleted : questData.friendCompleted;
+                if(!task) return false;
+                if(type !== 'shared') return task.completedToday;
+
+                const isOwner = user && task.ownerUid === user.uid;
+                return isOwner ? task.ownerCompleted : task.friendCompleted;
             }
             
             if (isMyPartCompleted()) {
@@ -1350,6 +1353,11 @@ async function initializeAppLogic(initialUser) {
                         badge.style.display = 'none';
                     }
                 });
+
+                // --- FIX: If the friends modal is open, refresh its content ---
+                if (friendsModal.classList.contains('visible')) {
+                    renderFriendsAndRequests();
+                }
             }
         }, (error) => {
             console.error("Error listening to friend requests: ", getCoolErrorMessage(error));
@@ -1657,22 +1665,32 @@ async function initializeAppLogic(initialUser) {
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
 
-            await shareQuest(questId, friendUid, friendUsername);
-            
-            closeModal(shareQuestModal);
+            try {
+                await shareQuest(questId, friendUid, friendUsername);
+            } catch (error) {
+                console.error("Failed to share quest:", error);
+                // Optionally, add a user-facing error message here
+                button.disabled = false;
+                button.textContent = 'Share';
+            } finally {
+                closeModal(shareQuestModal);
+            }
         }
     });
 
     async function shareQuest(questId, friendUid, friendUsername) {
+        // --- FIX: Refactored shared quest logic ---
         const { task, list } = findTaskAndContext(questId);
         if (!task || !list) return;
 
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const ownerUsername = userDoc.data().username;
+        
+        // 1. Let Firestore generate a new, unique ID for the shared quest
+        const sharedQuestRef = doc(collection(db, "sharedQuests"));
 
-        // 1. Create the shared quest document in the new collection
+        // 2. Create the shared quest document in the new collection
         const sharedQuestData = {
-            originalQuestId: questId,
             text: task.text,
             ownerUid: user.uid,
             ownerUsername: ownerUsername,
@@ -1681,30 +1699,27 @@ async function initializeAppLogic(initialUser) {
             ownerCompleted: false,
             friendCompleted: false,
             createdAt: Date.now(),
-            participants: [user.uid, friendUid] // For easier querying
+            participants: [user.uid, friendUid]
         };
-
-        const sharedQuestRef = doc(db, "sharedQuests", questId);
         await setDoc(sharedQuestRef, sharedQuestData);
 
-        // 2. Update the local task object to mark it as shared
-        task.shared = {
-            withUid: friendUid,
-            withUsername: friendUsername,
-            ownerCompleted: false,
-            friendCompleted: false
-        };
+        // 3. Remove the original local task, as it's now a cloud-synced quest
+        const taskIndex = list.findIndex(t => t.id === questId);
+        if (taskIndex > -1) {
+            list.splice(taskIndex, 1);
+        }
 
-        // 3. Save the owner's updated task list and re-render
+        // 4. Save the owner's updated task list. The `onSnapshot` listener
+        // will add the new shared quest to the UI for both players.
         playSound('share');
         saveState();
-        renderAllLists();
+        renderAllLists(); // Re-render immediately for the owner
     }
     
     async function completeSharedQuestPart(task, uncompleting = false) {
-        const questId = task.questId || task.id;
+        const questId = task.questId;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
-        const isOwner = sharedQuests.find(q => q.id === questId)?.ownerUid === user.uid;
+        const isOwner = user && task.ownerUid === user.uid;
         
         const updateData = {};
         if (isOwner) {
@@ -1725,38 +1740,27 @@ async function initializeAppLogic(initialUser) {
 
         const updatedDoc = await getDoc(sharedQuestRef);
         if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
-            finishSharedQuest(updatedDoc.data());
+            finishSharedQuest({ ...updatedDoc.data(), id: questId });
         } else {
-            renderAllLists();
+            // The onSnapshot listener will handle the re-render
         }
     }
     
     async function finishSharedQuest(questData) {
+        // --- FIX: Simplified to just delete the doc, letting the listener handle UI ---
         playSound('sharedQuestFinish');
         
-        // Visual effect on both clients
-        const taskEl = document.querySelector(`.task-item[data-id="${questData.originalQuestId}"]`);
+        const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
         if (taskEl) {
             taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
+            // After the animation, delete the document. The snapshot listener will then remove the element.
             taskEl.addEventListener('animationend', async () => {
-                // Remove from owner's local list
-                const { list } = findTaskAndContext(questData.originalQuestId);
-                if (list) {
-                    const index = list.findIndex(t => t.id === questData.originalQuestId);
-                    if (index > -1) list.splice(index, 1);
-                }
-                saveState();
-                
-                // Delete from Firestore
-                await deleteDoc(doc(db, "sharedQuests", questData.originalQuestId));
-                
-                // Final re-render after animation
-                renderAllLists();
-
+                await deleteDoc(doc(db, "sharedQuests", questData.id));
             }, { once: true });
         } else {
-            await deleteDoc(doc(db, "sharedQuests", questData.originalQuestId));
+            // If the element isn't visible for some reason, just delete the doc immediately.
+            await deleteDoc(doc(db, "sharedQuests", questData.id));
         }
     }
 
