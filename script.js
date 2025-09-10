@@ -94,7 +94,7 @@ let unsubscribeFromFriends = null;
 let unsubscribeFromSharedQuests = null; 
 let appController = null;
 
-let activeActionsItem = null; 
+let activeMobileActionsItem = null; 
 
 // --- DOM ELEMENTS FOR STARTUP ---
 const loaderOverlay = document.getElementById('loader-overlay');
@@ -132,9 +132,9 @@ function playSound(type) {
 
 const openModal = (modal) => {
     if(modal) {
-        if (activeActionsItem) {
-            activeActionsItem.classList.remove('actions-visible');
-            activeActionsItem = null;
+        if (activeMobileActionsItem) {
+            activeMobileActionsItem.classList.remove('actions-visible');
+            activeMobileActionsItem = null;
         }
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
@@ -886,7 +886,7 @@ async function initializeAppLogic(initialUser) {
                                 const r = ring.r.baseVal.value;
                                 if (r > 0) {
                                     const c = r * 2 * Math.PI;
-                                    const p = currentRemaining / t.duration;
+                                    const p = currentRemaining / t.timerDuration;
                                     ring.style.strokeDashoffset = c - (p * c);
                                 }
                             }
@@ -914,32 +914,27 @@ async function initializeAppLogic(initialUser) {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
 
-<<<<<<< HEAD
-        function handleActionsVisibility(element) {
-=======
-        function handleMobileActions(element) {
-             if (window.innerWidth > 1023) return;
->>>>>>> parent of fc4798b (Update script.js)
+        function handleActionsToggle(element) {
              if (e.target.closest('button')) { 
                  clearTimeout(actionsTimeoutId);
                  return;
              }
              clearTimeout(actionsTimeoutId);
-             if (activeActionsItem && activeActionsItem !== element) {
-                 activeActionsItem.classList.remove('actions-visible');
+             if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+                 activeMobileActionsItem.classList.remove('actions-visible');
              }
              const wasVisible = element.classList.contains('actions-visible');
              element.classList.toggle('actions-visible');
              if (!wasVisible) {
-                 activeActionsItem = element;
+                 activeMobileActionsItem = element;
                  actionsTimeoutId = setTimeout(() => {
                      if(element.classList.contains('actions-visible')) {
                          element.classList.remove('actions-visible');
-                         activeActionsItem = null;
+                         activeMobileActionsItem = null;
                      }
                  }, 3000);
              } else {
-                 activeActionsItem = null;
+                 activeMobileActionsItem = null;
              }
         }
         
@@ -974,13 +969,7 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-<<<<<<< HEAD
-            handleActionsVisibility(groupHeader);
-=======
-            if (window.innerWidth <= 1023) {
-                handleMobileActions(groupHeader);
-            }
->>>>>>> parent of fc4798b (Update script.js)
+            handleActionsToggle(groupHeader);
             return; 
         }
 
@@ -1001,11 +990,7 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-<<<<<<< HEAD
-            handleActionsVisibility(taskItem);
-=======
-            handleMobileActions(taskItem);
->>>>>>> parent of fc4798b (Update script.js)
+            handleActionsToggle(taskItem);
 
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
@@ -1978,10 +1963,12 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         console.error("Failed to merge guest data:", error);
         return cloudData;
     }
-<<<<<<< HEAD
 }
 ```
---- START OF FILE style.css ---
+
+### `style.css`
+I've refactored the CSS to remove the problematic hover behavior on desktops and unified the click-based interaction for all screen sizes. This ensures the "complete" button is always clickable.
+
 ```css
 /*
 ==========================================================================
@@ -3229,7 +3216,7 @@ BUTTONS & CONTROLS
 
 /*
 ==========================================================================
-TASK INTERACTIONS (REFACTORED)
+TASK INTERACTIONS (UNIFIED CLICK-TO-SHOW)
 ==========================================================================
 */
 
@@ -3268,10 +3255,8 @@ TASK INTERACTIONS (REFACTORED)
     border-radius: 0;
 }
 
-
-/* --- Desktop Hover Interactions (REMOVED HOVER, now handles group actions positioning) --- */
+/* On desktop, group actions are inline instead of an overlay */
 @media (min-width: 1024px) {
-    /* Change group actions to be inline, not an overlay */
     .main-quest-group-header .group-actions {
         position: static;
         width: auto;
@@ -3280,27 +3265,26 @@ TASK INTERACTIONS (REFACTORED)
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         z-index: auto;
-        /* The opacity is still controlled by the .actions-visible class */
+        /* Opacity is now controlled by the .actions-visible class below */
     }
 }
 
-/* --- Click-to-show-actions Interactions (All screen sizes) --- */
-/* When a task or group is tapped (gets .actions-visible), show the overlay */
+/* --- Unified Click/Tap Interactions for All Screen Sizes --- */
+
+/* When a task or group has .actions-visible, show the action buttons */
 .task-item.actions-visible .task-buttons-wrapper,
 .main-quest-group-header.actions-visible .group-actions {
     opacity: 1;
     pointer-events: auto;
 }
-
-/* And blur the content behind the overlay */
+    
+/* And blur the content behind the overlay (but NOT the complete button) */
 .task-item.actions-visible .task-content,
-.task-item.actions-visible .complete-btn,
 .main-quest-group-header.actions-visible .group-title-container {
     filter: blur(3px);
     transition: filter var(--transition-speed) ease;
     pointer-events: none;
 }
-
 
 /*
 ==========================================================================
@@ -3834,6 +3818,4 @@ ANIMATIONS
     0% { transform: scale(1) rotate(0); opacity: 1; }
     30% { transform: scale(1.1) rotate(-5deg); }
     100% { transform: scale(0) rotate(180deg); opacity: 0; max-height: 0; padding: 0; margin: 0; }
-=======
->>>>>>> parent of fc4798b (Update script.js)
 }
