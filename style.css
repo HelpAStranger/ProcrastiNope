@@ -919,6 +919,24 @@ body.is-dragging .main-quest-group {
     display: none;
 }
 
+/* Weekly goal met style */
+.task-item.weekly-goal-met {
+    border-style: dashed;
+    opacity: 0.8;
+}
+.task-item.weekly-goal-met::after {
+    content: 'GOAL MET!';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-10deg);
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--accent);
+    opacity: 0.1;
+    pointer-events: none;
+}
+
 /* Hide edit/delete when timer is active on any screen size */
 .task-item.timer-active .task-actions {
     display: none;
@@ -1295,21 +1313,7 @@ TASK INTERACTIONS (REFACTORED)
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         z-index: auto;
-        opacity: 1; /* Ensure it's always visible on desktop */
-        pointer-events: auto;
-    }
-
-    /* Desktop hover for task actions */
-    .task-item:hover .task-buttons-wrapper {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .task-item:hover:not(.timer-active) .task-content,
-    .task-item:hover:not(.timer-active) .complete-btn {
-        filter: blur(3px);
-        transition: filter var(--transition-speed) ease;
-        pointer-events: none;
+        /* The opacity is controlled by the global .actions-visible class */
     }
 }
 
