@@ -488,13 +488,12 @@ HEADER & PROGRESS
 FRIENDS FEATURE & MOBILE NAV
 ==========================================================================
 */
-/* IMPORT: Desktop friends button */
 #friends-btn-desktop {
-    display: none; /* Hidden on mobile by default */
+    display: none; 
 }
 @media (min-width: 1024px) {
     #friends-btn-desktop {
-        display: flex; /* Visible on desktop */
+        display: flex; 
         gap: 0.5rem;
         --shadow-color: var(--shadow);
     }
@@ -504,38 +503,39 @@ FRIENDS FEATURE & MOBILE NAV
     }
 }
 
-/* IMPORT: Mobile bottom navigation bar */
 #mobile-nav {
-    display: none; /* Hidden on desktop */
+    display: none;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 80px;
+    height: 85px;
     background-color: var(--surface);
     border-top: var(--border-width) solid var(--border);
     box-shadow: 0px -6px 0 var(--shadow);
     z-index: 500;
-    border-top-left-radius: var(--radius);
-    border-top-right-radius: var(--radius);
-    padding: 0 1rem;
-    border-left: var(--border-width) solid var(--border);
-    border-right: var(--border-width) solid var(--border);
 }
+
 .mobile-nav-content {
     display: flex;
     justify-content: space-around;
-    align-items: center;
+    align-items: flex-end;
     height: 100%;
-    border: var(--border-width) dashed rgba(var(--surface-rgb), 0.2);
-    border-bottom: none;
-    border-radius: calc(var(--radius) - var(--border-width));
-    padding-bottom: 5px;
-    transform: translateY(2px);
+    gap: 0.5rem;
+    padding: 0.75rem;
 }
+
 .mobile-nav-btn {
     background-color: var(--surface);
-    border: none;
+    border: var(--border-width) solid var(--border);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+    color: var(--text);
+    opacity: 0.7;
+    transition: all var(--transition-speed) ease;
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    flex: 1 1 0px;
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -543,30 +543,25 @@ FRIENDS FEATURE & MOBILE NAV
     gap: 4px;
     font-family: var(--font-main);
     font-weight: 700;
-    color: var(--text);
-    opacity: 0.6;
-    transition: all var(--transition-speed) ease;
-    padding: 0.5rem;
-    border-radius: var(--radius);
-    border: var(--border-width) solid transparent;
-    box-shadow: 4px 4px 0 transparent;
-    flex: 1 1 0px;
+    height: 65px;
 }
+
 .mobile-nav-btn span {
     font-weight: 900;
+    font-size: 0.8rem;
 }
 
 .mobile-nav-btn.active {
     opacity: 1;
-    border-color: var(--border);
-    box-shadow: 4px 4px 0 var(--shadow);
-    transform: translateY(-5px);
-    color: var(--accent);
-    background-color: var(--bg);
+    transform: translateY(-10px);
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    box-shadow: 6px 6px 0 var(--shadow);
+    z-index: 1;
 }
 
 .mobile-nav-btn.active svg {
-    color: var(--accent);
+    color: var(--text-on-accent);
 }
 
 .mobile-nav-btn svg {
@@ -575,20 +570,19 @@ FRIENDS FEATURE & MOBILE NAV
     stroke: currentColor;
     stroke-width: var(--border-width);
 }
+
 @media (max-width: 1023px) {
     #mobile-nav {
-        display: block; /* Show on mobile */
+        display: block;
     }
-    /* FIX: Explicitly hide the desktop friends button on mobile */
     #friends-btn-desktop {
         display: none;
     }
 }
 
-/* IMPORT: Friends Modal */
 #friends-modal .modal-content {
     position: relative;
-    overflow: hidden; /* To contain the animated background */
+    overflow: hidden; 
 }
 
 #friends-modal-bg {
@@ -616,13 +610,12 @@ FRIENDS FEATURE & MOBILE NAV
     100% { transform: translate(0, 0); }
 }
 
-/* FIX: Set min-height to prevent modal resizing between tabs */
 #friends-modal .tab-content {
     min-height: 250px;
 }
 
 #friends-modal h3 {
-    font-weight: 900; /* Bolder headers */
+    font-weight: 900;
 }
 
 .friends-list-container, .friend-requests-container {
@@ -640,14 +633,13 @@ FRIENDS FEATURE & MOBILE NAV
     align-items: center;
     padding: 0.75rem;
     border-radius: calc(var(--radius) / 2);
-    gap: 0.75rem; /* Add gap for level display */
+    gap: 0.75rem;
 }
 
-/* FIX: Bolder font for friend names and layout adjustment */
 .friend-item .friend-name, 
 .friend-request-item span {
     font-weight: 700;
-    flex-grow: 1; /* Allow name to take space */
+    flex-grow: 1;
 }
 
 
@@ -658,10 +650,9 @@ FRIENDS FEATURE & MOBILE NAV
 .friend-item-actions, .friend-request-actions {
     display: flex;
     gap: 0.5rem;
-    flex-shrink: 0; /* Prevent buttons from shrinking */
+    flex-shrink: 0;
 }
 
-/* FIX: Friend Level Display Box */
 .friend-level-display {
     background-color: var(--accent);
     color: var(--text-on-accent);
@@ -676,8 +667,6 @@ FRIENDS FEATURE & MOBILE NAV
     flex-shrink: 0;
 }
 
-
-/* FIX: Neobrutalism styling for friend action buttons */
 .friend-item-actions .remove-friend-btn,
 .friend-request-actions .decline-request-btn {
     --shadow-color: var(--accent-red);
@@ -778,8 +767,27 @@ body.is-dragging .main-quest-group {
 .expand-icon {
     transition: transform 0.2s ease;
     flex-shrink: 0;
-    width: 28px; /* FIX: Increased icon size */
-    height: 28px; /* FIX: Increased icon size */
+    width: 28px;
+    height: 28px;
+}
+
+.expand-icon-wrapper {
+    padding: 8px;
+    margin: -8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+}
+
+@media (min-width: 1024px) {
+    .expand-icon-wrapper:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    .dark-mode .expand-icon-wrapper:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
 }
 
 .main-quest-group.expanded .expand-icon {
