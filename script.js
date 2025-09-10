@@ -900,17 +900,23 @@ async function initializeAppLogic(initialUser) {
     addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
     addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
     settingsBtn.addEventListener('click', () => openModal(settingsModal));
+    
+    function handleFriendsModalClose() {
+        mobileNav.querySelector('[data-section="friends"]').classList.remove('active');
+        const lastSectionBtn = mobileNav.querySelector(`[data-section="${lastSection}"]`);
+        if (lastSectionBtn) lastSectionBtn.classList.add('active');
+        document.querySelectorAll('.task-group').forEach(group => {
+            group.classList.toggle('mobile-visible', group.dataset.section === lastSection);
+        });
+    }
+
     document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', (e) => {
         const modalId = e.currentTarget.dataset.closeModal;
         const modal = document.getElementById(modalId);
         if (modal.getAttribute('data-persistent') !== 'true') {
             closeModal(modal);
             if (modalId === 'friends-modal') {
-                const activeBtn = mobileNav.querySelector(`.mobile-nav-btn.active`);
-                const prevSection = activeBtn.dataset.section;
-                document.querySelectorAll('.task-group').forEach(group => {
-                    group.classList.toggle('mobile-visible', group.dataset.section === prevSection);
-                });
+                handleFriendsModalClose();
             }
         }
     }));
@@ -918,6 +924,9 @@ async function initializeAppLogic(initialUser) {
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                 closeModal(m); 
+                if (m.id === 'friends-modal') {
+                    handleFriendsModalClose();
+                }
             }
         }); 
     });
@@ -1629,3 +1638,4 @@ function mergeGuestDataWithCloud(cloudData = {}) {
         return cloudData;
     }
 }
+
