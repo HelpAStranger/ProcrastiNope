@@ -895,7 +895,7 @@ body.is-dragging .main-quest-group {
 .task-item.timer-finished {
     border-color: var(--accent-red);
     --shadow-color: var(--accent-red);
-    animation: shake 0.7s cubic-bezier(.36,.07,.19,.97) 3; /* Shake 3 times and stop */
+    animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) infinite both;
 }
 
 .task-item.daily-completed {
