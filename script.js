@@ -76,7 +76,7 @@ import {
 
 // --- FIREBASE SETUP ---
 const firebaseConfig = {
-    apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSG",
+    apiKey: "AIzaSyAOKGyzZ984TpHBrrgpOvlHKFJlDngGOSM",
     authDomain: "procrastinope.firebaseapp.com",
     projectId: "procrastinope",
     storageBucket: "procrastinope.appspot.com",
