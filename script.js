@@ -381,7 +381,6 @@ async function initializeAppLogic(initialUser) {
     const friendRequestCountBadgeModal = document.getElementById('friend-request-count-modal');
     const friendsListContainer = friendsModal.querySelector('.friends-list-container');
     const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
-    const outgoingRequestsContainer = document.getElementById('outgoing-requests-container');
     const deleteAccountBtn = document.getElementById('delete-account-btn');
 
     const shareQuestModal = document.getElementById('share-quest-modal');
@@ -1653,7 +1652,6 @@ async function initializeAppLogic(initialUser) {
         listeners.push(onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const userData = docSnap.data();
-                renderFriendsAndRequests(userData.friends || []);
                 renderFriendsList(userData.friends || []);
             }
         }));
@@ -1662,7 +1660,6 @@ async function initializeAppLogic(initialUser) {
         const incomingRequestsQuery = query(collection(db, "friendRequests"), where("recipientUid", "==", user.uid), where("status", "==", "pending"));
         listeners.push(onSnapshot(incomingRequestsQuery, (snapshot) => {
             incomingFriendRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
-            renderFriendsAndRequests(null, incomingFriendRequests);
             renderIncomingRequests(incomingFriendRequests);
 
             const requestCount = incomingFriendRequests.length;
@@ -1703,7 +1700,6 @@ async function initializeAppLogic(initialUser) {
             outgoingFriendRequests = snapshot.docs
                 .map(d => ({ ...d.data(), id: d.id }))
                 .filter(req => req.status === 'pending');
-            renderOutgoingRequests();
             
             // Re-render the friends list to reflect the change in outgoing requests
             const userDoc = await getDoc(doc(db, "users", user.uid));
@@ -1745,27 +1741,9 @@ async function initializeAppLogic(initialUser) {
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
     }
 
-    async function renderFriendsAndRequests(friendUIDs, requestObjects) {
     async function renderFriendsList(friendUIDs) {
         if (!user) return;
 
-        // Render friends list if friendUIDs are provided
-        if (friendUIDs) {
-            if (friendUIDs.length === 0) {
-                friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
-            } else {
-                friendsListContainer.innerHTML = '';
-                const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
-                const friendDocs = await getDocs(friendsQuery);
-                friendDocs.forEach(doc => {
-                    const friend = doc.data();
-                    const level = friend.appData?.playerData?.level || 1;
-                    const friendEl = document.createElement('div');
-                    friendEl.className = 'friend-item';
-                    friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
-                    friendsListContainer.appendChild(friendEl);
-                });
-            }
         friendsListContainer.innerHTML = ''; // Start fresh
 
         // 1. Fetch confirmed friends data
@@ -1780,27 +1758,6 @@ async function initializeAppLogic(initialUser) {
             });
         }
 
-        // Render friend requests if requestObjects are provided
-        if (requestObjects) {
-            if (requestObjects.length === 0) {
-            friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
-            } else {
-                friendRequestsContainer.innerHTML = '';
-                requestObjects.forEach(req => {
-                    const requestEl = document.createElement('div');
-                    requestEl.className = 'friend-request-item';
-                    requestEl.innerHTML = `<span>${req.senderUsername}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-id="${req.id}" data-uid="${req.senderUid}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-id="${req.id}" data-uid="${req.senderUid}" aria-label="Decline request">&times;</button></div>`;
-                    friendRequestsContainer.appendChild(requestEl);
-                });
-            }
-        }
-    }
-    
-    function renderOutgoingRequests() {
-        if (!outgoingRequestsContainer) return;
-        
-        if (outgoingFriendRequests.length === 0) {
-            outgoingRequestsContainer.innerHTML = '';
         // 2. Prepare outgoing requests data (from global state)
         const pendingFriends = outgoingFriendRequests.map(req => ({
             type: 'pending',
@@ -1816,24 +1773,10 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
-        const itemsHTML = outgoingFriendRequests.map(req => `
-            <div class="friend-request-item">
-                <span>${req.recipientUsername}</span>
-                <div class="friend-request-actions">
-                    <button class="btn icon-btn cancel-request-btn" data-id="${req.id}" aria-label="Cancel request">&times;</button>
-                </div>
-            </div>
-        `).join('');
         allItems.forEach(item => {
             const itemEl = document.createElement('div');
             itemEl.className = 'friend-item';
 
-        outgoingRequestsContainer.innerHTML = `
-            <h3 style="margin-bottom: 1rem;">Sent Requests</h3>
-            <div class="friend-requests-container">
-                ${itemsHTML}
-            </div>
-        `;
             if (item.type === 'friend') {
                 itemEl.innerHTML = `
                     <div class="friend-level-display">LVL ${item.level}</div>
@@ -2019,9 +1962,6 @@ async function initializeAppLogic(initialUser) {
     
     friendsListContainer.addEventListener('click', e => {
         if (e.target.closest('.remove-friend-btn')) removeFriend(e);
-    });
-    
-    outgoingRequestsContainer.addEventListener('click', e => {
         const cancelButton = e.target.closest('.cancel-request-btn');
         if (cancelButton) {
             const requestId = cancelButton.dataset.id;
