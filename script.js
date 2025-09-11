@@ -35,10 +35,8 @@ import {
 
 
 /*
---- IMPORTANT: FIREBASE SECURITY RULES UPDATE ---
-The user has provided updated rules in the prompt. Please ensure your Firebase Console
-(Firestore Database -> Rules tab) matches the rules provided in the prompt.
-The rules provided in the prompt are:
+The following security rules are required for the application to function correctly.
+Please ensure these are deployed in your Firebase Console (Firestore Database > Rules).
 
 rules_version = '2';
 service cloud.firestore {
@@ -46,7 +44,7 @@ service cloud.firestore {
 
     // The 'usernames' collection is used for unique usernames
     match /usernames/{username} {
-      allow read; // Anyone can check if a username exists
+      allow read;
       allow create: if request.auth != null &&
                     request.resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null &&
@@ -59,61 +57,45 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                     request.resource.data.senderUid == request.auth.uid;
 
-      // Participants can read the request.
-      allow read: if request.auth != null &&
-                  request.auth.uid in resource.data.participants;
+      // Participants can read the request, and can delete it to resolve it.
+      // This rule is now robust against old data and fixes delete permissions.
+      allow read, delete: if request.auth != null &&
+                             'participants' in resource.data &&
+                             request.auth.uid in resource.data.participants;
 
-      // The recipient can update the status (to accept/decline).
+      // The update rule is now largely obsolete but kept for safety.
       allow update: if request.auth != null &&
                     request.auth.uid == resource.data.recipientUid;
-
-      // The sender can delete the request (to cancel, or after it's handled).
-      allow delete: if request.auth != null &&
-                    request.auth.uid == resource.data.senderUid;
     }
 
-    // The 'friendRemovals' collection handles reciprocal friend removals.
+    // The 'friendRemovals' collection is no longer used by the app and can be removed.
     match /friendRemovals/{removalId} {
-      // A user can create a removal request if they are the one doing the removing.
-      allow create: if request.auth != null &&
-                    request.resource.data.removerUid == request.auth.uid;
-      // The user being removed can read and delete the request to process it.
-      allow read, delete: if request.auth != null && resource.data.removeeUid == request.auth.uid;
+      allow read, write: if false;
     }
 
     // The 'users' collection stores all private and public data for each user.
     match /users/{userId} {
-      // Needed for "login by username": allow fetching a single doc (to get email)
       allow get: if true;
-
-      // Normal profile reads for logged-in users (friends list, etc.)
       allow read: if request.auth != null;
-
-      // A user can create their own user document
       allow create: if request.auth != null && request.auth.uid == userId;
-
-      // Updates should restrict fields to avoid privilege escalation
       allow update: if request.auth != null && request.auth.uid == userId;
-
-      // Only a user can delete their own doc
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // Shared quests between friends
     match /sharedQuests/{questId} {
-      // Only participants can access the quest
+      // Only participants can access the quest.
+      // This rule is now robust against old data that may be missing a 'participants' field.
       allow read, update, delete: if request.auth != null &&
+                                  'participants' in resource.data &&
                                   request.auth.uid in resource.data.participants;
-
+      
       // Only the owner can create a shared quest
       allow create: if request.auth != null &&
                     request.auth.uid == request.resource.data.ownerUid;
     }
   }
 }
-
-Your Firebase config is meant to be public. True security is enforced
-by your Firestore Security Rules, not by hiding your API keys.
 */
 
 // --- FIREBASE SETUP ---
