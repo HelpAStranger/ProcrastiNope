@@ -290,6 +290,7 @@ async function initializeAppLogic(initialUser) {
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
     let actionsTimeoutId = null;
+    let undoTimeoutMap = new Map();
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
@@ -833,6 +834,21 @@ async function initializeAppLogic(initialUser) {
         saveState(); 
         playSound('addGroup'); 
     };
+    const undoCompleteMainQuest = (id) => {
+        if (undoTimeoutMap.has(id)) {
+            clearTimeout(undoTimeoutMap.get(id));
+            undoTimeoutMap.delete(id);
+        }
+
+        const { task } = findTaskAndContext(id);
+        if (task && task.pendingDeletion) {
+            delete task.pendingDeletion;
+            addXp(-XP_PER_TASK); // Revert XP gain
+            playSound('delete'); // Use the 'delete' sound for undo
+            renderAllLists();
+            // No saveState needed, as the task was never removed from the array.
+        }
+    };
     const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
     const findTaskAndContext = (id) => {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
@@ -895,11 +911,18 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
+        // For main quests, if it's already pending deletion, do nothing.
+        if ((type === 'standalone' || type === 'group') && task.pendingDeletion) {
+            return;
+        }
+        // For daily quests, if it's already completed, do nothing.
+        if (type === 'daily' && task.completedToday) {
+            return;
+        }
+
         addXp(XP_PER_TASK);
         playSound('complete');
         if (type === 'daily') {
-            // If already completed, do nothing (uncompletion is handled by uncompleteDailyTask)
-            if (task.completedToday) return; 
             task.completedToday = true;
             task.lastCompleted = new Date().toDateString();
             if (task.weeklyGoal > 0) {
@@ -912,18 +935,31 @@ async function initializeAppLogic(initialUser) {
                 }
             }
         } else {
+            task.pendingDeletion = true;
             createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
-            const { list, group } = findTaskAndContext(id);
-            if (list) {
-                const i = list.findIndex(t => t.id === id);
-                if (i > -1) list.splice(i, 1);
+
+            if (undoTimeoutMap.has(id)) {
+                clearTimeout(undoTimeoutMap.get(id));
             }
-            if (group && (!group.tasks || group.tasks.length === 0)) {
-                const i = generalTaskGroups.findIndex(g => g.id === group.id);
-                if (i > -1) generalTaskGroups.splice(i, 1);
-            }
+
+            const timeoutId = setTimeout(() => {
+                const { list, group } = findTaskAndContext(id);
+                if (list) {
+                    const i = list.findIndex(t => t.id === id);
+                    if (i > -1) list.splice(i, 1);
+                }
+                if (group && (!group.tasks || group.tasks.length === 0)) {
+                    const i = generalTaskGroups.findIndex(g => g.id === group.id);
+                    if (i > -1) generalTaskGroups.splice(i, 1);
+                }
+                undoTimeoutMap.delete(id);
+                saveState();
+                renderAllLists();
+            }, 5000); // 5 seconds to undo
+
+            undoTimeoutMap.set(id, timeoutId);
         }
-        saveState();
+        if (type === 'daily') saveState();
         renderAllLists();
         const { allDailiesDone, allTasksDone } = checkAllTasksCompleted();
         if (allTasksDone) createFullScreenConfetti(true);
