@@ -57,10 +57,10 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                     request.resource.data.senderUid == request.auth.uid;
 
-      // Participants can read the request, and can delete it to resolve it.
-      // This rule is now robust against old data and fixes delete permissions.
+      // Participants can read/delete. This is now robust against malformed data.
       allow read, delete: if request.auth != null &&
                              'participants' in resource.data &&
+                             resource.data.participants is list &&
                              request.auth.uid in resource.data.participants;
 
       // The update rule is now largely obsolete but kept for safety.
@@ -84,10 +84,10 @@ service cloud.firestore {
 
     // Shared quests between friends
     match /sharedQuests/{questId} {
-      // Only participants can access the quest.
-      // This rule is now robust against old data that may be missing a 'participants' field.
+      // Participants can access. This is now robust against malformed data.
       allow read, update, delete: if request.auth != null &&
                                   'participants' in resource.data &&
+                                  resource.data.participants is list &&
                                   request.auth.uid in resource.data.participants;
       
       // Only the owner can create a shared quest
