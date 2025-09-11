@@ -102,7 +102,7 @@ let app, auth, db;
 let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFriends
-let unsubscribeFromSharedQuests = null; 
+let unsubscribeFromSharedQuests = null;
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -172,7 +172,7 @@ try {
             unsubscribeFromFirestore(); 
             unsubscribeFromFirestore = null;
         }
-        if (unsubscribeFromFriendsAndShares) { // Changed from unsubscribeFromFriends
+        if (unsubscribeFromFriendsAndShares) {
             unsubscribeFromFriendsAndShares();
             unsubscribeFromFriendsAndShares = null;
         }
@@ -1911,43 +1911,62 @@ async function initializeAppLogic(initialUser) {
     function listenForSharedQuests() {
         if (!user) return;
         if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
-
-        // Query for shared quests where the current user is a participant AND the status is 'active' or 'completed'
-        // 'pending' quests are handled by listenForFriendsAndShares
-        const q = query(
-            collection(db, "sharedQuests"), 
-            where("participants", "array-contains", user.uid),
-            where("status", "in", ["active", "completed"]) // Only listen to active/completed shared quests here
-        );
         
-        unsubscribeFromSharedQuests = onSnapshot(q, (querySnapshot) => {
-            const newSharedQuests = [];
-            querySnapshot.forEach((doc) => {
-                newSharedQuests.push({ ...doc.data(), id: doc.id, questId: doc.id });
-            });
-            
-            newSharedQuests.forEach(newQuest => {
-                const oldQuest = sharedQuests.find(q => q.id === newQuest.id);
-                if (oldQuest) {
-                    const isOwner = newQuest.ownerUid === user.uid;
-                    const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
-                                                (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
-                    if (friendJustCompleted) {
-                        const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
-                        if(taskEl) {
-                           taskEl.classList.add('friend-completed-pulse');
-                           taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
-                           playSound('friendComplete');
+        // This map will hold all quests from all listeners to avoid race conditions.
+        let questsMap = new Map();
+        let unsubscribers = [];
+
+        const handleSnapshot = (querySnapshot) => {
+            // Process changes to update the map
+            querySnapshot.docChanges().forEach((change) => {
+                if (change.type === 'removed') {
+                    questsMap.delete(change.doc.id);
+                } else { // 'added' or 'modified'
+                    const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
+                    const oldQuest = questsMap.get(change.doc.id);
+                    if (oldQuest && change.type === 'modified') {
+                         const isOwner = newQuest.ownerUid === user.uid;
+                         const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
+                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
+                         if (friendJustCompleted) {
+                             const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
+                             if(taskEl) {
+                                taskEl.classList.add('friend-completed-pulse');
+                                taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
+                                playSound('friendComplete');
+                             }
                         }
                     }
+                    questsMap.set(change.doc.id, newQuest);
                 }
             });
-
-            sharedQuests = newSharedQuests;
+            
+            // Update the global list and re-render
+            sharedQuests = Array.from(questsMap.values());
             renderAllLists();
-        }, (error) => {
-            console.error("Error listening for shared quests:", getCoolErrorMessage(error));
-        });
+        };
+
+        // Create a listener for 'active' quests
+        const activeQuery = query(
+            collection(db, "sharedQuests"), 
+            where("participants", "array-contains", user.uid),
+            where("status", "==", "active")
+        );
+        unsubscribers.push(onSnapshot(activeQuery, handleSnapshot, (error) => {
+            console.error("Error listening for active shared quests:", getCoolErrorMessage(error));
+        }));
+
+        // Create a listener for 'completed' quests
+        const completedQuery = query(
+            collection(db, "sharedQuests"), 
+            where("participants", "array-contains", user.uid),
+            where("status", "==", "completed")
+        );
+        unsubscribers.push(onSnapshot(completedQuery, handleSnapshot, (error) => {
+            console.error("Error listening for completed quests:", getCoolErrorMessage(error));
+        }));
+
+        unsubscribeFromSharedQuests = () => unsubscribers.forEach(unsub => unsub());
     }
 
     async function openShareModal(questId) {
