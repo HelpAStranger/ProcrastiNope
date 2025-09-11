@@ -910,9 +910,6 @@ body.is-dragging .main-quest-group {
 
 /* Adjust .task-item.daily-completed to be more specific to non-shared daily tasks */
 .task-item.daily-completed:not(.shared-quest) {
-    max-height: 50px;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
     opacity: 0.6;
     filter: grayscale(0.5);
     cursor: pointer; /* To indicate it's clickable for undo */
@@ -926,10 +923,7 @@ body.is-dragging .main-quest-group {
 
 /* NEW: Styles for when *my part* of a shared quest is completed */
 .task-item.my-part-completed {
-    max-height: 50px; /* Collapse slightly */
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    opacity: 0.8; /* Slightly less opaque than active, but more than fully completed daily */
+    opacity: 0.8;
     filter: grayscale(0.3);
     cursor: pointer; /* To indicate it's clickable for undo */
 }
@@ -1670,6 +1664,14 @@ input[type="range"]::-moz-range-track {
     transition: all var(--transition-speed) ease;
     position: relative;
 }
+
+/* FIX: Adjust friend modal tabs for smaller screens to prevent text overflow */
+#friends-modal .toggle-btn {
+    font-size: 0.875rem; /* 14px */
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+}
+
 .toggle-btn.active {
     background-color: var(--accent);
     color: var(--text-on-accent);
