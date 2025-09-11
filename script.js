@@ -1882,8 +1882,10 @@ async function initializeAppLogic(initialUser) {
         if (!user || !usernameToFind) return;
 
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
-        const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
-
+        const currentUserData = currentUserDoc.exists() ? currentUserDoc.data() : {};
+        const currentUsername = currentUserData.username || null;
+        const currentFriends = currentUserData.friends || [];
+        
         if (!currentUsername) {
             friendStatusMessage.textContent = "Error: Your username is not set. Cannot send request.";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
@@ -1908,6 +1910,13 @@ async function initializeAppLogic(initialUser) {
         }
         
         const targetUserId = usernameSnap.data().userId;
+
+        // Check if the target user is already a friend.
+        if (currentFriends.includes(targetUserId)) {
+            friendStatusMessage.textContent = `You are already friends with ${usernameToFind}.`;
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+            return;
+        }
 
         // REFACTOR: Use a canonical ID for the friend request to prevent duplicates.
         const canonicalRequestId = [user.uid, targetUserId].sort().join('_');
