@@ -1804,7 +1804,6 @@ async function initializeAppLogic(initialUser) {
         }
 
         // 2. Prepare outgoing requests data (from global state)
-        // BUG FIX: Add recipient's UID to the pending friend object to allow for de-duplication.
         const pendingFriends = outgoingFriendRequests.map(req => ({
             type: 'pending',
             requestId: req.id,
@@ -1812,14 +1811,16 @@ async function initializeAppLogic(initialUser) {
             username: req.recipientUsername
         }));
 
-        // 3. Filter out pending requests for users who are already friends.
-        // This handles the race condition where a friend is added but the request document
-        // hasn't been deleted yet, preventing them from appearing twice.
-        const confirmedFriendUids = new Set(confirmedFriends.map(f => f.uid));
-        const filteredPendingFriends = pendingFriends.filter(p => !confirmedFriendUids.has(p.uid));
-
-        // 4. Combine and render
-        const allItems = [...confirmedFriends, ...filteredPendingFriends];
+        // 3. Combine and de-duplicate the lists.
+        // This ensures that if a user is both a confirmed friend and has a pending request
+        // (due to a race condition), they only appear once as a confirmed friend.
+        const allItemsCombined = [...confirmedFriends, ...pendingFriends];
+        const seenUids = new Set();
+        const allItems = allItemsCombined.filter(item => {
+            if (seenUids.has(item.uid)) return false; // Already seen, so it's a duplicate pending request.
+            seenUids.add(item.uid);
+            return true;
+        });
 
         if (allItems.length === 0) {
             friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
