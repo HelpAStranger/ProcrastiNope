@@ -228,6 +228,7 @@
             <div class="form-toggle">
                 <button class="toggle-btn active" data-tab="my-friends">Friends</button>
                 <button class="toggle-btn" data-tab="requests">Requests <span id="friend-request-count-modal" class="notification-badge"></span></button>
+                <button class="toggle-btn" data-tab="shares">Shares <span id="shares-request-count-modal" class="notification-badge"></span></button>
                 <button class="toggle-btn" data-tab="add-friend">Add</button>
             </div>
             
@@ -239,6 +240,13 @@
             <div id="requests-tab" class="tab-content">
                 <h3>Friend Requests</h3>
                 <div class="friend-requests-container"></div>
+            </div>
+
+            <div id="shares-tab" class="tab-content">
+                <h3>Incoming Shares</h3>
+                <div class="incoming-shares-container">
+                    <!-- Incoming shared quests will be dynamically inserted here -->
+                </div>
             </div>
 
             <div id="add-friend-tab" class="tab-content">

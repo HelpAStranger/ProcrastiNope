@@ -625,7 +625,7 @@ FRIENDS FEATURE & MOBILE NAV
     font-weight: 900;
 }
 
-.friends-list-container, .friend-requests-container {
+.friends-list-container, .friend-requests-container, .incoming-shares-container {
     max-height: 300px;
     overflow-y: auto;
     border: var(--border-width) solid var(--border);
@@ -634,7 +634,7 @@ FRIENDS FEATURE & MOBILE NAV
     background-color: var(--surface);
 }
 
-.friend-item, .friend-request-item {
+.friend-item, .friend-request-item, .incoming-share-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -644,17 +644,18 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 .friend-item .friend-name, 
-.friend-request-item span {
+.friend-request-item span,
+.incoming-share-item span {
     font-weight: 700;
     flex-grow: 1;
 }
 
 
-.friend-item:not(:last-child), .friend-request-item:not(:last-child) {
+.friend-item:not(:last-child), .friend-request-item:not(:last-child), .incoming-share-item:not(:last-child) {
     border-bottom: var(--border-width) dashed var(--border);
 }
 
-.friend-item-actions, .friend-request-actions {
+.friend-item-actions, .friend-request-actions, .incoming-share-actions {
     display: flex;
     gap: 0.5rem;
     flex-shrink: 0;
@@ -675,10 +676,12 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 .friend-item-actions .remove-friend-btn,
-.friend-request-actions .decline-request-btn {
+.friend-request-actions .decline-request-btn,
+.incoming-share-actions .deny-share-btn {
     --shadow-color: var(--accent-red);
 }
-.friend-request-actions .accept-request-btn {
+.friend-request-actions .accept-request-btn,
+.incoming-share-actions .accept-share-btn {
     --shadow-color: var(--accent-green);
 }
 
