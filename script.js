@@ -56,12 +56,11 @@ service cloud.firestore {
     match /users/{userId} {
       // Needed for "login by username": allow fetching a single doc (to get email)
       allow get: if true;
-      
-      // Allow authenticated users to perform 'list' queries (like fetching friends).
-      // The security of the query is then handled by the 'get' rule on each
-      // individual document read by the query.
-      allow list: if request.auth != null;
-      
+
+      // Normal profile reads for logged-in users (friends list, etc.)
+      // WARNING: This allows any logged-in user to list all other users.
+      allow read: if request.auth != null;
+
       // A user can create their own user document
       allow create: if request.auth != null && request.auth.uid == userId;
 
