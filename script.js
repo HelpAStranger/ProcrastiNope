@@ -1782,18 +1782,14 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('button');
         if (!button) return;
         const friendUidToRemove = button.dataset.uid;
-        
-        showConfirm("Remove Friend?", "Are you sure you want to remove this friend?", async () => {
 
         showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
             const friendUserRef = doc(db, "users", friendUidToRemove);
-            
 
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
             batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
-            
 
             // Query for and delete all shared quests between these two users
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
