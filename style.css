@@ -934,6 +934,34 @@ body.is-dragging .main-quest-group {
     display: none; /* Hide action buttons */
 }
 
+/* NEW: Styles for main quests pending deletion (undo state) */
+.task-item.pending-deletion {
+    opacity: 0.7;
+    filter: grayscale(0.5);
+}
+
+.task-item.pending-deletion .task-text {
+    text-decoration: line-through;
+}
+
+.task-item.pending-deletion .complete-btn {
+    display: none;
+}
+
+.task-item.pending-deletion .task-buttons-wrapper {
+    opacity: 1;
+    pointer-events: auto;
+    position: static;
+    width: auto;
+    height: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    z-index: auto;
+    margin-left: auto;
+    border-radius: 0;
+    justify-content: flex-end;
+}
 
 /* Hide edit/delete when timer is active on any screen size */
 .task-item.timer-active .task-actions {
@@ -1229,6 +1257,12 @@ BUTTONS & CONTROLS
     align-items: center;
     justify-content: center;
     color: var(--text);
+}
+
+.undo-btn {
+    background-color: var(--accent-yellow);
+    color: var(--text-on-accent);
+    --shadow-color: var(--shadow);
 }
 
 .btn:hover {
