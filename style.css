@@ -677,6 +677,7 @@ FRIENDS FEATURE & MOBILE NAV
 
 .friend-item-actions .remove-friend-btn,
 .friend-request-actions .decline-request-btn,
+.friend-request-actions .cancel-request-btn,
 .incoming-share-actions .deny-share-btn {
     --shadow-color: var(--accent-red);
 }
