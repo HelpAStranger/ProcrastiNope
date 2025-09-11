@@ -625,7 +625,7 @@ FRIENDS FEATURE & MOBILE NAV
     font-weight: 900;
 }
 
-.friends-list-container, .friend-requests-container, .incoming-shares-container {
+.friends-list-container, .friend-requests-container {
     max-height: 300px;
     overflow-y: auto;
     border: var(--border-width) solid var(--border);
@@ -634,7 +634,7 @@ FRIENDS FEATURE & MOBILE NAV
     background-color: var(--surface);
 }
 
-.friend-item, .friend-request-item, .incoming-share-item {
+.friend-item, .friend-request-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -644,18 +644,17 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 .friend-item .friend-name, 
-.friend-request-item span,
-.incoming-share-item .share-text {
+.friend-request-item span {
     font-weight: 700;
     flex-grow: 1;
 }
 
 
-.friend-item:not(:last-child), .friend-request-item:not(:last-child), .incoming-share-item:not(:last-child) {
+.friend-item:not(:last-child), .friend-request-item:not(:last-child) {
     border-bottom: var(--border-width) dashed var(--border);
 }
 
-.friend-item-actions, .friend-request-actions, .incoming-share-actions {
+.friend-item-actions, .friend-request-actions {
     display: flex;
     gap: 0.5rem;
     flex-shrink: 0;
@@ -676,12 +675,10 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 .friend-item-actions .remove-friend-btn,
-.friend-request-actions .decline-request-btn,
-.incoming-share-actions .deny-share-btn {
+.friend-request-actions .decline-request-btn {
     --shadow-color: var(--accent-red);
 }
-.friend-request-actions .accept-request-btn,
-.incoming-share-actions .accept-share-btn {
+.friend-request-actions .accept-request-btn {
     --shadow-color: var(--accent-green);
 }
 
@@ -1187,38 +1184,6 @@ SHARED QUESTS
 .share-friend-item .btn {
     margin-left: auto;
 }
-
-/* NEW: Incoming Share Item Styles */
-.incoming-share-item {
-    background-color: var(--surface);
-    border: var(--border-width) solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.incoming-share-item .share-text {
-    flex-grow: 1;
-    font-weight: 700;
-}
-
-.incoming-share-item .share-from {
-    font-size: 0.9em;
-    opacity: 0.8;
-    margin-left: auto;
-    flex-shrink: 0;
-}
-
-.incoming-share-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-shrink: 0;
-}
-
 /*
 ==========================================================================
 TIMER CLOCK BUTTON
