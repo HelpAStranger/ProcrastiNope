@@ -113,6 +113,7 @@ let app, auth, db;
 let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFriends
+let unsubscribeFromSharedQuests = null;
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -185,6 +186,10 @@ try {
         if (unsubscribeFromFriendsAndShares) {
             unsubscribeFromFriendsAndShares();
             unsubscribeFromFriendsAndShares = null;
+        }
+        if (unsubscribeFromSharedQuests) {
+            unsubscribeFromSharedQuests();
+            unsubscribeFromSharedQuests = null;
         }
         
         currentUser = user;
@@ -554,6 +559,8 @@ async function initializeAppLogic(initialUser) {
             
             // Listen for friend requests and incoming shared quests
             listenForFriendsAndShares(); 
+            // Listen for active shared quests (those accepted by both)
+            listenForSharedQuests();
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
@@ -1675,6 +1682,8 @@ async function initializeAppLogic(initialUser) {
             unsubscribeFromFriendsAndShares = null;
         }
 
+        const listeners = [];
+
         // Listener for the user's own document to get their friends list
         const userDocRef = doc(db, "users", user.uid);
         listeners.push(onSnapshot(userDocRef, (docSnap) => {
@@ -1682,13 +1691,11 @@ async function initializeAppLogic(initialUser) {
                 const userData = docSnap.data();
                 renderFriendsList(userData.friends || []);
             }
-        }, (error) => {
-            console.error("Error listening to user document:", getCoolErrorMessage(error));
         }));
 
         // Listener for ALL friend requests (incoming and outgoing)
         const allRequestsQuery = query(collection(db, "friendRequests"), where("participants", "array-contains", user.uid));
-        const friendRequestsUnsub = onSnapshot(allRequestsQuery, async (snapshot) => {
+        listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => {
             // REFACTOR: The logic for handling 'modified' requests is now obsolete.
             // The acceptor's client handles the entire transaction. This client only
             // needs to react to the request document disappearing and the friends list changing.
@@ -1723,50 +1730,17 @@ async function initializeAppLogic(initialUser) {
             } else {
                 renderFriendsList([]);
             }
-        }, (error) => {
-            console.error("Error listening for friend requests:", getCoolErrorMessage(error));
-        });
+        }));
 
-        // REFACTORED: Single listener for ALL shared quests for the user
-        const allSharedQuestsQuery = query(collection(db, "sharedQuests"), where("participants", "array-contains", user.uid));
-        const sharedQuestsUnsub = onSnapshot(allSharedQuestsQuery, (snapshot) => {
-            // Process changes to detect when a friend completes their part
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'modified') {
-                    const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
-                    const oldQuest = sharedQuests.find(q => q.id === newQuest.id);
-                    if (oldQuest) {
-                        const isOwner = newQuest.ownerUid === user.uid;
-                        const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
-                                                    (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
-                        if (friendJustCompleted) {
-                            const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
-                            if(taskEl) {
-                               taskEl.classList.add('friend-completed-pulse');
-                               taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
-                               playSound('friendComplete');
-                            }
-                       }
-                    }
-                }
-            });
-
-            // Repopulate global lists from the full snapshot
-            const allQuestsForUser = snapshot.docs.map(d => ({ ...d.data(), questId: d.id, id: d.id }));
-            
-            // Filter into the correct global arrays
-            sharedQuests = allQuestsForUser.filter(q => q.status === 'active' || q.status === 'completed');
-            incomingSharedQuests = allQuestsForUser.filter(q => q.status === 'pending' && q.friendUid === user.uid);
-
-            // Re-render the relevant parts of the UI
-            renderAllLists(); // This calls renderSharedQuests()
+        // Listener for incoming SHARED quests
+        const incomingSharesQuery = query(collection(db, "sharedQuests"), where("participants", "array-contains", user.uid), where("status", "==", "pending"));
+        listeners.push(onSnapshot(incomingSharesQuery, (snapshot) => {
+            const allPendingForUser = snapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
+            incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
             renderIncomingShares();
-        }, (error) => {
-            console.error("Error listening for shared quests:", getCoolErrorMessage(error));
-        });
+        }));
 
-        // Group all unsubscribers into one function
-        unsubscribeFromFriendsAndShares = () => [userDocUnsub, friendRequestsUnsub, sharedQuestsUnsub].forEach(unsub => unsub());
+        unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
     }
 
     async function renderFriendsList(friendUIDs) {
@@ -2563,8 +2537,8 @@ async function initializeAppLogic(initialUser) {
         isPartial: false,
         shutdown: () => {
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-             if (unsubscribeFromFirestore) unsubscribeFromFirestore();
-             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
+             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares(); // Changed
+             if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
         },
         updateUser: async (newUser) => {
             user = newUser;
