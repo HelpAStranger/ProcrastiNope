@@ -2524,18 +2524,25 @@ async function initializeAppLogic(initialUser) {
     };
 
     const initAudioContext = () => {
-        // FIX: Create the AudioContext on the first user gesture if it doesn't exist.
-        if (!audioCtx) {
-            try {
-                audioCtx = window.AudioContext ? new AudioContext() : null;
-            } catch (e) {
-                console.error("Could not create AudioContext:", e);
-                return; // Stop if creation fails
+        // If context exists, just try to resume it if needed.
+        if (audioCtx) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(e => console.error("AudioContext resume failed:", e));
             }
+            return;
         }
-        // FIX: Resume the context if it was created in a suspended state.
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(e => console.error("AudioContext resume failed:", e));
+
+        // Otherwise, create it for the first time.
+        try {
+            // Use webkitAudioContext for older Safari versions.
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                audioCtx = new AudioContext();
+            } else {
+                console.warn("Web Audio API is not supported in this browser.");
+            }
+        } catch (e) {
+            console.error("Could not create AudioContext:", e);
         }
     };
     document.body.addEventListener('click', initAudioContext, { once: true });
