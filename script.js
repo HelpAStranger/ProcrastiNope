@@ -779,7 +779,7 @@ async function initializeAppLogic(initialUser) {
         
         let buttonsHTML;
         if (task.pendingDeletion) {
-            buttonsHTML = `<button class="btn undo-btn">Undo</button>`;
+            buttonsHTML = `<button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>`;
         } else {
             buttonsHTML = `
                 <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
