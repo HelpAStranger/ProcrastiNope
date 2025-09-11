@@ -119,9 +119,10 @@ const firebaseConfig = {
 let app, auth, db;
 let currentUser = null;
 let unsubscribeFromFirestore = null;
-let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFriends
+let unsubscribeFromFriendList = null;
 let unsubscribeFromFriendRequests = null;
 let unsubscribeFromSharedQuests = null; 
+let unsubscribeFromIncomingShares = null;
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -191,13 +192,17 @@ try {
             unsubscribeFromFirestore(); 
             unsubscribeFromFirestore = null;
         }
-        if (unsubscribeFromFriendsAndShares) { // Changed from unsubscribeFromFriends
-            unsubscribeFromFriendsAndShares();
-            unsubscribeFromFriendsAndShares = null;
+        if (unsubscribeFromFriendList) {
+            unsubscribeFromFriendList();
+            unsubscribeFromFriendList = null;
         }
         if (unsubscribeFromFriendRequests) {
             unsubscribeFromFriendRequests();
             unsubscribeFromFriendRequests = null;
+        }
+        if (unsubscribeFromIncomingShares) {
+            unsubscribeFromIncomingShares();
+            unsubscribeFromIncomingShares = null;
         }
         if (unsubscribeFromSharedQuests) {
             unsubscribeFromSharedQuests();
@@ -611,7 +616,7 @@ async function initializeAppLogic(initialUser) {
             }
             
             // Set up all social feature listeners (friends, requests, shares)
-            setupSocialListeners(); 
+            setupSocialListeners();
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
@@ -2425,8 +2430,10 @@ async function initializeAppLogic(initialUser) {
         isPartial: false,
         shutdown: () => {
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares(); // Changed
+             if (unsubscribeFromFriendList) unsubscribeFromFriendList();
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
+             if (unsubscribeFromFriendRequests) unsubscribeFromFriendRequests();
+             if (unsubscribeFromIncomingShares) unsubscribeFromIncomingShares();
         },
         updateUser: async (newUser) => {
             user = newUser;
@@ -2434,157 +2441,6 @@ async function initializeAppLogic(initialUser) {
         }
     };
 }
-
-function getCoolErrorMessage(error) {
-    const defaultMessage = "An unexpected vortex appeared! Please try again.";
-    if (!error) return defaultMessage;
-    if (error.message && error.message.toLowerCase().includes("missing or insufficient permissions")) {
-        return "Permission Denied! Check your Firestore Security Rules.";
-    }
-    if (error.code === 'permission-denied') {
-         return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
-    }
-    switch (error.code) {
-        case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
-        case 'auth/user-disabled': return "This account has been disabled. Contact support for help.";
-        case 'auth/user-not-found': return "No account found with this email or username. Time to sign up?";
-        case 'auth/wrong-password': return "Incorrect password. Did you forget? It happens to the best of us!";
-        case 'auth/email-already-in-use': return "An account with this email already exists. Try logging in!";
-        case 'auth/weak-password': return "Password should be at least 6 characters long. Make it strong!";
-        case 'auth/requires-recent-login': return "This is a sensitive action. Please log in again to continue.";
-        case 'auth/popup-closed-by-user': return "Sign-in cancelled. Did you change your mind?";
-        case 'auth/account-exists-with-different-credential': return "You've already signed up with this email using a different method (e.g., Google). Try logging in that way!";
-        case 'auth/too-many-requests': return "You have made too many sign-in attempts. Please wait a bit before trying again.";
-        case 'auth/invalid-credential': return "Invalid login credentials. Please check your username and password.";
-        default:
-            console.error("Firebase/App Error:", error);
-            return "An unexpected error occurred. Check the console for more details.";
-    }
-}
-
-function setupAuthForms(container, onAuthSuccess) {
-    container.innerHTML = '';
-    const template = document.getElementById('account-modal-content');
-    const content = template.content.cloneNode(true);
-    container.appendChild(content);
-
-    const toggleBtns = container.querySelectorAll('.toggle-btn');
-    const signupForm = container.querySelector('[data-form="signup"]');
-    const loginForm = container.querySelector('[data-form="login"]');
-    const googleBtnContainer = container.querySelector('.google-signin-btn-container');
-
-    const googleBtn = document.createElement('button');
-    googleBtn.type = 'button';
-    googleBtn.className = 'google-btn-custom';
-    googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
-    if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
-    
-    toggleBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            toggleBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const showSignup = btn.dataset.tab === 'signup';
-            signupForm.style.display = showSignup ? 'block' : 'none';
-            loginForm.style.display = showSignup ? 'none' : 'block';
-        });
-    });
-
-    signupForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = signupForm.querySelector('.signup-username').value.trim().toLowerCase();
-        const email = signupForm.querySelector('.signup-email').value;
-        const password = signupForm.querySelector('.signup-password').value;
-        const errorEl = signupForm.querySelector('.signup-error');
-        errorEl.textContent = '';
-
-        try {
-            const usernamesRef = doc(db, "usernames", username);
-            const usernameSnap = await getDoc(usernamesRef);
-            if (usernameSnap.exists()) {
-                throw new Error('This username is already taken.');
-            }
-
-            await createUserWithEmailAndPassword(auth, email, password);
-
-            onAuthSuccess();
-        } catch (error) {
-            errorEl.textContent = error.message || getCoolErrorMessage(error);
-        }
-    });
-
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const emailOrUsername = loginForm.querySelector('.login-email').value;
-        const password = loginForm.querySelector('.login-password').value;
-        const errorEl = loginForm.querySelector('.login-error');
-        errorEl.textContent = '';
-        
-        try {
-            let emailToLogin = emailOrUsername;
-            if (!emailOrUsername.includes('@')) {
-                const usernamesRef = doc(db, "usernames", emailOrUsername.toLowerCase());
-                const usernameSnap = await getDoc(usernamesRef);
-                if (usernameSnap.exists()) {
-                    const targetUserId = usernameSnap.data().userId;
-                    const userDocRef = doc(db, "users", targetUserId);
-                    const userDocSnap = await getDoc(userDocRef);
-                    if(userDocSnap.exists()) {
-                       emailToLogin = userDocSnap.data().email;
-                    } else { throw new Error("User data not found for this username."); }
-                } else { throw { code: 'auth/user-not-found' }; }
-            }
-            await signInWithEmailAndPassword(auth, emailToLogin, password);
-            onAuthSuccess();
-        } catch (error) {
-            errorEl.textContent = getCoolErrorMessage(error);
-        }
-    });
-
-    if(googleBtn) {
-        googleBtn.addEventListener('click', async () => {
-            const provider = new GoogleAuthProvider();
-            const googleLoader = document.getElementById('google-signin-loader-modal');
-            try {
-                openModal(googleLoader);
-                await signInWithPopup(auth, provider);
-                onAuthSuccess();
-            } catch (error) {
-                console.error("Google Sign-In Error: ", error);
-                const errorEl = loginForm.querySelector('.login-error');
-                errorEl.textContent = getCoolErrorMessage(error);
-            } finally {
-                closeModal(googleLoader);
-            }
-        });
-    }
-}
-
-function mergeGuestDataWithCloud(cloudData = {}) {
-    const guestDataString = localStorage.getItem('anonymousUserData');
-    if (!guestDataString) return cloudData;
-    try {
-        const guestData = JSON.parse(guestDataString);
-        const mergedData = JSON.parse(JSON.stringify(cloudData));
-        const mergeTasks = (cloudTasks = [], guestTasks = []) => {
-            const existingTexts = new Set(cloudTasks.map(t => t.text));
-            const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
-            return [...cloudTasks, ...newTasks];
-        };
-        mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
-        mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
-        if (guestData.generalTaskGroups) {
-            if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
-            guestData.generalTaskGroups.forEach(guestGroup => {
-                const cloudGroup = mergedData.generalTaskGroups.find(cg => cg.name === guestGroup.name);
-                if (cloudGroup) {
-                    cloudGroup.tasks = mergeTasks(cloudGroup.tasks, guestGroup.tasks);
-                } else {
-                    mergedData.generalTaskGroups.push(guestGroup);
-                }
-            });
-        }
-        if (guestData.playerData) {
-            if (!mergedData.playerData) {
                 mergedData.playerData = guestData.playerData;
             } else {
                 const newXp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
