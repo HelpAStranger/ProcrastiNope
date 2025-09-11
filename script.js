@@ -26,6 +26,7 @@ import {
     where,
     getDocs,
     updateDoc,
+    arrayUnion,
     arrayRemove,
     deleteDoc,
     documentId
@@ -83,21 +84,6 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null &&
                                    request.auth.uid in resource.data.participants;
     }
-
-    // NEW: Friend requests between users
-    match /friendRequests/{requestId} {
-      // A user can create a request if they are the sender.
-      allow create: if request.auth != null &&
-                     request.auth.uid == request.resource.data.fromUid;
-
-      // The recipient can read to see the request.
-      // The sender can read to see if it's still pending.
-      allow read: if request.auth != null &&
-                   (request.auth.uid == resource.data.toUid || request.auth.uid == resource.data.fromUid);
-
-      // Only the recipient can delete (accept/decline) the request.
-      allow delete: if request.auth != null && request.auth.uid == resource.data.toUid;
-    }
   }
 }
 */
@@ -119,7 +105,6 @@ let app, auth, db;
 let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFriends
-let unsubscribeFromFriendRequests = null;
 let unsubscribeFromSharedQuests = null; 
 let appController = null;
 
@@ -193,10 +178,6 @@ try {
         if (unsubscribeFromFriendsAndShares) { // Changed from unsubscribeFromFriends
             unsubscribeFromFriendsAndShares();
             unsubscribeFromFriendsAndShares = null;
-        }
-        if (unsubscribeFromFriendRequests) {
-            unsubscribeFromFriendRequests();
-            unsubscribeFromFriendRequests = null;
         }
         if (unsubscribeFromSharedQuests) {
             unsubscribeFromSharedQuests();
@@ -306,7 +287,7 @@ async function initializeAppLogic(initialUser) {
     let user = initialUser;
     audioCtx = window.AudioContext ? new AudioContext() : null;
     
-    let lastSection = 'daily'; // To remember the last viewed section on mobile
+    let lastSection = 'daily';
     
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [];
     let playerData = { level: 1, xp: 0 };
@@ -314,7 +295,6 @@ async function initializeAppLogic(initialUser) {
     const activeTimers = {};
     let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
-    let incomingFriendRequests = [];
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
@@ -609,8 +589,8 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            // Set up all social feature listeners (friends, requests, shares)
-            setupSocialListeners(); 
+            // Listen for friend requests and incoming shared quests
+            listenForFriendsAndShares(); 
             // Listen for active shared quests (those accepted by both)
             listenForSharedQuests();
 
@@ -1833,24 +1813,20 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('button');
         if (!button) return;
 
-        const requestId = button.dataset.requestId;
-        const senderUid = button.dataset.senderUid;
-        const requestDocRef = doc(db, "friendRequests", requestId);
+        const senderUid = button.dataset.uid;
+        const currentUserRef = doc(db, "users", user.uid);
+        
+        const batch = writeBatch(db);
+        batch.update(currentUserRef, { friendRequests: arrayRemove(senderUid) });
 
         if (action === 'accept') {
-            const currentUserRef = doc(db, "users", user.uid);
             const senderUserRef = doc(db, "users", senderUid);
-            
-            const batch = writeBatch(db);
-            // Add each user to the other's friends list
-            batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
             batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
             batch.update(senderUserRef, { friends: arrayUnion(user.uid) });
-            batch.delete(requestDocRef); // Delete the request document
-            await batch.commit();
-        } else { // 'decline'
-            await deleteDoc(requestDocRef);
         }
+        
+        await batch.commit();
+        // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
     }
     
     async function removeFriend(e) {
@@ -2404,7 +2380,7 @@ async function initializeAppLogic(initialUser) {
     document.body.addEventListener('keydown', initAudioContext, { once: true });
 
     initOnce();
-    await loadUserSession(); // This calls initialLoad -> setupSocialListeners
+    await loadUserSession();
 
     return {
         isPartial: false,
