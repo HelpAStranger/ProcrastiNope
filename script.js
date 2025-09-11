@@ -33,10 +33,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
-// --- NOTE ON SECURITY & PERMISSIONS ERRORS ---
-// This update adds a new 'sharedQuests' collection. To enable this
-// feature, you MUST add the new rules section to your
-// Firestore Security Rules in the Firebase Console.
+// --- IMPORTANT: FIREBASE SECURITY RULES UPDATE ---
+// To enable shared quests, you MUST add the new rules section below.
+// This is critical for the invited user to receive the quest.
 //
 // ==> Copy and paste the following rules into your Firebase Console <==
 // ==> (Firestore Database -> Rules tab)                               <==
@@ -61,11 +60,10 @@ import {
 //     }
 //
 //     // NEW: Rules for shared quests collection
+//     // A user can only read, update, or delete a shared quest if they are a participant.
 //     match /sharedQuests/{questId} {
-//       // Only the two users involved in the quest can interact with it.
 //       allow read, update, delete: if request.auth != null && 
-//                                     (request.auth.uid == resource.data.ownerUid || 
-//                                      request.auth.uid == resource.data.friendUid);
+//                                     request.resource.data.participants.hasAll([request.auth.uid]);
 //       // The owner is the one who creates the shared quest document.
 //       allow create: if request.auth != null && 
 //                       request.auth.uid == request.resource.data.ownerUid;
@@ -648,20 +646,15 @@ async function initializeAppLogic(initialUser) {
     }
     function checkAllTasksCompleted() {
         // Only consider non-shared tasks for "all tasks completed" logic
-        const allDailiesDone = dailyTasks.filter(t => !t.isShared).length > 0 && dailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
+        const allDailiesDone = dailyTasks.length > 0 && dailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
         const noStandaloneQuests = standaloneMainQuests.filter(t => !t.isShared).length === 0;
         const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.filter(t => !t.isShared).length === 0);
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    // MODIFIED: renderSharedQuests to group by sharedGroupName and remove "No shared quests" message
     const renderSharedQuests = () => {
         sharedQuestsContainer.innerHTML = '';
         
-        // Removed the "No shared quests yet" message as per user request.
-        // The container will simply be empty if there are no shared quests.
-
-        // Group shared quests by sharedGroupName
         const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
             const groupName = quest.sharedGroupName || 'Individual Shared Quests';
             if (!acc[groupName]) {
@@ -684,7 +677,8 @@ async function initializeAppLogic(initialUser) {
             sharedQuestsContainer.appendChild(groupEl);
         }
     };
-    // MODIFIED: Filter out shared tasks from daily, standalone, and general lists
+    
+    // FIX: Updated rendering functions to correctly display tasks based on data
     const renderDailyTasks = () => { 
         dailyTaskListContainer.innerHTML = ''; 
         const nonSharedDailies = dailyTasks.filter(task => !task.isShared);
@@ -693,22 +687,24 @@ async function initializeAppLogic(initialUser) {
     };
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = ''; 
-        standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
+        const nonSharedStandalone = standaloneMainQuests.filter(t => !t.isShared);
+        nonSharedStandalone.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
     };
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
-        generalTaskGroups.forEach(group => generalTaskListContainer.appendChild(createGroupElement(group))); 
-        // MODIFIED: Updated condition for no-general-tasks-message to consider only non-shared tasks
+        generalTaskGroups.forEach(group => {
+            const el = createGroupElement(group);
+            generalTaskListContainer.appendChild(el);
+        }); 
         const hasAnyNonSharedMainQuests = standaloneMainQuests.filter(t => !t.isShared).length > 0 || generalTaskGroups.some(g => g.tasks && g.tasks.filter(t => !t.isShared).length > 0);
         noGeneralTasksMessage.style.display = hasAnyNonSharedMainQuests ? 'none' : 'block'; 
     };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
-        // MODIFIED: Added share-group-btn to group actions
         el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
-        // Filter out shared tasks from group lists
-        if (group.tasks) group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
+        const nonSharedGroupTasks = group.tasks.filter(t => !t.isShared);
+        nonSharedGroupTasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
         return el;
     };
     const createTaskElement = (task, type) => {
@@ -780,18 +776,18 @@ async function initializeAppLogic(initialUser) {
             }
         }
 
-        // NEW: Handle tasks marked as shared in their original lists
+        // NEW: Handle tasks marked as shared in their original lists.
+        // We still render them, but with a different style.
         if (task.isShared) {
             li.classList.add('is-shared-task');
             const completeBtn = li.querySelector('.complete-btn');
             if (completeBtn) {
                 completeBtn.disabled = true;
-                completeBtn.title = 'This is a shared quest, manage its completion in the Shared Quests section.';
+                completeBtn.title = 'This is a shared quest, manage it in the Shared Quests section.';
             }
-            // Disable other action buttons for shared tasks in their original lists
             li.querySelectorAll('.timer-clock-btn, .share-btn, .edit-btn').forEach(btn => {
                 btn.disabled = true;
-                btn.title = 'This quest is shared and cannot be modified here.';
+                btn.title = 'This is a shared quest.';
             });
         }
 
@@ -818,45 +814,43 @@ async function initializeAppLogic(initialUser) {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
         for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } 
-        task = sharedQuests.find(t => t && t.id === id); if (task) return { task, list: sharedQuests, type: 'shared' }; // Note: sharedQuests use 'id' as questId
+        task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
         return {};
     };
     const deleteTask = (id) => { 
         stopTimer(id, false); 
-        const {task, list} = findTaskAndContext(id); 
+        const {task, list, type} = findTaskAndContext(id); 
         if (!task || !list) return;
 
-        // If it's a shared task in its original list, just remove it locally.
-        // The actual shared quest document in Firestore remains until deleted from the sharedQuests view.
-        if (task.isShared) {
-            const i = list.findIndex(t => t.id === id);
-            if(i > -1) {
-                list.splice(i, 1);
-            }
+        // NEW: Only allow deletion of shared quests from the shared list.
+        if (type === 'shared') {
+            showConfirm("Delete Shared Quest?", "This will delete the quest for all participants.", async () => {
+                try {
+                    const questDocRef = doc(db, "sharedQuests", id);
+                    await deleteDoc(questDocRef);
+                    // The onSnapshot listener will handle UI updates
+                    playSound('delete');
+                } catch (error) {
+                    console.error("Error deleting shared quest:", getCoolErrorMessage(error));
+                    showConfirm("Error", "Failed to delete shared quest. Please try again later.", () => {});
+                }
+            });
         } else {
-            // Regular task deletion
-            const i = list.findIndex(t => t.id === id);
-            if(i > -1) {
+             const i = list.findIndex(t => t.id === id); 
+             if(i > -1) {
                 list.splice(i, 1);
-            }
+                renderAllLists(); 
+                saveState(); 
+                playSound('delete');
+             }
         }
-        renderAllLists(); 
-        saveState(); 
-        playSound('delete'); 
     };
     const completeTask = (id) => {
         stopTimer(id, false);
         const { task, type } = findTaskAndContext(id);
         if (!task) return;
 
-        // NEW: If the task is marked as shared in its original list, do not complete it here.
-        // Its completion is managed via the sharedQuests mechanism.
-        if (task.isShared && type !== 'shared') { // Only prevent if it's a local task marked as shared
-            console.log(`Task ${id} is shared, completion handled in shared quests.`);
-            return;
-        }
-
-        if(type === 'shared') {
+        if (type === 'shared') {
             completeSharedQuestPart(task);
             return;
         }
@@ -898,12 +892,6 @@ async function initializeAppLogic(initialUser) {
         const { task, type } = findTaskAndContext(id);
         if (!task) return;
 
-        // NEW: If the task is marked as shared in its original list, do not uncomplete it here.
-        if (task.isShared && type !== 'shared') { // Only prevent if it's a local task marked as shared
-            console.log(`Task ${id} is shared, uncompletion handled in shared quests.`);
-            return;
-        }
-
         if (type === 'shared' || task.completedToday) {
             
             if(type === 'shared') { // Un-complete shared task part
@@ -925,9 +913,9 @@ async function initializeAppLogic(initialUser) {
     const editTask = (id, text, goal) => {
         const { task, type } = findTaskAndContext(id);
         if (task) {
-            // NEW: Prevent editing of shared tasks in their original lists
-            if (task.isShared) {
+            if (task.isShared) { // Prevent editing a task that's been shared
                 console.log(`Task ${id} is shared, cannot edit from here.`);
+                showConfirm("Cannot Edit", "This quest has been shared. It can only be edited by the owner from the shared quest list.", () => {});
                 return;
             }
             task.text = text;
@@ -958,9 +946,9 @@ async function initializeAppLogic(initialUser) {
         const { task } = findTaskAndContext(id);
         if (!task) return;
 
-        // NEW: Prevent starting timer on shared tasks in their original lists
         if (task.isShared) {
             console.log(`Task ${id} is shared, cannot start timer from here.`);
+            showConfirm("Cannot Set Timer", "This quest has been shared. Timers can only be set on personal quests.", () => {});
             return;
         }
 
@@ -1038,22 +1026,13 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
-    /**
-     * Toggles the visibility of action buttons for a given element (task item or group header).
-     * Manages a global `activeMobileActionsItem` to ensure only one set of actions is visible at a time.
-     * Includes a timeout to automatically hide actions if no further interaction.
-     * @param {HTMLElement} element The DOM element (task-item or main-quest-group-header) whose actions to toggle.
-     */
     function toggleTaskActions(element) {
-        // If the element has an active timer, its actions are always visible and laid out differently.
-        // Do not toggle the overlay in this case.
         if (element.classList.contains('timer-active')) {
             return;
         }
 
-        clearTimeout(actionsTimeoutId); // Clear any existing timeout for any element
+        clearTimeout(actionsTimeoutId);
 
-        // If another element's actions are visible, hide them
         if (activeMobileActionsItem && activeMobileActionsItem !== element) {
             activeMobileActionsItem.classList.remove('actions-visible');
         }
@@ -1061,16 +1040,15 @@ async function initializeAppLogic(initialUser) {
         const wasVisible = element.classList.contains('actions-visible');
         element.classList.toggle('actions-visible');
 
-        if (!wasVisible) { // If it just became visible
+        if (!wasVisible) {
             activeMobileActionsItem = element;
-            // Set a timeout to hide it after 3 seconds
             actionsTimeoutId = setTimeout(() => {
                 if(element.classList.contains('actions-visible')) {
                     element.classList.remove('actions-visible');
                     activeMobileActionsItem = null;
                 }
             }, 3000);
-        } else { // If it just became hidden
+        } else {
             activeMobileActionsItem = null;
         }
     }
@@ -1078,8 +1056,6 @@ async function initializeAppLogic(initialUser) {
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
-
-        // Removed handleGroupHeaderMobileActions as it's no longer needed
         
         if (groupHeader) { 
             const groupId = groupHeader.parentElement.dataset.groupId;
@@ -1089,7 +1065,6 @@ async function initializeAppLogic(initialUser) {
             const isAddClick = e.target.closest('.add-task-to-group-btn');
             const isDeleteClick = e.target.closest('.delete-group-btn');
             const isEditClick = e.target.closest('.edit-group-btn');
-            // NEW: Share Group button click
             const isShareClick = e.target.closest('.share-group-btn');
 
             if (isExpandClick) {
@@ -1097,10 +1072,8 @@ async function initializeAppLogic(initialUser) {
                     g.isExpanded = !g.isExpanded; 
                     groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
                 }
-                // If actions were visible, keep them visible after expand/collapse
-                // and reset the timeout.
                 if (groupHeader.classList.contains('actions-visible')) {
-                    clearTimeout(actionsTimeoutId); // Reset timeout
+                    clearTimeout(actionsTimeoutId);
                     actionsTimeoutId = setTimeout(() => {
                         if(groupHeader.classList.contains('actions-visible')) {
                             groupHeader.classList.remove('actions-visible');
@@ -1124,15 +1097,13 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             if (isEditClick) {
-                // If there's an edit group modal, open it here.
                 // For now, just let the click fall through to toggleTaskActions.
             }
-            // NEW: Handle Share Group click
             if (isShareClick) {
                 if (!user) {
                     showConfirm("Login Required", "You must be logged in to share groups.", () => {
-                        closeModal(shareGroupModal); // Close the share modal if it was open
-                        openModal(accountModal); // Open login modal
+                        closeModal(shareGroupModal);
+                        openModal(accountModal);
                     });
                     return;
                 }
@@ -1140,8 +1111,6 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             
-            // If the click was not on any specific button (expand, add, delete, edit, share),
-            // toggle the actions overlay.
             if (!e.target.closest('button')) {
                 toggleTaskActions(groupHeader);
             }
@@ -1155,47 +1124,30 @@ async function initializeAppLogic(initialUser) {
             const isMyPartCompleted = () => {
                 if(!task) return false;
                 if(type !== 'shared') return task.completedToday;
-
                 const isOwner = user && task.ownerUid === user.uid;
                 return isOwner ? task.ownerCompleted : task.friendCompleted;
             }
             
-            // If the task is completed (or my part of a shared task is completed),
-            // a click should uncomplete it, not open the actions menu.
-            if (isMyPartCompleted()) {
+            if (isMyPartCompleted() || (task && task.isShared && type !== 'shared')) {
                 uncompleteDailyTask(id);
                 return;
             }
             
-            // If the click is on a button, perform the button action.
-            // Otherwise, toggle the task actions menu.
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.complete-btn')) completeTask(id);
                 else if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.share-btn')) {
-                    // NEW: Prevent sharing an already shared task from its original list
-                    if (task && task.isShared) {
-                        console.log(`Task ${id} is already shared.`);
-                        return;
-                    }
+                    if (task && task.isShared) { return; }
                     openShareModal(id);
                 }
                 else if (e.target.closest('.timer-clock-btn')) { 
-                    // NEW: Prevent setting timer on shared tasks from their original lists
-                    if (task && task.isShared) {
-                        console.log(`Task ${id} is shared, cannot set timer from here.`);
-                        return;
-                    }
+                    if (task && task.isShared) { return; }
                     if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); 
                 }
                 else if (e.target.closest('.edit-btn')) {
                     if (task) {
-                        // NEW: Prevent editing shared tasks from their original lists
-                        if (task.isShared) {
-                            console.log(`Task ${id} is shared, cannot edit from here.`);
-                            return;
-                        }
+                        if (task.isShared) { return; }
                         editTaskIdInput.value = task.id;
                         editTaskInput.value = task.text;
                         editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
@@ -1212,7 +1164,6 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
-                // If not a button click and not completed, toggle the actions
                 toggleTaskActions(taskItem);
             }
         } 
@@ -1250,7 +1201,6 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    // MODIFIED: Added shareGroupModal to the list of modals that close on overlay click
     [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal].forEach(m => { 
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
@@ -1284,7 +1234,7 @@ async function initializeAppLogic(initialUser) {
     resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
     exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
     importDataBtn.addEventListener('click', () => importFileInput.click());
-    importFileInput.addEventListener('change', (e) => { const f = e.target.files; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
+    importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
     document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
     
     manageAccountBtn.addEventListener('click', () => {
@@ -1444,10 +1394,10 @@ async function initializeAppLogic(initialUser) {
             const { task, list: sourceListArray } = findTaskAndContext(taskId);
             if (!task || !sourceListArray) return;
 
-            // NEW: Prevent dragging of shared tasks
+            // FIX: Prevent dragging of shared tasks
             if (task.isShared) {
-                evt.cancel = true; // Cancel the drag operation
-                renderAllLists(); // Re-render to revert visual changes if any
+                evt.cancel = true; 
+                renderAllLists(); 
                 return;
             }
 
@@ -1482,14 +1432,13 @@ async function initializeAppLogic(initialUser) {
 
         const commonTaskOptions = {
             animation: 150,
-            delay: 500, // Apply a delay to prevent accidental drags on quick clicks
-            delayOnTouchOnly: false, // Ensure delay applies to both touch and mouse
+            delay: 500,
+            delayOnTouchOnly: false,
             onStart: (evt) => {
-                // NEW: Prevent dragging of shared tasks
                 const taskId = evt.item.dataset.id;
                 const { task } = findTaskAndContext(taskId);
                 if (task && task.isShared) {
-                    evt.cancel = true; // Cancel the drag operation
+                    evt.cancel = true;
                     return;
                 }
                 document.body.classList.add('is-dragging');
@@ -1505,8 +1454,8 @@ async function initializeAppLogic(initialUser) {
         new Sortable(generalTaskListContainer, {
             animation: 150,
             handle: '.main-quest-group-header',
-            delay: 500, // Apply delay for group dragging as well
-            delayOnTouchOnly: false, // Ensure delay applies to both touch and mouse
+            delay: 500,
+            delayOnTouchOnly: false,
             onStart: () => document.body.classList.add('is-dragging'),
             onEnd: (e) => {
                 document.body.classList.remove('is-dragging');
@@ -1568,9 +1517,6 @@ async function initializeAppLogic(initialUser) {
                     }
                 });
 
-                // FIX: Always re-render friends and requests when the snapshot updates
-                // This ensures the list is fresh if the modal is open, or will be fresh
-                // when the modal is next opened.
                 renderFriendsAndRequests();
             }
         }, (error) => {
@@ -1612,7 +1558,7 @@ async function initializeAppLogic(initialUser) {
             const requestsQuery = query(collection(db, "users"), where(documentId(), 'in', requestUIDs));
             const requestDocs = await getDocs(requestsQuery);
             requestDocs.forEach(doc => {
-                const requestUser = doc.data(); // FIX: Changed requestDoc to doc
+                const requestUser = doc.data(); 
                 const requestEl = document.createElement('div');
                 requestEl.className = 'friend-request-item';
                 requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
@@ -1631,7 +1577,6 @@ async function initializeAppLogic(initialUser) {
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
         const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
 
-        // Prevent sending friend request to self
         if (currentUsername && usernameToFind === currentUsername) {
             friendStatusMessage.textContent = "You can't send a friend request to yourself!";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
@@ -1795,7 +1740,7 @@ async function initializeAppLogic(initialUser) {
         await initialLoad();
         await updateUserUI();
         await promptForUsernameIfNeeded();
-        await updateUserUI(); // Update UI again in case username was just set
+        await updateUserUI();
         checkDailyReset();
         resumeTimers();
     }
@@ -1814,11 +1759,12 @@ async function initializeAppLogic(initialUser) {
                 newSharedQuests.push({ ...doc.data(), id: doc.id, questId: doc.id });
             });
             
-            // Check for updates
             newSharedQuests.forEach(newQuest => {
                 const oldQuest = sharedQuests.find(q => q.id === newQuest.id);
                 if (oldQuest) {
-                    const friendJustCompleted = (newQuest.friendUid === user.uid && !oldQuest.ownerCompleted && newQuest.ownerCompleted) || (newQuest.ownerUid === user.uid && !oldQuest.friendCompleted && newQuest.friendCompleted);
+                    const isOwner = newQuest.ownerUid === user.uid;
+                    const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
+                                                (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
                     if (friendJustCompleted) {
                         const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
                         if(taskEl) {
@@ -1839,10 +1785,8 @@ async function initializeAppLogic(initialUser) {
 
     async function openShareModal(questId) {
         const { task } = findTaskAndContext(questId);
-        // NEW: Prevent opening share modal for tasks already marked as shared in their original list
         if (!task || task.isShared) {
             console.error("Task is not sharable or already shared.");
-            // Optionally, show a user-facing message
             return;
         }
 
@@ -1888,7 +1832,7 @@ async function initializeAppLogic(initialUser) {
                 await shareQuest(questId, friendUid, friendUsername);
             } catch (error) {
                 console.error("Failed to share quest:", error);
-                // Optionally, add a user-facing error message here
+                showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
                 button.disabled = false;
                 button.textContent = 'Share';
             } finally {
@@ -1898,20 +1842,14 @@ async function initializeAppLogic(initialUser) {
     });
 
     async function shareQuest(questId, friendUid, friendUsername) {
-        // --- FIX: Refactored shared quest logic to keep original task and mark it as shared ---
         const { task, list } = findTaskAndContext(questId);
-        if (!task || !list) {
-            console.error("Share Quest: Original task or list not found.");
-            return;
-        }
+        if (!task || !list) return;
 
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const ownerUsername = userDoc.data().username;
         
-        // 1. Let Firestore generate a new, unique ID for the shared quest
         const sharedQuestRef = doc(collection(db, "sharedQuests"));
 
-        // 2. Create the shared quest document in the new collection
         const sharedQuestData = {
             text: task.text,
             ownerUid: user.uid,
@@ -1921,180 +1859,94 @@ async function initializeAppLogic(initialUser) {
             ownerCompleted: false,
             friendCompleted: false,
             createdAt: Date.now(),
-            participants: [user.uid, friendUid],
-            originalTaskId: task.id // Link to the original task ID
+            participants: [user.uid, friendUid]
         };
-        await setDoc(sharedQuestRef, sharedQuestData);
+        
+        const batch = writeBatch(db);
+        // Step 1: Create the shared quest document
+        batch.set(sharedQuestRef, sharedQuestData);
 
-        // 3. Mark the original local task as shared, do NOT remove it
-        task.isShared = true;
-        task.sharedQuestId = sharedQuestRef.id; // Store the ID of the shared quest document
+        // Step 2: Remove the original task from the local list
+        const originalTaskIndex = list.findIndex(t => t.id === task.id);
+        if (originalTaskIndex > -1) {
+            list.splice(originalTaskIndex, 1);
+        }
 
-        // 4. Save the owner's updated task list. The `onSnapshot` listener
-        // will add the new shared quest to the UI for both players.
+        // Step 3: Save the updated local state to Firestore
+        const dataToSave = { 
+            dailyTasks: dailyTasks, 
+            standaloneMainQuests: standaloneMainQuests, 
+            generalTaskGroups: generalTaskGroups.map(({ isExpanded, ...rest }) => rest),
+            playerData: playerData, 
+            settings: settings
+        };
+        batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
+        
+        await batch.commit();
         playSound('share');
-        saveState();
-        renderAllLists(); // Re-render immediately for the owner
     }
     
     async function completeSharedQuestPart(task, uncompleting = false) {
-        const questId = task.questId; // For shared quests, task.id is questId
+        const questId = task.questId;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
         
-        console.log(`Attempting to ${uncompleting ? 'uncomplete' : 'complete'} shared quest part for questId: ${questId}`);
-        console.log(`Current user UID: ${user ? user.uid : 'N/A'}, Is owner: ${isOwner}`);
-        console.log(`Task ownerUid: ${task.ownerUid}, Task friendUid: ${task.friendUid}`);
+        const currentSharedQuestSnap = await getDoc(sharedQuestRef);
+        if (!currentSharedQuestSnap.exists()) {
+            console.error("Shared quest not found:", questId);
+            return;
+        }
+        const currentSharedQuestData = currentSharedQuestSnap.data();
 
-        try {
-            // Fetch current state to prevent multiple completions by the same user
-            const currentSharedQuestSnap = await getDoc(sharedQuestRef);
-            if (!currentSharedQuestSnap.exists()) {
-                console.error("Shared quest document not found:", questId);
-                return;
+        const updateData = {};
+        if (isOwner) {
+            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
+                console.log("Owner already completed their part.");
+                return; 
             }
-            const currentSharedQuestData = currentSharedQuestSnap.data();
+            updateData.ownerCompleted = !uncompleting;
+        } else {
+            if (!uncompleting && currentSharedQuestData.friendCompleted) {
+                console.log("Friend already completed their part.");
+                return; 
+            }
+            updateData.friendCompleted = !uncompleting;
+        }
+        
+        await updateDoc(sharedQuestRef, updateData);
+        
+        if (!uncompleting) {
+            playSound('complete');
+            addXp(XP_PER_SHARED_QUEST / 2);
+        } else {
+            playSound('delete');
+            addXp(-(XP_PER_SHARED_QUEST / 2));
+        }
 
-            const updateData = {};
-            if (isOwner) {
-                if (!uncompleting && currentSharedQuestData.ownerCompleted) {
-                    console.log("Owner already completed their part, no action needed.");
-                    return; // Prevent re-completing
-                }
-                updateData.ownerCompleted = !uncompleting;
-            } else {
-                if (!uncompleting && currentSharedQuestData.friendCompleted) {
-                    console.log("Friend already completed their part, no action needed.");
-                    return; // Prevent re-completing
-                }
-                updateData.friendCompleted = !uncompleting;
-            }
-            
-            await updateDoc(sharedQuestRef, updateData);
-            console.log(`Successfully updated shared quest ${questId}. New state:`, updateData);
-            
-            if (!uncompleting) {
-                playSound('complete');
-                addXp(XP_PER_SHARED_QUEST / 2); // Award half XP for completing your part
-            } else {
-                playSound('delete');
-                addXp(-(XP_PER_SHARED_QUEST / 2));
-            }
-
-            // Re-fetch the updated document to check for full completion
-            const updatedDoc = await getDoc(sharedQuestRef);
-            if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
-                console.log("Both participants completed their parts. Finishing shared quest.");
-                finishSharedQuest({ ...updatedDoc.data(), id: questId });
-            } else {
-                console.log("Shared quest not fully completed yet. UI will update via snapshot listener.");
-                // The onSnapshot listener will handle the re-render
-            }
-        } catch (error) {
-            console.error(`Error ${uncompleting ? 'uncompleting' : 'completing'} shared quest part ${questId}:`, getCoolErrorMessage(error), error);
-            // Optionally, show a user-facing error message here
+        const updatedDoc = await getDoc(sharedQuestRef);
+        if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
+            finishSharedQuest({ ...updatedDoc.data(), id: questId });
         }
     }
     
     async function finishSharedQuest(questData) {
-        console.log("Shared quest fully completed by both participants:", questData.id);
         playSound('sharedQuestFinish');
         
         const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
         if (taskEl) {
             taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
-            // After the animation, delete the document. The snapshot listener will then remove the element.
             taskEl.addEventListener('animationend', async () => {
-                // Remove the original task from the owner's local list if it exists
-                if (questData.ownerUid === user.uid && questData.originalTaskId) {
-                    let found = false;
-                    // Check daily tasks
-                    const dailyIndex = dailyTasks.findIndex(t => t.id === questData.originalTaskId);
-                    if (dailyIndex > -1) {
-                        dailyTasks.splice(dailyIndex, 1);
-                        found = true;
-                    }
-                    // Check standalone main quests
-                    if (!found) {
-                        const standaloneIndex = standaloneMainQuests.findIndex(t => t.id === questData.originalTaskId);
-                        if (standaloneIndex > -1) {
-                            standaloneMainQuests.splice(standaloneIndex, 1);
-                            found = true;
-                        }
-                    }
-                    // Check grouped tasks
-                    if (!found) {
-                        for (const group of generalTaskGroups) {
-                            if (group.tasks) {
-                                const groupTaskIndex = group.tasks.findIndex(t => t.id === questData.originalTaskId);
-                                if (groupTaskIndex > -1) {
-                                    group.tasks.splice(groupTaskIndex, 1);
-                                    if (group.tasks.length === 0) { // If group becomes empty, remove it
-                                        generalTaskGroups = generalTaskGroups.filter(g => g.id !== group.id);
-                                    }
-                                    found = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (found) {
-                        saveState(); // Save the updated local state after removing the original task
-                        console.log(`Original task ${questData.originalTaskId} removed from owner's local list.`);
-                    }
-                }
                 await deleteDoc(doc(db, "sharedQuests", questData.id));
-                console.log(`Shared quest document ${questData.id} deleted from Firestore.`);
             }, { once: true });
         } else {
-            // If the element isn't visible for some reason, just delete the doc immediately.
-            // Also remove the original task from the owner's local list if it exists
-            if (questData.ownerUid === user.uid && questData.originalTaskId) {
-                let found = false;
-                const dailyIndex = dailyTasks.findIndex(t => t.id === questData.originalTaskId);
-                if (dailyIndex > -1) {
-                    dailyTasks.splice(dailyIndex, 1);
-                    found = true;
-                }
-                if (!found) {
-                    const standaloneIndex = standaloneMainQuests.findIndex(t => t.id === questData.originalTaskId);
-                    if (standaloneIndex > -1) {
-                        standaloneMainQuests.splice(standaloneIndex, 1);
-                        found = true;
-                    }
-                }
-                if (!found) {
-                    for (const group of generalTaskGroups) {
-                        if (group.tasks) {
-                            const groupTaskIndex = group.tasks.findIndex(t => t.id === questData.originalTaskId);
-                            if (groupTaskIndex > -1) {
-                                group.tasks.splice(groupTaskIndex, 1);
-                                if (group.tasks.length === 0) {
-                                    generalTaskGroups = generalTaskGroups.filter(g => g.id !== group.id);
-                                }
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (found) {
-                    saveState();
-                    console.log(`Original task ${questData.originalTaskId} removed from owner's local list (no animation).`);
-                }
-            }
             await deleteDoc(doc(db, "sharedQuests", questData.id));
-            console.log(`Shared quest document ${questData.id} deleted from Firestore (no animation).`);
         }
     }
 
-    // NEW: Function to open the Share Group modal
     async function openShareGroupModal(groupId) {
-        if (!user) return; // Should be caught by event listener, but good to double check
-
+        if (!user) return; 
         const group = generalTaskGroups.find(g => g.id === groupId);
-        // NEW: Prevent sharing an empty group or a group where all tasks are already shared
         if (!group || !group.tasks || group.tasks.filter(t => !t.isShared).length === 0) {
             showConfirm("Cannot Share Group", "This group has no non-shared tasks to share.", () => {});
             return;
@@ -2130,7 +1982,6 @@ async function initializeAppLogic(initialUser) {
         });
     }
 
-    // NEW: Event listener for the Share Group friend list
     shareGroupFriendList.addEventListener('click', async (e) => {
         const button = e.target.closest('.share-btn-action');
         if (button) {
@@ -2144,6 +1995,7 @@ async function initializeAppLogic(initialUser) {
                 await shareGroup(groupId, friendUid, friendUsername);
             } catch (error) {
                 console.error("Failed to share group:", error);
+                showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => {});
                 button.disabled = false;
                 button.textContent = 'Share';
             } finally {
@@ -2152,7 +2004,6 @@ async function initializeAppLogic(initialUser) {
         }
     });
 
-    // NEW: Function to handle sharing a group
     async function shareGroup(groupId, friendUid, friendUsername) {
         if (!user) return;
 
@@ -2160,7 +2011,6 @@ async function initializeAppLogic(initialUser) {
         if (groupIndex === -1) return;
 
         const groupToShare = generalTaskGroups[groupIndex];
-        // Only share tasks that are not already shared
         const tasksToShare = groupToShare.tasks.filter(t => !t.isShared);
 
         if (tasksToShare.length === 0) {
@@ -2185,22 +2035,31 @@ async function initializeAppLogic(initialUser) {
                 friendCompleted: false,
                 createdAt: Date.now(),
                 participants: [user.uid, friendUid],
-                sharedGroupId: groupId, // Link to the original group ID
-                sharedGroupName: groupToShare.name, // Store group name for display
-                originalTaskId: task.id // Link to the original task ID
+                sharedGroupId: groupId,
+                sharedGroupName: groupToShare.name
             };
             batch.set(sharedQuestRef, sharedQuestData);
-
-            // Mark the original local task as shared
-            task.isShared = true;
-            task.sharedQuestId = sharedQuestRef.id;
         }
         
+        // Remove tasks from the original group after adding them to the batch
+        groupToShare.tasks = groupToShare.tasks.filter(t => t.isShared);
+        // If the group becomes empty, remove it
+        if (groupToShare.tasks.length === 0) {
+            generalTaskGroups.splice(groupIndex, 1);
+        }
+
+        const dataToSave = { 
+            dailyTasks: dailyTasks, 
+            standaloneMainQuests: standaloneMainQuests, 
+            generalTaskGroups: generalTaskGroups.map(({ isExpanded, ...rest }) => rest),
+            playerData: playerData, 
+            settings: settings
+        };
+        batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
+
         await batch.commit();
 
         playSound('share');
-        saveState();
-        renderAllLists();
     }
 
 
@@ -2298,19 +2157,14 @@ function setupAuthForms(container, onAuthSuccess) {
         errorEl.textContent = '';
 
         try {
-            // Check if username is already taken (read is allowed by rules)
             const usernamesRef = doc(db, "usernames", username);
             const usernameSnap = await getDoc(usernamesRef);
             if (usernameSnap.exists()) {
                 throw new Error('This username is already taken.');
             }
 
-            // Create the Firebase Auth user. This will trigger onAuthStateChanged.
             await createUserWithEmailAndPassword(auth, email, password);
 
-            // The actual Firestore document creation (for 'users' and 'usernames')
-            // will now be handled by the onAuthStateChanged listener and
-            // promptForUsernameIfNeeded, ensuring request.auth is available.
             onAuthSuccess();
         } catch (error) {
             errorEl.textContent = error.message || getCoolErrorMessage(error);
