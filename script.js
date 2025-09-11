@@ -766,7 +766,7 @@ async function initializeAppLogic(initialUser) {
             if(myPartCompleted) {
                  const completeBtn = li.querySelector('.complete-btn');
                  completeBtn.classList.add('checked');
-                 completeBtn.disabled = true; // Explicitly disable the button if my part is completed
+                 completeBtn.disabled = false; // Allow uncompletion
                  li.classList.add('my-part-completed'); // New class for my part completion
             }
             return li;
@@ -898,7 +898,8 @@ async function initializeAppLogic(initialUser) {
         addXp(XP_PER_TASK);
         playSound('complete');
         if (type === 'daily') {
-            if (task.completedToday) return;
+            // If already completed, do nothing (uncompletion is handled by uncompleteDailyTask)
+            if (task.completedToday) return; 
             task.completedToday = true;
             task.lastCompleted = new Date().toDateString();
             if (task.weeklyGoal > 0) {
@@ -1166,26 +1167,28 @@ async function initializeAppLogic(initialUser) {
             const id = taskItem.dataset.id;
             const { task, type } = findTaskAndContext(id);
 
+            // Helper to determine if the task is completed by the current user
             const isMyPartCompleted = () => {
-                if(!task) return false;
-                if(type !== 'shared') return task.completedToday;
-                const isOwner = user && task.ownerUid === user.uid;
-                return isOwner ? task.ownerCompleted : task.friendCompleted;
-            }
+                if (!task) return false;
+                if (type === 'shared') {
+                    const isOwner = user && task.ownerUid === user.uid;
+                    return isOwner ? task.ownerCompleted : task.friendCompleted;
+                }
+                return task.completedToday;
+            };
             
             if (e.target.closest('.complete-btn')) {
-                // If it's a shared quest and my part is completed, allow uncompletion
-                if (type === 'shared' && isMyPartCompleted()) {
-                    uncompleteDailyTask(id); // This will call completeSharedQuestPart with uncompleting = true
-                    return;
+                if (type === 'daily' || type === 'shared') {
+                    if (isMyPartCompleted()) {
+                        uncompleteDailyTask(id); // This function will handle both daily and shared uncompletion
+                    } else {
+                        completeTask(id); // This function will handle both daily and shared completion
+                    }
+                } else {
+                    // For standalone and grouped main quests, completion means deletion.
+                    // There's no "uncomplete" for these, as they are removed upon completion.
+                    completeTask(id);
                 }
-                // If it's a regular daily task and completed, allow uncompletion
-                if (type === 'daily' && task.completedToday) {
-                    uncompleteDailyTask(id);
-                    return;
-                }
-                // Otherwise, attempt to complete
-                completeTask(id);
                 return;
             }
             
@@ -2003,16 +2006,14 @@ async function initializeAppLogic(initialUser) {
 
         const updateData = {};
         if (isOwner) {
-            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
-                console.log("Owner already completed their part.");
-                return; 
-            }
+            // Only proceed if the state is actually changing
+            if (!uncompleting && currentSharedQuestData.ownerCompleted) return;
+            if (uncompleting && !currentSharedQuestData.ownerCompleted) return;
             updateData.ownerCompleted = !uncompleting;
         } else {
-            if (!uncompleting && currentSharedQuestData.friendCompleted) {
-                console.log("Friend already completed their part.");
-                return; 
-            }
+            // Only proceed if the state is actually changing
+            if (!uncompleting && currentSharedQuestData.friendCompleted) return;
+            if (uncompleting && !currentSharedQuestData.friendCompleted) return;
             updateData.friendCompleted = !uncompleting;
         }
         
