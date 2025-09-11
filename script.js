@@ -319,7 +319,7 @@ async function initializeAppLogic(initialUser) {
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let playerData = { level: 1, xp: 0 };
-    let currentListToAdd = null, currentEditingTaskId = null;
+    let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
     const activeTimers = {};
     let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
@@ -877,6 +877,15 @@ async function initializeAppLogic(initialUser) {
         saveState(); 
         playSound('addGroup'); 
     };
+    const editGroup = (id, newName) => {
+        const group = generalTaskGroups.find(g => g.id === id);
+        if (group) {
+            group.name = newName;
+            saveState();
+            renderAllLists();
+            playSound('toggle');
+        }
+    };
     const undoCompleteMainQuest = (id) => {
         if (undoTimeoutMap.has(id)) {
             clearTimeout(undoTimeoutMap.get(id));
@@ -1222,7 +1231,15 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             if (isEditClick) {
-                // For now, just let the click fall through to toggleTaskActions.
+                if (g) {
+                    currentEditingGroupId = groupId;
+                    addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
+                    addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
+                    newGroupInput.value = g.name;
+                    openModal(addGroupModal);
+                    focusOnDesktop(newGroupInput);
+                }
+                return;
             }
             if (isShareClick) {
                 if (!user) {
@@ -1333,11 +1350,30 @@ async function initializeAppLogic(initialUser) {
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
     timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
-    addGroupForm.addEventListener('submit', (e) => { e.preventDefault(); const n = newGroupInput.value.trim(); if (n) { addGroup(n); newGroupInput.value = ''; closeModal(addGroupModal); } });
+    addGroupForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = newGroupInput.value.trim();
+        if (name) {
+            if (currentEditingGroupId) {
+                editGroup(currentEditingGroupId, name);
+            } else {
+                addGroup(name);
+            }
+            newGroupInput.value = '';
+            closeModal(addGroupModal);
+        }
+    });
     
     addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
     addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
-    addGroupBtn.addEventListener('click', () => { openModal(addGroupModal); focusOnDesktop(newGroupInput); });
+    addGroupBtn.addEventListener('click', () => {
+        currentEditingGroupId = null;
+        addGroupModal.querySelector('h2').textContent = 'Create New Group';
+        addGroupModal.querySelector('.modal-submit-btn').textContent = 'Create';
+        newGroupInput.value = '';
+        openModal(addGroupModal);
+        focusOnDesktop(newGroupInput);
+    });
     settingsBtn.addEventListener('click', () => openModal(settingsModal));
     
     function handleFriendsModalClose() {
