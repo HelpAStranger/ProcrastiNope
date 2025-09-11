@@ -53,6 +53,26 @@ service cloud.firestore {
                     resource.data.userId == request.auth.uid;
     }
 
+    // friendRequests collection for pending friend connections
+    match /friendRequests/{requestId} {
+      // A user can create a request if they are the sender.
+      allow create: if request.auth != null &&
+                    request.resource.data.senderUid == request.auth.uid;
+
+      // The sender or recipient can read the request.
+      allow read: if request.auth != null &&
+                  (request.auth.uid == resource.data.senderUid ||
+                   request.auth.uid == resource.data.recipientUid);
+
+      // The recipient can update the status (to accept/decline).
+      allow update: if request.auth != null &&
+                    request.auth.uid == resource.data.recipientUid;
+
+      // The sender can delete the request (to cancel, or after it's handled).
+      allow delete: if request.auth != null &&
+                    request.auth.uid == resource.data.senderUid;
+    }
+
     // The 'friendRemovals' collection handles reciprocal friend removals.
     match /friendRemovals/{removalId} {
       // A user can create a removal request if they are the one doing the removing.
