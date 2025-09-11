@@ -59,10 +59,9 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                     request.resource.data.senderUid == request.auth.uid;
 
-      // The sender or recipient can read the request.
+      // Participants can read the request.
       allow read: if request.auth != null &&
-                  (request.auth.uid == resource.data.senderUid ||
-                   request.auth.uid == resource.data.recipientUid);
+                  request.auth.uid in resource.data.participants;
 
       // The recipient can update the status (to accept/decline).
       allow update: if request.auth != null &&
@@ -1676,12 +1675,40 @@ async function initializeAppLogic(initialUser) {
             }
         }));
 
-        // Listener for INCOMING friend requests
-        const incomingRequestsQuery = query(collection(db, "friendRequests"), where("recipientUid", "==", user.uid), where("status", "==", "pending"));
-        listeners.push(onSnapshot(incomingRequestsQuery, (snapshot) => {
-            incomingFriendRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+        // Listener for ALL friend requests (incoming and outgoing)
+        const allRequestsQuery = query(collection(db, "friendRequests"), where("participants", "array-contains", user.uid));
+        listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => {
+            // This logic handles when the OTHER user accepts/declines a request I sent.
+            snapshot.docChanges().forEach(async (change) => {
+                if (change.type === "modified") {
+                    const requestData = change.doc.data();
+                    const requestId = change.doc.id;
+                    // Check if I am the sender of this modified request
+                    if (requestData.senderUid === user.uid) {
+                        if (requestData.status === 'accepted') {
+                            const friendUid = requestData.recipientUid;
+                            const currentUserRef = doc(db, "users", user.uid);
+                            const batch = writeBatch(db);
+                            batch.update(currentUserRef, { friends: arrayUnion(friendUid) });
+                            batch.delete(doc(db, "friendRequests", requestId));
+                            await batch.commit();
+                        } else if (requestData.status === 'declined') {
+                            await deleteDoc(doc(db, "friendRequests", requestId));
+                        }
+                    }
+                }
+            });
+
+            // Repopulate local lists from the full snapshot
+            const allRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+
+            incomingFriendRequests = allRequests.filter(req => req.recipientUid === user.uid && req.status === 'pending');
+            outgoingFriendRequests = allRequests.filter(req => req.senderUid === user.uid && req.status === 'pending');
+
+            // Render the UI for incoming requests
             renderIncomingRequests(incomingFriendRequests);
 
+            // Update notification badges for incoming requests
             const requestCount = incomingFriendRequests.length;
             const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile, friendRequestCountBadgeModal];
             badges.forEach(badge => {
@@ -1692,36 +1719,8 @@ async function initializeAppLogic(initialUser) {
                     badge.style.display = 'none';
                 }
             });
-        }));
 
-        // Listener for OUTGOING request status changes (to complete the friendship)
-        const outgoingRequestsQuery = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid));
-        listeners.push(onSnapshot(outgoingRequestsQuery, async (snapshot) => {
-            snapshot.docChanges().forEach(async (change) => {
-                if (change.type === "modified") {
-                    const requestData = change.doc.data();
-                    const requestId = change.doc.id;
-                    if (requestData.status === 'accepted') {
-                        // Friend accepted our request! Add them to our friends list and delete the request.
-                        const friendUid = requestData.recipientUid;
-                        const currentUserRef = doc(db, "users", user.uid);
-                        const batch = writeBatch(db);
-                        batch.update(currentUserRef, { friends: arrayUnion(friendUid) });
-                        batch.delete(doc(db, "friendRequests", requestId));
-                        await batch.commit();
-                    } else if (requestData.status === 'declined') {
-                        // Friend declined, just delete the request.
-                        await deleteDoc(doc(db, "friendRequests", requestId));
-                    }
-                }
-            });
-
-            // NEW part: update the list of pending outgoing requests for UI display.
-            outgoingFriendRequests = snapshot.docs
-                .map(d => ({ ...d.data(), id: d.id }))
-                .filter(req => req.status === 'pending');
-            
-            // Re-render the friends list to reflect the change in outgoing requests
+            // Re-render the main friends list to show pending outgoing requests
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
                 renderFriendsList(userDoc.data().friends || []);
@@ -1863,7 +1862,7 @@ async function initializeAppLogic(initialUser) {
         const q2 = query(collection(db, "friendRequests"), where("senderUid", "==", targetUserId), where("recipientUid", "==", user.uid));
         const [existing1, existing2] = await Promise.all([getDocs(q1), getDocs(q2)]);
         if (!existing1.empty || !existing2.empty) {
-            friendStatusMessage.textContent = "A friend request is already pending between you and this user.";
+            friendStatusMessage.textContent = "A friend request is already pending with this user.";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
@@ -1874,6 +1873,7 @@ async function initializeAppLogic(initialUser) {
                 senderUsername: currentUsername,
                 recipientUid: targetUserId,
                 recipientUsername: usernameToFind,
+                participants: [user.uid, targetUserId],
                 status: 'pending',
                 createdAt: Date.now()
             });
