@@ -1678,26 +1678,9 @@ async function initializeAppLogic(initialUser) {
         // Listener for ALL friend requests (incoming and outgoing)
         const allRequestsQuery = query(collection(db, "friendRequests"), where("participants", "array-contains", user.uid));
         listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => {
-            // This logic handles when the OTHER user accepts/declines a request I sent.
-            snapshot.docChanges().forEach(async (change) => {
-                if (change.type === "modified") {
-                    const requestData = change.doc.data();
-                    const requestId = change.doc.id;
-                    // Check if I am the sender of this modified request
-                    if (requestData.senderUid === user.uid) {
-                        if (requestData.status === 'accepted') {
-                            const friendUid = requestData.recipientUid;
-                            const currentUserRef = doc(db, "users", user.uid);
-                            const batch = writeBatch(db);
-                            batch.update(currentUserRef, { friends: arrayUnion(friendUid) });
-                            batch.delete(doc(db, "friendRequests", requestId));
-                            await batch.commit();
-                        } else if (requestData.status === 'declined') {
-                            await deleteDoc(doc(db, "friendRequests", requestId));
-                        }
-                    }
-                }
-            });
+            // REFACTOR: The logic for handling 'modified' requests is now obsolete.
+            // The acceptor's client handles the entire transaction. This client only
+            // needs to react to the request document disappearing and the friends list changing.
 
             // Repopulate local lists from the full snapshot
             const allRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
@@ -1721,6 +1704,8 @@ async function initializeAppLogic(initialUser) {
             });
 
             // Re-render the main friends list to show pending outgoing requests
+            // The userDoc listener will also trigger this, but calling it here ensures
+            // the pending list is up-to-date immediately after a request is sent/received.
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
                 renderFriendsList(userDoc.data().friends || []);
@@ -1735,26 +1720,6 @@ async function initializeAppLogic(initialUser) {
             const allPendingForUser = snapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
             incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
             renderIncomingShares();
-        }));
-
-        // Listener for incoming friend REMOVALS
-        const removalQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
-        listeners.push(onSnapshot(removalQuery, (snapshot) => {
-            snapshot.docChanges().forEach(async (change) => {
-                if (change.type === "added") {
-                    const removalData = change.doc.data();
-                    const removerUid = removalData.removerUid;
-                    const removalDocRef = change.doc.ref;
-
-                    const currentUserRef = doc(db, "users", user.uid);
-                    
-                    const batch = writeBatch(db);
-                    batch.update(currentUserRef, { friends: arrayRemove(removerUid) });
-                    batch.delete(removalDocRef);
-                    await batch.commit();
-                    // The main userDoc listener will handle re-rendering the friends list automatically.
-                }
-            });
         }));
 
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
@@ -1868,18 +1833,20 @@ async function initializeAppLogic(initialUser) {
         
         const targetUserId = usernameSnap.data().userId;
 
-        // Check if a request already exists between these users
-        const q1 = query(collection(db, "friendRequests"), where("participants", "==", [user.uid, targetUserId]));
-        const q2 = query(collection(db, "friendRequests"), where("participants", "==", [targetUserId, user.uid]));
-        const [existing1, existing2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        if (!existing1.empty || !existing2.empty) {
+        // REFACTOR: Use a canonical ID for the friend request to prevent duplicates.
+        const canonicalRequestId = [user.uid, targetUserId].sort().join('_');
+        const requestDocRef = doc(db, "friendRequests", canonicalRequestId);
+
+        const requestSnap = await getDoc(requestDocRef);
+        if (requestSnap.exists()) {
             friendStatusMessage.textContent = "A friend request is already pending with this user.";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
 
         try {
-            await addDoc(collection(db, "friendRequests"), {
+            // REFACTOR: Use setDoc with the canonical ID.
+            await setDoc(requestDocRef, {
                 senderUid: user.uid,
                 senderUsername: currentUsername,
                 recipientUid: targetUserId,
@@ -1915,35 +1882,29 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('button');
         if (!button) return;
 
-        const requestId = button.dataset.id; // The ID of the document in friendRequests
+        const requestId = button.dataset.id;
         const senderUid = button.dataset.uid;
+        const recipientUid = user.uid; // The current user is the recipient
         const requestDocRef = doc(db, "friendRequests", requestId);
 
         if (action === 'accept') {
-            const currentUserRef = doc(db, "users", user.uid);
+            // REFACTOR: Use a single atomic batch to add friends and delete the request.
             const batch = writeBatch(db);
-            // 1. Add sender to my friends list
-            batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
-            // 2. Update the request status to 'accepted' so the sender's client can see it
-            batch.update(requestDocRef, { status: 'accepted' });
+            const senderUserRef = doc(db, "users", senderUid);
+            const recipientUserRef = doc(db, "users", recipientUid);
 
-            // 3. Check for and delete a mutual request from me to the sender
-            const mutualRequestQuery = query(
-                collection(db, "friendRequests"),
-                // This query is now secure as it uses the 'participants' field,
-                // which is checked by the Firestore security rules.
-                where("participants", "==", [user.uid, senderUid])
-            );
-            const mutualRequestSnap = await getDocs(mutualRequestQuery);
-            if (!mutualRequestSnap.empty) {
-                const mutualRequestDocRef = mutualRequestSnap.docs[0].ref;
-                batch.delete(mutualRequestDocRef);
-            }
+            // 1. Add each user to the other's friends list.
+            batch.update(senderUserRef, { friends: arrayUnion(recipientUid) });
+            batch.update(recipientUserRef, { friends: arrayUnion(senderUid) });
+
+            // 2. Delete the friend request document now that it's fulfilled.
+            batch.delete(requestDocRef);
 
             await batch.commit();
+            // The onSnapshot listeners on both clients will see the changes and update UIs.
         } else { // decline
-            // Just update status to 'declined', sender's client will delete it.
-            await updateDoc(requestDocRef, { status: 'declined' });
+            // REFACTOR: Simply delete the request. The sender will see it disappear.
+            await deleteDoc(requestDocRef);
         }
     }
     
@@ -1954,20 +1915,17 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
+            const friendUserRef = doc(db, "users", friendUidToRemove);
 
             const batch = writeBatch(db);
+            
+            // REFACTOR: Atomically remove the friendship from both users' documents.
             // 1. Remove friend from my list.
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
+            // 2. Remove me from my friend's list.
+            batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
 
-            // 2. Create a removal request document. The other user's client will listen for this
-            // and remove you from their friends list automatically.
-            const removalRequestRef = doc(collection(db, "friendRemovals"));
-            batch.set(removalRequestRef, {
-                removerUid: user.uid,
-                removeeUid: friendUidToRemove
-            });
-
-            // Query for and delete all shared quests between these two users
+            // 3. Query for and delete all shared quests between these two users
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
             const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
 
@@ -1977,6 +1935,7 @@ async function initializeAppLogic(initialUser) {
             querySnapshot2.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
+            // The onSnapshot listeners on both clients will handle UI updates automatically.
         });
     }
 
