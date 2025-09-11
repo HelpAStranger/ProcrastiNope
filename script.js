@@ -372,6 +372,7 @@ async function initializeAppLogic(initialUser) {
     const friendRequestCountBadgeModal = document.getElementById('friend-request-count-modal');
     const friendsListContainer = friendsModal.querySelector('.friends-list-container');
     const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
+    const outgoingRequestsContainer = document.getElementById('outgoing-requests-container');
     const deleteAccountBtn = document.getElementById('delete-account-btn');
 
     const shareQuestModal = document.getElementById('share-quest-modal');
@@ -1668,6 +1669,7 @@ async function initializeAppLogic(initialUser) {
         // Listener for OUTGOING request status changes (to complete the friendship)
         const outgoingRequestsQuery = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid));
         listeners.push(onSnapshot(outgoingRequestsQuery, (snapshot) => {
+        listeners.push(onSnapshot(outgoingRequestsQuery, async (snapshot) => {
             snapshot.docChanges().forEach(async (change) => {
                 if (change.type === "modified") {
                     const requestData = change.doc.data();
@@ -1686,6 +1688,12 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             });
+
+            // NEW part: update the list of pending outgoing requests for UI display.
+            outgoingFriendRequests = snapshot.docs
+                .map(d => ({ ...d.data(), id: d.id }))
+                .filter(req => req.status === 'pending');
+            renderOutgoingRequests();
         }));
 
         // Listener for incoming SHARED quests
@@ -1737,6 +1745,31 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
+    function renderOutgoingRequests() {
+        if (!outgoingRequestsContainer) return;
+        
+        if (outgoingFriendRequests.length === 0) {
+            outgoingRequestsContainer.innerHTML = '';
+            return;
+        }
+
+        const itemsHTML = outgoingFriendRequests.map(req => `
+            <div class="friend-request-item">
+                <span>${req.recipientUsername}</span>
+                <div class="friend-request-actions">
+                    <button class="btn icon-btn cancel-request-btn" data-id="${req.id}" aria-label="Cancel request">&times;</button>
+                </div>
+            </div>
+        `).join('');
+
+        outgoingRequestsContainer.innerHTML = `
+            <h3 style="margin-bottom: 1rem;">Sent Requests</h3>
+            <div class="friend-requests-container">
+                ${itemsHTML}
+            </div>
+        `;
+    }
+
     async function handleAddFriend(e) {
         e.preventDefault();
         const usernameToFind = searchUsernameInput.value.trim().toLowerCase();
@@ -1793,6 +1826,19 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
+    async function cancelSentRequest(requestId) {
+        if (!requestId) return;
+        try {
+            await deleteDoc(doc(db, "friendRequests", requestId));
+            playSound('delete');
+            // The onSnapshot listener will automatically update the UI.
+        } catch (error) {
+            console.error("Error cancelling friend request:", getCoolErrorMessage(error));
+            friendStatusMessage.textContent = "Could not cancel request.";
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+        }
+    }
+
     async function handleRequestAction(e, action) {
         const button = e.target.closest('button');
         if (!button) return;
@@ -1874,6 +1920,14 @@ async function initializeAppLogic(initialUser) {
         if (e.target.closest('.remove-friend-btn')) removeFriend(e);
     });
     
+    outgoingRequestsContainer.addEventListener('click', e => {
+        const cancelButton = e.target.closest('.cancel-request-btn');
+        if (cancelButton) {
+            const requestId = cancelButton.dataset.id;
+            cancelSentRequest(requestId);
+        }
+    });
+
     friendsModalToggle.addEventListener('click', (e) => {
         if (e.target.matches('.toggle-btn')) {
             const tab = e.target.dataset.tab;
