@@ -757,7 +757,6 @@ body.is-dragging .main-quest-group {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
     padding: 1rem;
     background-color: var(--surface);
     border: var(--border-width) solid var(--border);
@@ -868,10 +867,8 @@ body.is-dragging .main-quest-group {
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
     padding: 1rem 1.5rem;
     margin-bottom: 1.5rem;
-    transition: all var(--transition-speed) ease, max-height var(--transition-speed) ease;
+    transition: all var(--transition-speed) ease;
     position: relative;
-    overflow: hidden;
-    max-height: 100px; /* Base height for transitions */
 }
 
 /* Standalone quests look like group headers */
