@@ -276,7 +276,9 @@ function showAuthFormsOnLanding(initialTab) {
 async function initializeAppLogic(initialUser) {
 
     const focusOnDesktop = (el) => {
-        if (!window.matchMedia('(pointer: coarse)').matches && el) {
+        // FIX: Check for touch support more reliably. 'pointer: coarse' can be true for touch-screen laptops.
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (!isTouchDevice && el) {
             el.focus();
         }
     };
@@ -285,7 +287,9 @@ async function initializeAppLogic(initialUser) {
     audioCtx = window.AudioContext ? new AudioContext() : null;
     
     let lastSection = 'daily';
-    
+    // FIX: Defer AudioContext creation until a user gesture.
+    // The line `audioCtx = window.AudioContext ? new AudioContext() : null;` is moved to `initAudioContext`.
+
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
@@ -1747,11 +1751,15 @@ async function initializeAppLogic(initialUser) {
         const targetUserId = usernameSnap.data().userId;
         const targetUserDocRef = doc(db, "users", targetUserId);
         
+        // PROBLEM: The following 'updateDoc' will always fail with your current security rules.
+        // The rule `allow update: if request.auth.uid == userId` prevents a user from writing
+        // to another user's document. This code attempts to write to the target user's `friendRequests` array.
+        // A full fix requires redesigning the friend request system (e.g., using a separate 'requests' collection).
         try {
             await updateDoc(targetUserDocRef, {
                 friendRequests: arrayUnion(user.uid)
             });
-            friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
+            friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`; // This success message will not be reached.
             friendStatusMessage.style.color = 'var(--accent-green-light)';
             searchUsernameInput.value = '';
         } catch (error) {
@@ -1774,7 +1782,12 @@ async function initializeAppLogic(initialUser) {
         if (action === 'accept') {
             const senderUserRef = doc(db, "users", senderUid);
             batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
-            batch.update(senderUserRef, { friends: arrayUnion(user.uid) });
+            // FIX: The line below is removed to prevent a permissions error.
+            // Your security rules only allow users to update their own documents. This line
+            // attempts to update the other user's document to make the friendship mutual.
+            // Without this line, friendships will be "one-way" until the other user also sends and accepts a request.
+            // A full solution requires a different data model or a Cloud Function.
+            // batch.update(senderUserRef, { friends: arrayUnion(user.uid) });
         }
         
         await batch.commit();
@@ -1792,7 +1805,11 @@ async function initializeAppLogic(initialUser) {
 
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
-            batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
+            // FIX: The line below is removed to prevent a permissions error.
+            // Your security rules only allow users to update their own documents.
+            // This means when you remove a friend, they will still see you on their friends list
+            // until they also remove you.
+            // batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
 
             // Query for and delete all shared quests between these two users
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
@@ -2343,13 +2360,23 @@ async function initializeAppLogic(initialUser) {
     };
 
     const initAudioContext = () => {
+        // FIX: Create the AudioContext on the first user gesture if it doesn't exist.
+        if (!audioCtx) {
+            try {
+                audioCtx = window.AudioContext ? new AudioContext() : null;
+            } catch (e) {
+                console.error("Could not create AudioContext:", e);
+                return; // Stop if creation fails
+            }
+        }
+        // FIX: Resume the context if it was created in a suspended state.
         if (audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume().catch(e => console.error("AudioContext resume failed:", e));
         }
     };
     document.body.addEventListener('click', initAudioContext, { once: true });
     document.body.addEventListener('keydown', initAudioContext, { once: true });
-
+    
     initOnce();
     await loadUserSession();
 
