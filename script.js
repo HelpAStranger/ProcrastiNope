@@ -288,7 +288,7 @@ async function initializeAppLogic(initialUser) {
     
     let lastSection = 'daily';
 
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [];
+    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
@@ -1630,94 +1630,109 @@ async function initializeAppLogic(initialUser) {
     // NEW: Combined listener for friend requests and incoming shared quests
     function listenForFriendsAndShares() {
         if (!user) return;
-        if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
-        
-        const userDocRef = doc(db, "users", user.uid);
-        unsubscribeFromFriendsAndShares = onSnapshot(userDocRef, async (docSnap) => {
-            if (docSnap.exists()) {
-                const userData = docSnap.data();
-                const requests = userData.friendRequests || [];
-                const requestCount = requests.length;
-                const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile, friendRequestCountBadgeModal];
-                badges.forEach(badge => {
-                     if (requestCount > 0) {
-                        badge.textContent = requestCount;
-                        badge.style.display = 'flex';
-                    } else {
-                        badge.style.display = 'none';
-                    }
-                });
-
-                // Fetch incoming shared quests (status 'pending' and current user is the friendUid)
-                const incomingSharesQuery = query(
-                    collection(db, "sharedQuests"),
-                    where("participants", "array-contains", user.uid),
-                    where("status", "==", "pending")
-                );
-                const incomingSharesSnapshot = await getDocs(incomingSharesQuery);
-                // Filter client-side because security rules require querying on 'participants'
-                const allPendingForUser = incomingSharesSnapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
-                incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
-                
-                const sharesCount = incomingSharedQuests.length;
-                if (sharesCount > 0) {
-                    sharesRequestCountBadge.textContent = sharesCount;
-                    sharesRequestCountBadge.style.display = 'flex';
-                } else {
-                    sharesRequestCountBadge.style.display = 'none';
-                }
-
-                renderFriendsAndRequests();
-                renderIncomingShares(); // Render the new shares tab content
-            }
-        }, (error) => {
-            console.error("Error listening to friend requests or incoming shares: ", getCoolErrorMessage(error));
-        });
-    }
-
-    async function renderFriendsAndRequests() {
-        if (!user) return;
-        
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (!userDoc.exists()) return;
-
-        const userData = userDoc.data();
-        const friendUIDs = userData.friends || [];
-        const requestUIDs = userData.friendRequests || [];
-        
-        // FIX: Use a Set to prevent duplicates from rendering, in case of data inconsistency.
-        const uniqueFriendUIDs = [...new Set(friendUIDs)];
-
-        if (uniqueFriendUIDs.length === 0) {
-            friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
-        } else {
-            friendsListContainer.innerHTML = '';
-            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', uniqueFriendUIDs));
-            const friendDocs = await getDocs(friendsQuery);
-            friendDocs.forEach(doc => {
-                 const friend = doc.data();
-                 const level = friend.appData?.playerData?.level || 1;
-                 const friendEl = document.createElement('div');
-                 friendEl.className = 'friend-item';
-                 friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
-                 friendsListContainer.appendChild(friendEl);
-            });
+        if (unsubscribeFromFriendsAndShares) {
+            unsubscribeFromFriendsAndShares();
+            unsubscribeFromFriendsAndShares = null;
         }
 
-        if (requestUIDs.length === 0) {
-            friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
-        } else {
-            friendRequestsContainer.innerHTML = '';
-            const requestsQuery = query(collection(db, "users"), where(documentId(), 'in', requestUIDs));
-            const requestDocs = await getDocs(requestsQuery);
-            requestDocs.forEach(doc => {
-                const requestUser = doc.data(); 
-                const requestEl = document.createElement('div');
-                requestEl.className = 'friend-request-item';
-                requestEl.innerHTML = `<span>${requestUser.username}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-uid="${doc.id}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-uid="${doc.id}" aria-label="Decline request">&times;</button></div>`;
-                friendRequestsContainer.appendChild(requestEl);
+        const listeners = [];
+
+        // Listener for the user's own document to get their friends list
+        const userDocRef = doc(db, "users", user.uid);
+        listeners.push(onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const userData = docSnap.data();
+                renderFriendsAndRequests(userData.friends || []);
+            }
+        }));
+
+        // Listener for INCOMING friend requests
+        const incomingRequestsQuery = query(collection(db, "friendRequests"), where("recipientUid", "==", user.uid), where("status", "==", "pending"));
+        listeners.push(onSnapshot(incomingRequestsQuery, (snapshot) => {
+            incomingFriendRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+            renderFriendsAndRequests(null, incomingFriendRequests);
+
+            const requestCount = incomingFriendRequests.length;
+            const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile, friendRequestCountBadgeModal];
+            badges.forEach(badge => {
+                if (requestCount > 0) {
+                    badge.textContent = requestCount;
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none';
+                }
             });
+        }));
+
+        // Listener for OUTGOING request status changes (to complete the friendship)
+        const outgoingRequestsQuery = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid));
+        listeners.push(onSnapshot(outgoingRequestsQuery, (snapshot) => {
+            snapshot.docChanges().forEach(async (change) => {
+                if (change.type === "modified") {
+                    const requestData = change.doc.data();
+                    const requestId = change.doc.id;
+                    if (requestData.status === 'accepted') {
+                        // Friend accepted our request! Add them to our friends list and delete the request.
+                        const friendUid = requestData.recipientUid;
+                        const currentUserRef = doc(db, "users", user.uid);
+                        const batch = writeBatch(db);
+                        batch.update(currentUserRef, { friends: arrayUnion(friendUid) });
+                        batch.delete(doc(db, "friendRequests", requestId));
+                        await batch.commit();
+                    } else if (requestData.status === 'declined') {
+                        // Friend declined, just delete the request.
+                        await deleteDoc(doc(db, "friendRequests", requestId));
+                    }
+                }
+            });
+        }));
+
+        // Listener for incoming SHARED quests
+        const incomingSharesQuery = query(collection(db, "sharedQuests"), where("participants", "array-contains", user.uid), where("status", "==", "pending"));
+        listeners.push(onSnapshot(incomingSharesQuery, (snapshot) => {
+            const allPendingForUser = snapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
+            incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
+            renderIncomingShares();
+        }));
+
+        unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
+    }
+
+    async function renderFriendsAndRequests(friendUIDs, requestObjects) {
+        if (!user) return;
+
+        // Render friends list if friendUIDs are provided
+        if (friendUIDs) {
+            if (friendUIDs.length === 0) {
+                friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
+            } else {
+                friendsListContainer.innerHTML = '';
+                const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+                const friendDocs = await getDocs(friendsQuery);
+                friendDocs.forEach(doc => {
+                    const friend = doc.data();
+                    const level = friend.appData?.playerData?.level || 1;
+                    const friendEl = document.createElement('div');
+                    friendEl.className = 'friend-item';
+                    friendEl.innerHTML = `<div class="friend-level-display">LVL ${level}</div><span class="friend-name">${friend.username}</span><div class="friend-item-actions"><button class="btn icon-btn remove-friend-btn" data-uid="${doc.id}" aria-label="Remove friend">&times;</button></div>`;
+                    friendsListContainer.appendChild(friendEl);
+                });
+            }
+        }
+
+        // Render friend requests if requestObjects are provided
+        if (requestObjects) {
+            if (requestObjects.length === 0) {
+            friendRequestsContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No new requests.</p>`;
+            } else {
+                friendRequestsContainer.innerHTML = '';
+                requestObjects.forEach(req => {
+                    const requestEl = document.createElement('div');
+                    requestEl.className = 'friend-request-item';
+                    requestEl.innerHTML = `<span>${req.senderUsername}</span><div class="friend-request-actions"><button class="btn icon-btn accept-request-btn" data-id="${req.id}" data-uid="${req.senderUid}" aria-label="Accept request">&#10003;</button><button class="btn icon-btn decline-request-btn" data-id="${req.id}" data-uid="${req.senderUid}" aria-label="Decline request">&times;</button></div>`;
+                    friendRequestsContainer.appendChild(requestEl);
+                });
+            }
         }
     }
     
@@ -1747,43 +1762,56 @@ async function initializeAppLogic(initialUser) {
         }
         
         const targetUserId = usernameSnap.data().userId;
-        const targetUserDocRef = doc(db, "users", targetUserId);
-        
-        // PROBLEM: The following 'updateDoc' will always fail with your current security rules.
-        // The rule `allow update: if request.auth.uid == userId` prevents a user from writing
-        // to another user's document. This code attempts to write to the target user's `friendRequests` array.
-        // A full fix requires redesigning the friend request system (e.g., using a separate 'requests' collection).
-        // FIX: This call is guaranteed to fail and is the source of the "Permission Denied" error.
-        // The code is being disabled to prevent the error. This means the "Add Friend" button
-        // will not work until the backend logic is redesigned.
-        friendStatusMessage.textContent = "Feature disabled: Violates security rules.";
-        friendStatusMessage.style.color = 'var(--accent-red-light)';
-        console.error("handleAddFriend disabled: Attempted to write to another user's document, which is not allowed by Firestore security rules.");
+
+        // Check if a request already exists between these users
+        const q1 = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid), where("recipientUid", "==", targetUserId));
+        const q2 = query(collection(db, "friendRequests"), where("senderUid", "==", targetUserId), where("recipientUid", "==", user.uid));
+        const [existing1, existing2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        if (!existing1.empty || !existing2.empty) {
+            friendStatusMessage.textContent = "A friend request is already pending between you and this user.";
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, "friendRequests"), {
+                senderUid: user.uid,
+                senderUsername: currentUsername,
+                recipientUid: targetUserId,
+                recipientUsername: usernameToFind,
+                status: 'pending',
+                createdAt: Date.now()
+            });
+            friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
+            friendStatusMessage.style.color = 'var(--accent-green-light)';
+            searchUsernameInput.value = '';
+        } catch (error) {
+            friendStatusMessage.textContent = "Could not send request.";
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+            console.error("Error sending friend request:", getCoolErrorMessage(error));
+        }
     }
     
     async function handleRequestAction(e, action) {
         const button = e.target.closest('button');
         if (!button) return;
 
+        const requestId = button.dataset.id; // The ID of the document in friendRequests
         const senderUid = button.dataset.uid;
-        const currentUserRef = doc(db, "users", user.uid);
-        
-        const batch = writeBatch(db);
-        batch.update(currentUserRef, { friendRequests: arrayRemove(senderUid) });
+        const requestDocRef = doc(db, "friendRequests", requestId);
 
         if (action === 'accept') {
-            const senderUserRef = doc(db, "users", senderUid);
+            const currentUserRef = doc(db, "users", user.uid);
+            const batch = writeBatch(db);
+            // 1. Add sender to my friends list
             batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
-            // FIX: The line below is removed to prevent a permissions error.
-            // Your security rules only allow users to update their own documents. This line
-            // attempts to update the other user's document to make the friendship mutual.
-            // Without this line, friendships will be "one-way" until the other user also sends and accepts a request.
-            // A full solution requires a different data model or a Cloud Function.
-            // batch.update(senderUserRef, { friends: arrayUnion(user.uid) });
+            // 2. Update the request status to 'accepted' so the sender's client can see it
+            batch.update(requestDocRef, { status: 'accepted' });
+            await batch.commit();
+        } else { // decline
+            // Just update status to 'declined', sender's client will delete it.
+            await updateDoc(requestDocRef, { status: 'declined' });
         }
-        
-        await batch.commit();
-        // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
     }
     
     async function removeFriend(e) {
@@ -1797,7 +1825,7 @@ async function initializeAppLogic(initialUser) {
 
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
-            // FIX: The line below is removed to prevent a permissions error.
+            // NOTE: The line below is removed to prevent a permissions error.
             // Your security rules only allow users to update their own documents.
             // This means when you remove a friend, they will still see you on their friends list
             // until they also remove you.
@@ -1813,7 +1841,6 @@ async function initializeAppLogic(initialUser) {
             querySnapshot2.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
-            // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
         });
     }
 
@@ -2287,6 +2314,15 @@ async function initializeAppLogic(initialUser) {
             incomingSharesContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No incoming shares.</p>`;
             return;
         }
+
+        const sharesCount = incomingSharedQuests.length;
+        if (sharesCount > 0) {
+            sharesRequestCountBadge.textContent = sharesCount;
+            sharesRequestCountBadge.style.display = 'flex';
+        } else {
+            sharesRequestCountBadge.style.display = 'none';
+        }
+
 
         incomingSharedQuests.forEach(quest => {
             const shareItemEl = document.createElement('div');
