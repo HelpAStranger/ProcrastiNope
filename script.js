@@ -1919,8 +1919,9 @@ async function initializeAppLogic(initialUser) {
             // 3. Check for and delete a mutual request from me to the sender
             const mutualRequestQuery = query(
                 collection(db, "friendRequests"),
-                where("senderUid", "==", user.uid),
-                where("recipientUid", "==", senderUid)
+                // This query is now secure as it uses the 'participants' field,
+                // which is checked by the Firestore security rules.
+                where("participants", "==", [user.uid, senderUid])
             );
             const mutualRequestSnap = await getDocs(mutualRequestQuery);
             if (!mutualRequestSnap.empty) {
