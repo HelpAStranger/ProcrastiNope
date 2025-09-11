@@ -776,14 +776,25 @@ async function initializeAppLogic(initialUser) {
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
         let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
-        li.innerHTML = `<button class="complete-btn"></button>
-            <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
-            <div class="task-buttons-wrapper">
+        
+        let buttonsHTML;
+        if (task.pendingDeletion) {
+            buttonsHTML = `<button class="btn undo-btn">Undo</button>`;
+        } else {
+            buttonsHTML = `
                 <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                 <button class="btn icon-btn share-btn" aria-label="Share Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+            `;
+        }
+
+        li.innerHTML = `<button class="complete-btn"></button>
+            <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
+            <div class="task-buttons-wrapper">
+                ${buttonsHTML.trim()}
             </div>`;
+        if (task.pendingDeletion) li.classList.add('pending-deletion');
         if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
         if (task.timerFinished) li.classList.add('timer-finished');
         if (task.timerStartTime && task.timerDuration) {
@@ -1212,6 +1223,12 @@ async function initializeAppLogic(initialUser) {
                 }
                 return task.completedToday;
             };
+            
+            // NEW: Handle undo button click
+            if (e.target.closest('.undo-btn')) {
+                undoCompleteMainQuest(id);
+                return;
+            }
             
             if (e.target.closest('.complete-btn')) {
                 if (type === 'daily' || type === 'shared') {
