@@ -284,11 +284,9 @@ async function initializeAppLogic(initialUser) {
     };
 
     let user = initialUser;
-    audioCtx = window.AudioContext ? new AudioContext() : null;
+    // audioCtx is now created in initAudioContext on first user gesture.
     
     let lastSection = 'daily';
-    // FIX: Defer AudioContext creation until a user gesture.
-    // The line `audioCtx = window.AudioContext ? new AudioContext() : null;` is moved to `initAudioContext`.
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [];
     let playerData = { level: 1, xp: 0 };
@@ -1755,18 +1753,12 @@ async function initializeAppLogic(initialUser) {
         // The rule `allow update: if request.auth.uid == userId` prevents a user from writing
         // to another user's document. This code attempts to write to the target user's `friendRequests` array.
         // A full fix requires redesigning the friend request system (e.g., using a separate 'requests' collection).
-        try {
-            await updateDoc(targetUserDocRef, {
-                friendRequests: arrayUnion(user.uid)
-            });
-            friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`; // This success message will not be reached.
-            friendStatusMessage.style.color = 'var(--accent-green-light)';
-            searchUsernameInput.value = '';
-        } catch (error) {
-            friendStatusMessage.textContent = "Could not send request.";
-            friendStatusMessage.style.color = 'var(--accent-red-light)';
-            console.error("Error sending friend request:", getCoolErrorMessage(error));
-        }
+        // FIX: This call is guaranteed to fail and is the source of the "Permission Denied" error.
+        // The code is being disabled to prevent the error. This means the "Add Friend" button
+        // will not work until the backend logic is redesigned.
+        friendStatusMessage.textContent = "Feature disabled: Violates security rules.";
+        friendStatusMessage.style.color = 'var(--accent-red-light)';
+        console.error("handleAddFriend disabled: Attempted to write to another user's document, which is not allowed by Firestore security rules.");
     }
     
     async function handleRequestAction(e, action) {
