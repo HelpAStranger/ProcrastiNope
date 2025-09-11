@@ -53,6 +53,15 @@ service cloud.firestore {
                     resource.data.userId == request.auth.uid;
     }
 
+    // The 'friendRemovals' collection handles reciprocal friend removals.
+    match /friendRemovals/{removalId} {
+      // A user can create a removal request if they are the one doing the removing.
+      allow create: if request.auth != null &&
+                    request.resource.data.removerUid == request.auth.uid;
+      // The user being removed can read and delete the request to process it.
+      allow read, delete: if request.auth != null && resource.data.removeeUid == request.auth.uid;
+    }
+
     // The 'users' collection stores all private and public data for each user.
     match /users/{userId} {
       // Needed for "login by username": allow fetching a single doc (to get email)
@@ -1703,6 +1712,26 @@ async function initializeAppLogic(initialUser) {
             renderIncomingShares();
         }));
 
+        // Listener for incoming friend REMOVALS
+        const removalQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
+        listeners.push(onSnapshot(removalQuery, (snapshot) => {
+            snapshot.docChanges().forEach(async (change) => {
+                if (change.type === "added") {
+                    const removalData = change.doc.data();
+                    const removerUid = removalData.removerUid;
+                    const removalDocRef = change.doc.ref;
+
+                    const currentUserRef = doc(db, "users", user.uid);
+                    
+                    const batch = writeBatch(db);
+                    batch.update(currentUserRef, { friends: arrayRemove(removerUid) });
+                    batch.delete(removalDocRef);
+                    await batch.commit();
+                    // The main userDoc listener will handle re-rendering the friends list automatically.
+                }
+            });
+        }));
+
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
     }
 
@@ -1880,15 +1909,18 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
-            const friendUserRef = doc(db, "users", friendUidToRemove);
 
             const batch = writeBatch(db);
+            // 1. Remove friend from my list.
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
-            // NOTE: The line below is removed to prevent a permissions error.
-            // Your security rules only allow users to update their own documents.
-            // This means when you remove a friend, they will still see you on their friends list
-            // until they also remove you.
-            // batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
+
+            // 2. Create a removal request document. The other user's client will listen for this
+            // and remove you from their friends list automatically.
+            const removalRequestRef = doc(collection(db, "friendRemovals"));
+            batch.set(removalRequestRef, {
+                removerUid: user.uid,
+                removeeUid: friendUidToRemove
+            });
 
             // Query for and delete all shared quests between these two users
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
