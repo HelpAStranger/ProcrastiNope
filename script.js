@@ -34,40 +34,51 @@ import {
 
 
 // --- IMPORTANT: FIREBASE SECURITY RULES UPDATE ---
-// To enable shared quests, you MUST add the new rules section below.
-// This is critical for the invited user to receive the quest.
-//
-// ==> Copy and paste the following rules into your Firebase Console <==
-// ==> (Firestore Database -> Rules tab)                               <==
+// The user has provided updated rules in the prompt. Please ensure your Firebase Console
+// (Firestore Database -> Rules tab) matches the rules provided in the prompt.
+// The rules provided in the prompt are:
 //
 // rules_version = '2';
 // service cloud.firestore {
 //   match /databases/{database}/documents {
 //
-//     // Usernames must be unique and are public.
+//     // The 'usernames' collection is used for unique usernames
 //     match /usernames/{username} {
-//       allow read;
-//       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-//       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+//       allow read; // Anyone can check if a username exists
+//       allow create: if request.auth != null &&
+//                     request.resource.data.userId == request.auth.uid;
+//       allow delete: if request.auth != null &&
+//                     resource.data.userId == request.auth.uid;
 //     }
 //
-//     // User data collection.
+//     // The 'users' collection stores all private and public data for each user.
 //     match /users/{userId} {
+//       // Needed for "login by username": allow fetching a single doc (to get email)
+//       allow get: if true;
+//
+//       // Normal profile reads for logged-in users (friends list, etc.)
 //       allow read: if request.auth != null;
+//
+//       // A user can create their own user document
 //       allow create: if request.auth != null && request.auth.uid == userId;
-//       allow update: if request.auth != null;
+//
+//       // Updates should restrict fields to avoid privilege escalation
+//       allow update: if request.auth != null && request.auth.uid == userId;
+//
+//       // Only a user can delete their own doc
 //       allow delete: if request.auth != null && request.auth.uid == userId;
 //     }
 //
-//     // NEW: Rules for shared quests collection
-//     // A user can only read, update, or delete a shared quest if they are a participant.
+//     // Shared quests between friends
 //     match /sharedQuests/{questId} {
-//       allow read: if request.auth != null && request.resource.data.participants.hasAny([request.auth.uid]);
-//       allow update: if request.auth != null && request.resource.data.participants.hasAll([request.auth.uid]);
-//       allow delete: if request.auth != null && request.resource.data.participants.hasAll([request.auth.uid]);
-//       // The owner is the one who creates the shared quest document.
-//       allow create: if request.auth != null && 
-//                       request.auth.uid == request.resource.data.ownerUid;
+//       // Only the owner and invited friend can access the quest
+//       allow read, update, delete: if request.auth != null &&
+//                                   (request.auth.uid == resource.data.ownerUid ||
+//                                    request.auth.uid == resource.data.friendUid);
+//
+//       // Only the owner can create a shared quest
+//       allow create: if request.auth != null &&
+//                     request.auth.uid == request.resource.data.ownerUid;
 //     }
 //   }
 // }
@@ -699,8 +710,8 @@ async function initializeAppLogic(initialUser) {
     };
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = ''; 
-        const nonSharedStandalone = standaloneMainQuests.filter(t => !t.isShared);
-        nonSharedStandalone.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
+        // BUG FIX: Removed filter for !t.isShared so shared standalone tasks are still rendered.
+        standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
     };
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
@@ -708,6 +719,7 @@ async function initializeAppLogic(initialUser) {
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
         }); 
+        // The message should only consider non-shared tasks for "no tasks"
         const hasAnyNonSharedMainQuests = standaloneMainQuests.filter(t => !t.isShared).length > 0 || generalTaskGroups.some(g => g.tasks && g.tasks.filter(t => !t.isShared).length > 0);
         noGeneralTasksMessage.style.display = hasAnyNonSharedMainQuests ? 'none' : 'block'; 
     };
@@ -715,8 +727,8 @@ async function initializeAppLogic(initialUser) {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
-        const nonSharedGroupTasks = group.tasks.filter(t => !t.isShared);
-        nonSharedGroupTasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
+        // BUG FIX: Removed filter for !t.isShared so shared group tasks are still rendered.
+        group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
         return el;
     };
     const createTaskElement = (task, type) => {
@@ -2145,12 +2157,10 @@ async function initializeAppLogic(initialUser) {
             task.sharedQuestId = sharedQuestRef.id;
         }
         
-        // Filter out tasks that are now shared from the original group
-        groupToShare.tasks = groupToShare.tasks.filter(t => !t.isShared);
-        // If the group becomes empty, remove it
-        if (groupToShare.tasks.length === 0) {
-            generalTaskGroups.splice(groupIndex, 1);
-        }
+        // BUG FIX: Removed the logic that removes shared tasks from the original group.
+        // They should remain in the list, but marked as shared.
+        // The rendering functions (renderStandaloneTasks, createGroupElement) have been updated
+        // to display shared tasks from the original lists with appropriate styling.
 
         const dataToSave = { 
             dailyTasks: dailyTasks, 
@@ -2298,7 +2308,7 @@ function setupAuthForms(container, onAuthSuccess) {
 
     const toggleBtns = container.querySelectorAll('.toggle-btn');
     const signupForm = container.querySelector('[data-form="signup"]');
-    const loginForm = container.querySelector('[data-form="login"]');
+    const loginForm = container.querySelector('[data-form="login']');
     const googleBtnContainer = container.querySelector('.google-signin-btn-container');
 
     const googleBtn = document.createElement('button');
