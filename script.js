@@ -1765,10 +1765,13 @@ async function initializeAppLogic(initialUser) {
 
         friendsListContainer.innerHTML = ''; // Start fresh
 
+        // Defensively ensure friendUIDs are unique to prevent issues from upstream.
+        const uniqueFriendUIDs = friendUIDs ? [...new Set(friendUIDs)] : [];
+
         // 1. Fetch confirmed friends data
         let confirmedFriends = [];
-        if (friendUIDs && friendUIDs.length > 0) {
-            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        if (uniqueFriendUIDs.length > 0) {
+            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', uniqueFriendUIDs));
             const friendDocs = await getDocs(friendsQuery);
             confirmedFriends = friendDocs.docs.map(doc => {
                 const friend = doc.data();
@@ -1778,14 +1781,22 @@ async function initializeAppLogic(initialUser) {
         }
 
         // 2. Prepare outgoing requests data (from global state)
+        // BUG FIX: Add recipient's UID to the pending friend object to allow for de-duplication.
         const pendingFriends = outgoingFriendRequests.map(req => ({
             type: 'pending',
             requestId: req.id,
+            uid: req.recipientUid,
             username: req.recipientUsername
         }));
 
-        // 3. Combine and render
-        const allItems = [...confirmedFriends, ...pendingFriends];
+        // 3. Filter out pending requests for users who are already friends.
+        // This handles the race condition where a friend is added but the request document
+        // hasn't been deleted yet, preventing them from appearing twice.
+        const confirmedFriendUids = new Set(confirmedFriends.map(f => f.uid));
+        const filteredPendingFriends = pendingFriends.filter(p => !confirmedFriendUids.has(p.uid));
+
+        // 4. Combine and render
+        const allItems = [...confirmedFriends, ...filteredPendingFriends];
 
         if (allItems.length === 0) {
             friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
