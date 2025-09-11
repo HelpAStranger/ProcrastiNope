@@ -1231,7 +1231,13 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
-                toggleTaskActions(taskItem);
+                // If the task is a daily or shared quest and it's completed, un-complete it.
+                if ((type === 'daily' || type === 'shared') && isMyPartCompleted()) {
+                    uncompleteDailyTask(id);
+                } else {
+                    // Otherwise, show the action buttons.
+                    toggleTaskActions(taskItem);
+                }
             }
         } 
     });
