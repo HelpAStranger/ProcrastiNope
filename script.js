@@ -1649,11 +1649,13 @@ async function initializeAppLogic(initialUser) {
                 // Fetch incoming shared quests (status 'pending' and current user is the friendUid)
                 const incomingSharesQuery = query(
                     collection(db, "sharedQuests"),
-                    where("friendUid", "==", user.uid),
+                    where("participants", "array-contains", user.uid),
                     where("status", "==", "pending")
                 );
                 const incomingSharesSnapshot = await getDocs(incomingSharesQuery);
-                incomingSharedQuests = incomingSharesSnapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
+                // Filter client-side because security rules require querying on 'participants'
+                const allPendingForUser = incomingSharesSnapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
+                incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
                 
                 const sharesCount = incomingSharedQuests.length;
                 if (sharesCount > 0) {
