@@ -1811,16 +1811,25 @@ async function initializeAppLogic(initialUser) {
             username: req.recipientUsername
         }));
 
-        // 3. Combine and de-duplicate the lists.
-        // This ensures that if a user is both a confirmed friend and has a pending request
+        // 3. Combine and de-duplicate the lists using a Map for robust uniqueness.
+        // This strategy ensures that if a user is both a confirmed friend and has a pending request
         // (due to a race condition), they only appear once as a confirmed friend.
-        const allItemsCombined = [...confirmedFriends, ...pendingFriends];
-        const seenUids = new Set();
-        const allItems = allItemsCombined.filter(item => {
-            if (seenUids.has(item.uid)) return false; // Already seen, so it's a duplicate pending request.
-            seenUids.add(item.uid);
-            return true;
+        const allItemsMap = new Map();
+
+        // Add confirmed friends first, giving them priority in the map.
+        confirmedFriends.forEach(friend => {
+            allItemsMap.set(friend.uid, friend);
         });
+
+        // Then, add pending friends only if they are not already in the map.
+        // This prevents a pending request from overwriting a confirmed friend.
+        pendingFriends.forEach(pending => {
+            if (!allItemsMap.has(pending.uid)) {
+                allItemsMap.set(pending.uid, pending);
+            }
+        });
+
+        const allItems = Array.from(allItemsMap.values());
 
         if (allItems.length === 0) {
             friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
