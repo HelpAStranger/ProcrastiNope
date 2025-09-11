@@ -1784,13 +1784,26 @@ async function initializeAppLogic(initialUser) {
         const friendUidToRemove = button.dataset.uid;
         
         showConfirm("Remove Friend?", "Are you sure you want to remove this friend?", async () => {
+
+        showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
             const friendUserRef = doc(db, "users", friendUidToRemove);
             
+
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
             batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
             
+
+            // Query for and delete all shared quests between these two users
+            const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
+            const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
+
+            const [querySnapshot1, querySnapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+            querySnapshot1.forEach(doc => batch.delete(doc.ref));
+            querySnapshot2.forEach(doc => batch.delete(doc.ref));
+
             await batch.commit();
             // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
         });
