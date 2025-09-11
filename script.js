@@ -1808,6 +1808,19 @@ async function initializeAppLogic(initialUser) {
             batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
             // 2. Update the request status to 'accepted' so the sender's client can see it
             batch.update(requestDocRef, { status: 'accepted' });
+
+            // 3. Check for and delete a mutual request from me to the sender
+            const mutualRequestQuery = query(
+                collection(db, "friendRequests"),
+                where("senderUid", "==", user.uid),
+                where("recipientUid", "==", senderUid)
+            );
+            const mutualRequestSnap = await getDocs(mutualRequestQuery);
+            if (!mutualRequestSnap.empty) {
+                const mutualRequestDocRef = mutualRequestSnap.docs[0].ref;
+                batch.delete(mutualRequestDocRef);
+            }
+
             await batch.commit();
         } else { // decline
             // Just update status to 'declined', sender's client will delete it.
