@@ -1668,7 +1668,6 @@ async function initializeAppLogic(initialUser) {
 
         // Listener for OUTGOING request status changes (to complete the friendship)
         const outgoingRequestsQuery = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid));
-        listeners.push(onSnapshot(outgoingRequestsQuery, (snapshot) => {
         listeners.push(onSnapshot(outgoingRequestsQuery, async (snapshot) => {
             snapshot.docChanges().forEach(async (change) => {
                 if (change.type === "modified") {
