@@ -538,48 +538,6 @@ async function initializeAppLogic(initialUser) {
         updateProgressUI();
     }
 
-    async function cleanupDanglingSharedQuests(appData) {
-        let wasModified = false;
-        const allTasks = [
-            ...(appData.dailyTasks || []),
-            ...(appData.standaloneMainQuests || []),
-            ...((appData.generalTaskGroups || []).flatMap(g => g.tasks || []))
-        ];
-
-        const sharedTasks = allTasks.filter(t => t && t.isShared && t.sharedQuestId);
-        if (sharedTasks.length === 0) {
-            return false;
-        }
-
-        const checkPromises = sharedTasks.map(task => {
-            const questRef = doc(db, "sharedQuests", task.sharedQuestId);
-            return getDoc(questRef).then(questSnap => ({
-                taskId: task.id,
-                exists: questSnap.exists()
-            }));
-        });
-
-        const results = await Promise.all(checkPromises);
-        const danglingTaskIds = new Set(results.filter(r => !r.exists).map(r => r.taskId));
-
-        if (danglingTaskIds.size > 0) {
-            wasModified = true;
-            const modifyList = (list) => {
-                if (!list) return;
-                list.forEach(task => {
-                    if (task && danglingTaskIds.has(task.id)) {
-                        delete task.isShared;
-                        delete task.sharedQuestId;
-                    }
-                });
-            };
-            modifyList(appData.dailyTasks);
-            modifyList(appData.standaloneMainQuests);
-            if (appData.generalTaskGroups) appData.generalTaskGroups.forEach(group => modifyList(group.tasks));
-        }
-        return wasModified;
-    }
-
     async function initialLoad() {
         return new Promise((resolve) => {
             if (!user) {
@@ -596,14 +554,9 @@ async function initializeAppLogic(initialUser) {
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
-            unsubscribeFromFirestore = onSnapshot(userDocRef, async (docSnap) => {
+            unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists() && docSnap.data().appData) {
-                    const appData = docSnap.data().appData;
-                    const wasModified = await cleanupDanglingSharedQuests(appData);
-                    loadAndDisplayData(appData);
-                    if (wasModified) {
-                        saveState(); // This will save the cleaned data back to Firestore
-                    }
+                    loadAndDisplayData(docSnap.data().appData);
                 } else {
                     loadAndDisplayData({});
                 }
