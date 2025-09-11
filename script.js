@@ -53,30 +53,18 @@ import {
 //
 //     // The 'users' collection stores all private and public data for each user.
 //     match /users/{userId} {
-//       // Needed for "login by username": allow fetching a single doc (to get email)
-//       allow get: if true;
-//
-//       // Normal profile reads for logged-in users (friends list, etc.)
-//       allow read: if request.auth != null;
-//
-//       // A user can create their own user document
+//       allow read: if request.auth != null && request.auth.uid == userId;
 //       allow create: if request.auth != null && request.auth.uid == userId;
-//
-//       // Updates should restrict fields to avoid privilege escalation
-//       allow update: if request.auth != null && request.auth.uid == userId;
-//
-//       // Only a user can delete their own doc
+//       allow update: if request.auth != null && request.auth.uid == userId &&
+//                       request.resource.data.keys().hasAll(['appData']) || request.resource.data.keys().hasAll(['username']);
 //       allow delete: if request.auth != null && request.auth.uid == userId;
 //     }
 //
 //     // Shared quests between friends
 //     match /sharedQuests/{questId} {
-//       // Only the owner and invited friend can access the quest
 //       allow read, update, delete: if request.auth != null &&
 //                                   (request.auth.uid == resource.data.ownerUid ||
 //                                    request.auth.uid == resource.data.friendUid);
-//
-//       // Only the owner can create a shared quest
 //       allow create: if request.auth != null &&
 //                     request.auth.uid == request.resource.data.ownerUid;
 //     }
@@ -118,7 +106,7 @@ let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 
 let audioCtx = null; // Will be initialized by the app logic
 
 function playSound(type) {
-    if (!audioCtx || settings.volume === 0) return;
+    if (!audioCtx || audioCtx.state === 'suspended' || settings.volume === 0) return;
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
     o.connect(g); g.connect(audioCtx.destination);
     let v = settings.volume, d = 0.2;
@@ -766,7 +754,7 @@ async function initializeAppLogic(initialUser) {
             if(myPartCompleted) {
                  const completeBtn = li.querySelector('.complete-btn');
                  completeBtn.classList.add('checked');
-                 completeBtn.disabled = false; // Allow uncompletion
+                 completeBtn.disabled = true; // Explicitly disable the button if my part is completed
                  li.classList.add('my-part-completed'); // New class for my part completion
             }
             return li;
@@ -898,8 +886,7 @@ async function initializeAppLogic(initialUser) {
         addXp(XP_PER_TASK);
         playSound('complete');
         if (type === 'daily') {
-            // If already completed, do nothing (uncompletion is handled by uncompleteDailyTask)
-            if (task.completedToday) return; 
+            if (task.completedToday) return;
             task.completedToday = true;
             task.lastCompleted = new Date().toDateString();
             if (task.weeklyGoal > 0) {
@@ -1167,28 +1154,26 @@ async function initializeAppLogic(initialUser) {
             const id = taskItem.dataset.id;
             const { task, type } = findTaskAndContext(id);
 
-            // Helper to determine if the task is completed by the current user
             const isMyPartCompleted = () => {
-                if (!task) return false;
-                if (type === 'shared') {
-                    const isOwner = user && task.ownerUid === user.uid;
-                    return isOwner ? task.ownerCompleted : task.friendCompleted;
-                }
-                return task.completedToday;
-            };
+                if(!task) return false;
+                if(type !== 'shared') return task.completedToday;
+                const isOwner = user && task.ownerUid === user.uid;
+                return isOwner ? task.ownerCompleted : task.friendCompleted;
+            }
             
             if (e.target.closest('.complete-btn')) {
-                if (type === 'daily' || type === 'shared') {
-                    if (isMyPartCompleted()) {
-                        uncompleteDailyTask(id); // This function will handle both daily and shared uncompletion
-                    } else {
-                        completeTask(id); // This function will handle both daily and shared completion
-                    }
-                } else {
-                    // For standalone and grouped main quests, completion means deletion.
-                    // There's no "uncomplete" for these, as they are removed upon completion.
-                    completeTask(id);
+                // If it's a shared quest and my part is completed, allow uncompletion
+                if (type === 'shared' && isMyPartCompleted()) {
+                    uncompleteDailyTask(id); // This will call completeSharedQuestPart with uncompleting = true
+                    return;
                 }
+                // If it's a regular daily task and completed, allow uncompletion
+                if (type === 'daily' && task.completedToday) {
+                    uncompleteDailyTask(id);
+                    return;
+                }
+                // Otherwise, attempt to complete
+                completeTask(id);
                 return;
             }
             
@@ -1197,7 +1182,7 @@ async function initializeAppLogic(initialUser) {
                 if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) { 
-                        showConfirm("Shared Quest", "This quest has already been shared.", () => {});
+                        showConfirm("Already Shared", "This quest has already been shared.", () => {});
                         return; 
                     }
                     openShareModal(id);
@@ -1586,10 +1571,10 @@ async function initializeAppLogic(initialUser) {
                     }
                 });
 
-                // Fetch incoming shared quests (status 'pending' and current user is the friendUid)
+                // Fetch incoming shared quests (status 'pending' and the current user is a participant).
                 const incomingSharesQuery = query(
                     collection(db, "sharedQuests"),
-                    where("friendUid", "==", user.uid),
+                    where("participants", "array-contains", user.uid), // This query is now aligned with the new security rule.
                     where("status", "==", "pending")
                 );
                 const incomingSharesSnapshot = await getDocs(incomingSharesQuery);
@@ -2006,14 +1991,16 @@ async function initializeAppLogic(initialUser) {
 
         const updateData = {};
         if (isOwner) {
-            // Only proceed if the state is actually changing
-            if (!uncompleting && currentSharedQuestData.ownerCompleted) return;
-            if (uncompleting && !currentSharedQuestData.ownerCompleted) return;
+            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
+                console.log("Owner already completed their part.");
+                return; 
+            }
             updateData.ownerCompleted = !uncompleting;
         } else {
-            // Only proceed if the state is actually changing
-            if (!uncompleting && currentSharedQuestData.friendCompleted) return;
-            if (uncompleting && !currentSharedQuestData.friendCompleted) return;
+            if (!uncompleting && currentSharedQuestData.friendCompleted) {
+                console.log("Friend already completed their part.");
+                return; 
+            }
             updateData.friendCompleted = !uncompleting;
         }
         
