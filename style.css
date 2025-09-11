@@ -1018,8 +1018,7 @@ body.is-dragging .main-quest-group {
     flex-shrink: 0; /* Prevent from shrinking */
 }
 
-/* NEW: Styles for tasks marked as shared in their original lists.
-   This prevents premature removal from the owner's list. */
+/* NEW: Styles for tasks marked as shared in their original lists */
 .task-item.is-shared-task {
     opacity: 0.7;
     filter: grayscale(0.3);
