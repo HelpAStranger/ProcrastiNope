@@ -289,7 +289,7 @@ async function initializeAppLogic(initialUser) {
     
     let lastSection = 'daily';
 
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [];
+    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null;
     const activeTimers = {};
