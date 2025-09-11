@@ -1681,11 +1681,14 @@ async function initializeAppLogic(initialUser) {
         const friendUIDs = userData.friends || [];
         const requestUIDs = userData.friendRequests || [];
         
-        if (friendUIDs.length === 0) {
+        // FIX: Use a Set to prevent duplicates from rendering, in case of data inconsistency.
+        const uniqueFriendUIDs = [...new Set(friendUIDs)];
+
+        if (uniqueFriendUIDs.length === 0) {
             friendsListContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">Go add some friends!</p>`;
         } else {
             friendsListContainer.innerHTML = '';
-            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', uniqueFriendUIDs));
             const friendDocs = await getDocs(friendsQuery);
             friendDocs.forEach(doc => {
                  const friend = doc.data();
@@ -1772,7 +1775,7 @@ async function initializeAppLogic(initialUser) {
         }
         
         await batch.commit();
-        renderFriendsAndRequests();
+        // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
     }
     
     async function removeFriend(e) {
@@ -1789,7 +1792,7 @@ async function initializeAppLogic(initialUser) {
             batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
             
             await batch.commit();
-            renderFriendsAndRequests();
+            // REMOVED: Let the onSnapshot listener handle UI updates to prevent race conditions.
         });
     }
 
