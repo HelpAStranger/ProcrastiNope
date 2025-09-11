@@ -37,52 +37,55 @@ import {
 // The user has provided updated rules in the prompt. Please ensure your Firebase Console
 // (Firestore Database -> Rules tab) matches the rules provided in the prompt.
 // The rules provided in the prompt are:
-//
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//
-//     // The 'usernames' collection is used for unique usernames
-//     match /usernames/{username} {
-//       allow read; // Anyone can check if a username exists
-//       allow create: if request.auth != null &&
-//                     request.resource.data.userId == request.auth.uid;
-//       allow delete: if request.auth != null &&
-//                     resource.data.userId == request.auth.uid;
-//     }
-//
-//     // The 'users' collection stores all private and public data for each user.
-//     match /users/{userId} {
-//       // Needed for "login by username": allow fetching a single doc (to get email)
-//       allow get: if true;
-//
-//       // Normal profile reads for logged-in users (friends list, etc.)
-//       allow read: if request.auth != null;
-//
-//       // A user can create their own user document
-//       allow create: if request.auth != null && request.auth.uid == userId;
-//
-//       // Updates should restrict fields to avoid privilege escalation
-//       allow update: if request.auth != null && request.auth.uid == userId;
-//
-//       // Only a user can delete their own doc
-//       allow delete: if request.auth != null && request.auth.uid == userId;
-//     }
-//
-//     // Shared quests between friends
-//     match /sharedQuests/{questId} {
-//       // Only the owner and invited friend can access the quest
-//       allow read, update, delete: if request.auth != null &&
-//                                   (request.auth.uid == resource.data.ownerUid ||
-//                                    request.auth.uid == resource.data.friendUid);
-//
-//       // Only the owner can create a shared quest
-//       allow create: if request.auth != null &&
-//                     request.auth.uid == request.resource.data.ownerUid;
-//     }
-//   }
-// }
-//
+/*
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The 'usernames' collection is used for unique usernames
+    match /usernames/{username} {
+      allow read; // Anyone can check if a username exists
+      allow create: if request.auth != null &&
+                    request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null &&
+                    resource.data.userId == request.auth.uid;
+    }
+
+    // The 'users' collection stores all private and public data for each user.
+    match /users/{userId} {
+      // Needed for "login by username": allow fetching a single doc (to get email)
+      allow get: if true;
+
+      // Normal profile reads for logged-in users (friends list, etc.)
+      // WARNING: This allows any logged-in user to list all other users.
+      allow read: if request.auth != null;
+
+      // A user can create their own user document
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // Updates should restrict fields to avoid privilege escalation
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // Only a user can delete their own doc
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Shared quests between friends
+    match /sharedQuests/{questId} {
+      // A user can create a quest if they are the owner and the participants are set correctly.
+      allow create: if request.auth != null &&
+                     request.auth.uid == request.resource.data.ownerUid &&
+                     request.auth.uid in request.resource.data.participants &&
+                     request.resource.data.participants.size() == 2;
+
+      // Participants can read, update, or delete the quest.
+      allow read, update, delete: if request.auth != null &&
+                                   request.auth.uid in resource.data.participants;
+    }
+  }
+}
+*/
 // Your Firebase config is meant to be public. True security is enforced
 // by your Firestore Security Rules, not by hiding your API keys.
 
