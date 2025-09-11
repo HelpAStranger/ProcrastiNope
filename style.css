@@ -686,6 +686,26 @@ FRIENDS FEATURE & MOBILE NAV
     --shadow-color: var(--accent-green);
 }
 
+.friend-item.pending {
+    opacity: 0.7;
+    font-style: italic;
+}
+
+.friend-item.pending .friend-level-display {
+    display: none;
+}
+
+.friend-item.pending .pending-tag {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+    background-color: var(--surface);
+    flex-shrink: 0;
+}
+
 #add-friend-form {
     display: flex;
     gap: 0.5rem;
