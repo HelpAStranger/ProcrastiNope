@@ -26,7 +26,6 @@ import {
     where,
     getDocs,
     updateDoc,
-    arrayUnion,
     arrayRemove,
     deleteDoc,
     documentId
@@ -307,7 +306,7 @@ async function initializeAppLogic(initialUser) {
     let user = initialUser;
     audioCtx = window.AudioContext ? new AudioContext() : null;
     
-    let lastSection = 'daily';
+    let lastSection = 'daily'; // To remember the last viewed section on mobile
     
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [];
     let playerData = { level: 1, xp: 0 };
@@ -612,6 +611,8 @@ async function initializeAppLogic(initialUser) {
             
             // Set up all social feature listeners (friends, requests, shares)
             setupSocialListeners(); 
+            // Listen for active shared quests (those accepted by both)
+            listenForSharedQuests();
 
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
@@ -1812,34 +1813,17 @@ async function initializeAppLogic(initialUser) {
         }
         
         const targetUserId = usernameSnap.data().userId;
+        const targetUserDocRef = doc(db, "users", targetUserId);
         
         try {
-            // Check if a request already exists between the two users
-            const q1 = query(collection(db, "friendRequests"), where("fromUid", "==", user.uid), where("toUid", "==", targetUserId));
-            const q2 = query(collection(db, "friendRequests"), where("fromUid", "==", targetUserId), where("toUid", "==", user.uid));
-            const [existing1, existing2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-            if (!existing1.empty || !existing2.empty) {
-                friendStatusMessage.textContent = "A friend request is already pending.";
-                friendStatusMessage.style.color = 'var(--accent-red-light)';
-                return;
-            }
-
-            // Create a new document in the `friendRequests` collection
-            const friendRequestRef = doc(collection(db, "friendRequests"));
-            await setDoc(friendRequestRef, {
-                fromUid: user.uid,
-                fromUsername: currentUsername,
-                toUid: targetUserId,
-                toUsername: usernameToFind,
-                status: 'pending',
-                createdAt: Date.now()
+            await updateDoc(targetUserDocRef, {
+                friendRequests: arrayUnion(user.uid)
             });
-
             friendStatusMessage.textContent = `Friend request sent to ${usernameToFind}!`;
             friendStatusMessage.style.color = 'var(--accent-green-light)';
             searchUsernameInput.value = '';
         } catch (error) {
-            friendStatusMessage.textContent = "Could not send request. Check permissions.";
+            friendStatusMessage.textContent = "Could not send request.";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             console.error("Error sending friend request:", getCoolErrorMessage(error));
         }
@@ -1860,8 +1844,9 @@ async function initializeAppLogic(initialUser) {
             const batch = writeBatch(db);
             // Add each user to the other's friends list
             batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
+            batch.update(currentUserRef, { friends: arrayUnion(senderUid) });
             batch.update(senderUserRef, { friends: arrayUnion(user.uid) });
-            batch.delete(requestDocRef); // Delete the request document now that it's handled
+            batch.delete(requestDocRef); // Delete the request document
             await batch.commit();
         } else { // 'decline'
             await deleteDoc(requestDocRef);
