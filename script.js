@@ -1706,7 +1706,7 @@ async function initializeAppLogic(initialUser) {
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
         const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
 
-        if (currentUsername && usernameToFind === currentUsername) {
+        if (currentUsername && usernameToFind === currentUsername.toLowerCase()) {
             friendStatusMessage.textContent = "You can't send a friend request to yourself!";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
