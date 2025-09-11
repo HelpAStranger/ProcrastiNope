@@ -1852,6 +1852,14 @@ async function initializeAppLogic(initialUser) {
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
         const currentUsername = currentUserDoc.exists() ? currentUserDoc.data().username : null;
 
+        if (!currentUsername) {
+            friendStatusMessage.textContent = "Error: Your username is not set. Cannot send request.";
+            friendStatusMessage.style.color = 'var(--accent-red-light)';
+            // The app should have prompted for a username on login, but as a fallback:
+            await promptForUsernameIfNeeded();
+            return;
+        }
+
         if (currentUsername && usernameToFind === currentUsername.toLowerCase()) {
             friendStatusMessage.textContent = "You can't send a friend request to yourself!";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
