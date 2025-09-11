@@ -1860,6 +1860,8 @@ async function initializeAppLogic(initialUser) {
         // Check if a request already exists between these users
         const q1 = query(collection(db, "friendRequests"), where("senderUid", "==", user.uid), where("recipientUid", "==", targetUserId));
         const q2 = query(collection(db, "friendRequests"), where("senderUid", "==", targetUserId), where("recipientUid", "==", user.uid));
+        const q1 = query(collection(db, "friendRequests"), where("participants", "==", [user.uid, targetUserId]));
+        const q2 = query(collection(db, "friendRequests"), where("participants", "==", [targetUserId, user.uid]));
         const [existing1, existing2] = await Promise.all([getDocs(q1), getDocs(q2)]);
         if (!existing1.empty || !existing2.empty) {
             friendStatusMessage.textContent = "A friend request is already pending with this user.";
