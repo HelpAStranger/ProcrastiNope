@@ -1714,9 +1714,31 @@ async function initializeAppLogic(initialUser) {
         // Listener for ALL friend requests (incoming and outgoing)
         const allRequestsQuery = query(collection(db, "friendRequests"), where("participants", "array-contains", user.uid));
         listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => {
-            // REFACTOR: The logic for handling 'modified' requests is now obsolete.
-            // The acceptor's client handles the entire transaction. This client only
-            // needs to react to the request document disappearing and the friends list changing.
+            // REFACTOR: This logic is now split. The recipient initiates 'accept' or 'decline' by updating
+            // the request status. The sender's client finalizes the action upon seeing the status change.
+            for (const change of snapshot.docChanges()) {
+                if (change.type === 'modified') {
+                    const requestData = change.doc.data();
+                    const requestRef = doc(db, "friendRequests", change.doc.id);
+
+                    // I am the SENDER, and the recipient just ACCEPTED.
+                    if (user && requestData.senderUid === user.uid && requestData.status === 'accepted') {
+                        // The recipient has already added us. Now we add them and delete the request.
+                        const batch = writeBatch(db);
+                        const currentUserRef = doc(db, "users", user.uid);
+                        
+                        batch.update(currentUserRef, { friends: arrayUnion(requestData.recipientUid) });
+                        batch.delete(requestRef);
+                        
+                        await batch.commit();
+                    } 
+                    // I am the SENDER, and the recipient just DECLINED.
+                    else if (user && requestData.senderUid === user.uid && requestData.status === 'declined') {
+                        // The recipient has indicated they don't want to be friends. We just clean up the request.
+                        await deleteDoc(requestRef);
+                    }
+                }
+            }
 
             // Repopulate local lists from the full snapshot
             const allRequests = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
@@ -1932,23 +1954,22 @@ async function initializeAppLogic(initialUser) {
         const requestDocRef = doc(db, "friendRequests", requestId);
 
         if (action === 'accept') {
-            // REFACTOR: Use a single atomic batch to add friends and delete the request.
+            // REFACTOR: Use a two-step process compliant with security rules.
+            // 1. The recipient (current user) adds the sender to their friends list.
+            // 2. The recipient updates the request status to 'accepted'.
+            // 3. The sender's client will be listening for this status change to complete the process.
             const batch = writeBatch(db);
-            const senderUserRef = doc(db, "users", senderUid);
             const recipientUserRef = doc(db, "users", recipientUid);
 
-            // 1. Add each user to the other's friends list.
-            batch.update(senderUserRef, { friends: arrayUnion(recipientUid) });
             batch.update(recipientUserRef, { friends: arrayUnion(senderUid) });
-
-            // 2. Delete the friend request document now that it's fulfilled.
-            batch.delete(requestDocRef);
+            batch.update(requestDocRef, { status: 'accepted' });
 
             await batch.commit();
             // The onSnapshot listeners on both clients will see the changes and update UIs.
         } else { // decline
-            // REFACTOR: Simply delete the request. The sender will see it disappear.
-            await deleteDoc(requestDocRef);
+            // REFACTOR: The recipient cannot delete the request directly due to security rules.
+            // They update the status, and the sender's client will delete it.
+            await updateDoc(requestDocRef, { status: 'declined' });
         }
     }
     
