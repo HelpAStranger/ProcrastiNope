@@ -1903,15 +1903,11 @@ async function initializeAppLogic(initialUser) {
         const canonicalRequestId = [user.uid, targetUserId].sort().join('_');
         const requestDocRef = doc(db, "friendRequests", canonicalRequestId);
 
-        const requestSnap = await getDoc(requestDocRef);
-        if (requestSnap.exists()) {
-            friendStatusMessage.textContent = "A friend request is already pending with this user.";
-            friendStatusMessage.style.color = 'var(--accent-red-light)';
-            return;
-        }
-
         try {
-            // REFACTOR: Use setDoc with the canonical ID.
+            // REFACTOR: The security rules prevent checking if a document exists before writing it.
+            // Instead, we attempt to create it. If it fails with "permission-denied", it's because
+            // the document already exists (making it an update, which is denied for the sender),
+            // so we can infer that a request is already pending.
             await setDoc(requestDocRef, {
                 senderUid: user.uid,
                 senderUsername: currentUsername,
@@ -1925,9 +1921,13 @@ async function initializeAppLogic(initialUser) {
             friendStatusMessage.style.color = 'var(--accent-green-light)';
             searchUsernameInput.value = '';
         } catch (error) {
-            friendStatusMessage.textContent = "Could not send request.";
+            if (error.code === 'permission-denied') {
+                friendStatusMessage.textContent = "A friend request is already pending with this user.";
+            } else {
+                friendStatusMessage.textContent = "Could not send request.";
+                console.error("Error sending friend request:", getCoolErrorMessage(error));
+            }
             friendStatusMessage.style.color = 'var(--accent-red-light)';
-            console.error("Error sending friend request:", getCoolErrorMessage(error));
         }
     }
     
