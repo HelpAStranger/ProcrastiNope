@@ -101,15 +101,11 @@ service cloud.firestore {
 
     // Shared quests between friends
     match /sharedQuests/{questId} {
-      // Participants can read a quest.
-      allow read: if request.auth != null &&
-                   request.auth.uid in resource.data.participants;
+      // Participants can read and update.
+      allow read, update: if request.auth != null &&
+                           request.auth.uid in resource.data.participants;
 
-      // Participants can update a quest.
-      allow update: if request.auth != null &&
-                      (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
-
-      // A participant can delete a quest.
+      // A participant can delete a quest. This is more explicit than checking the array.
       allow delete: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
 
@@ -1161,9 +1157,9 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
-                // Query Firestore to find the shared quest document to update.
+                // Query Firestore to find the shared quest document to delete.
                 const q = query(
-                    collection(db, "sharedQuests"), 
+                    collection(db, "sharedQuests"),
                     where("originalTaskId", "==", originalTaskId),
                     where("ownerUid", "==", user.uid),
                     where("status", "==", "pending")
@@ -1171,13 +1167,19 @@ async function initializeAppLogic(initialUser) {
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
+                    // If the document is not found, it might have been accepted already.
+                    // In this case, we can just revert the local state as a cleanup.
+                    revertSharedQuest(originalTaskId);
                     throw new Error("Could not find the pending share to cancel. It might have been accepted or cancelled already.");
                 }
 
-                const sharedQuestDocToUpdate = querySnapshot.docs[0];
-                // Instead of deleting directly, update the status. The listener will handle cleanup.
-                await updateDoc(sharedQuestDocToUpdate.ref, { status: 'cancelled' });
-                // The listener now handles all UI changes and sound feedback.
+                // Directly delete the document. This is allowed by the 'delete' security rule.
+                const sharedQuestDocToDelete = querySnapshot.docs[0];
+                await deleteDoc(sharedQuestDocToDelete.ref);
+
+                // Manually revert the local state of the original task.
+                revertSharedQuest(originalTaskId);
+
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
                 showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
