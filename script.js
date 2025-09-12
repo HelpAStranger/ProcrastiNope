@@ -1124,8 +1124,13 @@ async function initializeAppLogic(initialUser) {
     };
 
     const cancelShare = async (originalTaskId, sharedQuestId) => {
-        if (!originalTaskId || !sharedQuestId) return;
-
+        // FIX: Add defensive check for invalid or "undefined" string for sharedQuestId
+        if (!originalTaskId || !sharedQuestId || sharedQuestId === 'undefined') {
+            console.error("cancelShare called with invalid IDs, aborting.", { originalTaskId, sharedQuestId });
+            showConfirm("Error", "Could not cancel share due to an internal ID mismatch. Please refresh and try again.", () => {});
+            return;
+        }
+        
         const { task } = findTaskAndContext(originalTaskId);
         if (!task || !task.isShared) {
             console.error("Could not find original task to cancel share.");
