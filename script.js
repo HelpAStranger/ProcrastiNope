@@ -326,7 +326,7 @@ async function initializeAppLogic(initialUser) {
 
     let lastSection = 'daily';
 
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], sharedGroups = [], incomingSharedQuests = [], outgoingFriendRequests = [], incomingFriendRequests = [];
+    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], sharedGroups = [], incomingSharedQuests = [], outgoingFriendRequests = [];
     let confirmedFriendUIDs = []; // NEW: Centralized state for friend UIDs
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
@@ -2074,7 +2074,7 @@ async function initializeAppLogic(initialUser) {
         }
         if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
     }
-    const renderAllLists = () => { renderSharedContent(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingShares(); initSortable(); resumeTimers(); };
+    const renderAllLists = () => { renderSharedQuests(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingShares(); initSortable(); resumeTimers(); };
     
     settingsLoginBtn.addEventListener('click', () => {
         const accountModalContent = accountModal.querySelector('.modal-content');
@@ -3117,8 +3117,8 @@ function listenForSharedGroups() {
         snapshot.forEach(doc => {
             newSharedGroups.push({ ...doc.data(), id: doc.id });
         });
-        sharedGroups = newSharedGroups;
-        renderAllLists();
+        appController.state.sharedGroups = newSharedGroups;
+        appController.renderAllLists();
     }, (error) => {
         console.error("Error listening for shared groups:", getCoolErrorMessage(error));
     });
