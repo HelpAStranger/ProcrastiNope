@@ -772,11 +772,12 @@ async function initializeAppLogic(initialUser) {
         // Shared Quest specific rendering (from sharedQuests collection)
         if(type === 'shared') {
             const isOwner = user && task.ownerUid === user.uid;
+            const ownerCompleted = task.ownerCompleted;
+            const friendCompleted = task.friendCompleted;
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
-            const allCompleted = task.ownerCompleted && task.friendCompleted;
+            const allCompleted = ownerCompleted && friendCompleted;
 
             li.classList.add('shared-quest');
-            li.style.setProperty('--shadow-color', 'var(--accent-red)');
             if (allCompleted) {
                 li.classList.add('all-completed');
             }
@@ -788,14 +789,11 @@ async function initializeAppLogic(initialUser) {
             li.innerHTML = `
                 <button class="complete-btn"></button>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
-                <div class="task-buttons-wrapper">
-                    <button class="btn abandon-quest-btn" aria-label="Abandon Quest">Abandon</button>
-                </div>
                 <div class="shared-quest-info">
                     <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
-                        <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
-                        <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
+                        <div class="status-indicator ${ownerCompleted ? 'completed' : ''}"></div>
+                        <div class="status-indicator ${friendCompleted ? 'completed' : ''}"></div>
                     </div>
                 </div>`;
 
@@ -1350,7 +1348,6 @@ async function initializeAppLogic(initialUser) {
             // Case 3: Click was on an action button (edit, delete, etc.)
             currentEditingTaskId = id;
             if (e.target.closest('.undo-btn')) undoCompleteMainQuest(id);
-            else if (e.target.closest('.abandon-quest-btn')) abandonSharedQuest(id);
             else if (e.target.closest('.delete-btn')) deleteTask(id);
             else if (e.target.closest('.view-shared-quest-btn')) {
                 const viewBtn = e.target.closest('.view-shared-quest-btn');
@@ -2264,25 +2261,18 @@ async function initializeAppLogic(initialUser) {
         let unsubscribers = [];
 
         const handleSnapshot = (querySnapshot) => {
-            let localStateNeedsUpdate = false;
             // Process changes to update the map
             querySnapshot.docChanges().forEach((change) => {
                 if (change.type === 'removed') {
-                    const removedQuest = questsMap.get(change.doc.id);
-                    // If the quest is removed and this user is the owner, revert the original task.
-                    if (removedQuest && removedQuest.ownerUid === user.uid) {
-                        revertSharedQuest(removedQuest.originalTaskId, false); // Don't save state yet
-                        localStateNeedsUpdate = true;
-                    }
                     questsMap.delete(change.doc.id);
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
 
                     // NEW: Handle rejection by owner
                     if (newQuest.status === 'rejected' && newQuest.ownerUid === user.uid) {
-                        revertSharedQuest(newQuest.originalTaskId, true);
+                        revertSharedQuest(newQuest.originalTaskId);
                         // After reverting, delete the sharedQuest document.
-                        deleteDoc(doc(db, "sharedQuests", newQuest.id)).catch(err => console.error("Cleanup failed for rejected quest:", err));
+                        deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
                     }
@@ -2315,9 +2305,6 @@ async function initializeAppLogic(initialUser) {
             
             // Update the global list and re-render
             sharedQuests = Array.from(questsMap.values());
-            if (localStateNeedsUpdate) {
-                saveState(); // Now save the state after all changes are processed
-            }
             renderAllLists();
         };
 
