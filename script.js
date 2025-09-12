@@ -1428,14 +1428,17 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
-                // If the task is a daily or shared quest and it's completed, un-complete it.
-                if ((type === 'daily' || type === 'shared') && isMyPartCompleted()) {
-                    uncompleteDailyTask(id);
-                } else {
-                    // Otherwise, show the action buttons, but not for shared quests which have none.
-                    if (type !== 'shared') {
-                        toggleTaskActions(taskItem);
+                // If the click was not on a button, handle it based on task type.
+                if (type === 'daily' || type === 'shared') {
+                    // For daily and shared quests, clicking the body toggles completion status.
+                    if (isMyPartCompleted()) {
+                        uncompleteDailyTask(id);
+                    } else {
+                        completeTask(id);
                     }
+                } else {
+                    // For other quest types (main, standalone), show the action buttons.
+                    toggleTaskActions(taskItem);
                 }
             }
         } 
