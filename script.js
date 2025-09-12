@@ -802,9 +802,19 @@ async function initializeAppLogic(initialUser) {
             const selfIdentifier = isOwner ? 'You' : otherPlayerUsername;
             const otherIdentifier = isOwner ? otherPlayerUsername : task.ownerUsername; // Corrected: should be owner's username if current user is friend
             
+            const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-active-btn" aria-label="Unshare Quest" title="Unshare Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
+
+            const buttonsHTML = `
+                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                ${unshareBtnHTML}
+                <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+            `;
+
             li.innerHTML = `
                 <button class="complete-btn"></button>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
+                <div class="task-buttons-wrapper">${buttonsHTML}</div>
                 <div class="shared-quest-info">
                     <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
@@ -1128,9 +1138,24 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
-    const editTask = (id, text, goal) => {
+    const editTask = async (id, text, goal) => {
         const { task, type } = findTaskAndContext(id);
         if (task) {
+            if (type === 'shared') {
+                if (user.uid !== task.ownerUid) {
+                    showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => {});
+                    return;
+                }
+                try {
+                    const sharedQuestRef = doc(db, "sharedQuests", id);
+                    await updateDoc(sharedQuestRef, { text: text });
+                    playSound('toggle');
+                } catch (error) {
+                    console.error("Error updating shared quest:", getCoolErrorMessage(error));
+                    showConfirm("Error", "Could not update shared quest.", () => {});
+                }
+                return;
+            }
             // NEW: Prevent editing a task that's been shared from its original list
             if (task.isShared) { 
                 showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => {});
@@ -1154,6 +1179,26 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
+    const unshareQuest = async (questId) => {
+        const { task: sharedQuest, type: taskType } = findTaskAndContext(questId);
+        if (!sharedQuest || taskType !== 'shared') return;
+
+        if (user.uid !== sharedQuest.ownerUid) {
+            showConfirm("Cannot Unshare", "Only the owner can unshare a quest.", () => {});
+            return;
+        }
+
+        showConfirm("Unshare Quest?", "This will convert it back to a normal quest for you and remove it for your friend. Are you sure?", async () => {
+            try {
+                await deleteDoc(doc(db, "sharedQuests", questId));
+                revertSharedQuest(sharedQuest.originalTaskId);
+                playSound('delete');
+            } catch (error) {
+                console.error("Error unsharing quest:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not unshare the quest.", () => {});
+            }
+        });
+    };
     const cancelShare = async (originalTaskId) => {
         if (!originalTaskId) return;
 
@@ -1227,21 +1272,21 @@ async function initializeAppLogic(initialUser) {
     }
     function startTimer(id, mins) {
         stopTimer(id, false);
-        const { task } = findTaskAndContext(id);
+        const { task, type } = findTaskAndContext(id);
         if (!task) return;
 
-        // NEW: Prevent setting timer on shared tasks from original lists
-        if (task.isShared) {
-            showConfirm("Cannot Set Timer", "This quest has been shared. Timers can only be set on personal quests.", () => {});
+        // Allow timers on shared quests, but they will be local and not persisted.
+        if (type !== 'shared' && task.isShared) {
+            showConfirm("Cannot Set Timer", "This quest is pending a share and cannot have a timer.", () => {});
             return;
         }
 
         task.timerStartTime = Date.now();
         task.timerDuration = mins * 60;
         delete task.timerFinished;
-        
-        saveState();
-        renderAllLists();
+
+        if (type !== 'shared') saveState();
+        renderAllLists(); // This will re-render and start the timer UI update via resumeTimers
     }
     function stopTimer(id, shouldRender = true) {
         if (activeTimers[id]) {
@@ -1500,29 +1545,38 @@ async function initializeAppLogic(initialUser) {
                     cancelShare(originalTaskId); // Pass only the original task ID for a more robust lookup.
                 }
                 else if (e.target.closest('.share-btn')) {
-                    if (task && task.isShared) { 
+                    if (task && task.isShared) {
                         showConfirm("Shared Quest", "This quest has already been shared.", () => {});
-                        return; 
+                        return;
                     }
                     openShareModal(id);
                 }
-                else if (e.target.closest('.timer-clock-btn')) { 
-                    if (task && task.isShared) { 
-                        showConfirm("Cannot Set Timer", "This quest has been shared. Timers can only be set on personal quests.", () => {});
-                        return; 
-                    }
-                    if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); 
+                else if (e.target.closest('.unshare-active-btn')) {
+                    unshareQuest(id);
+                }
+                else if (e.target.closest('.timer-clock-btn')) {
+                    if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal);
                 }
                 else if (e.target.closest('.edit-btn')) {
                     if (task) {
-                        if (task.isShared) { 
+                        const isSharedFromList = type === 'shared';
+                        const isSharedPlaceholder = !isSharedFromList && task.isShared;
+
+                        if (isSharedPlaceholder) {
                             showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => {});
-                            return; 
+                            return;
                         }
-                        editTaskIdInput.value = task.id;
+
+                        if (isSharedFromList && user.uid !== task.ownerUid) {
+                            showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => {});
+                            return;
+                        }
+
+                        editTaskIdInput.value = id;
                         editTaskInput.value = task.text;
-                        editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
-                        if (type === 'daily') {
+                        editTaskModal.querySelector('#edit-task-modal-title').textContent = isSharedFromList ? 'Edit Shared Quest' : ((type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest');
+
+                        if (type === 'daily' && !isSharedFromList) {
                             const goal = task.weeklyGoal || 0;
                             editWeeklyGoalSlider.value = goal;
                             editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
@@ -1537,12 +1591,9 @@ async function initializeAppLogic(initialUser) {
             } else {
                 // If the click was not on a button, decide whether to toggle completion or show actions.
                 if (type === 'shared') {
-                    // For quests in the shared list, a click on the body toggles completion.
-                    if (isMyPartCompleted()) {
-                        uncompleteDailyTask(id); // Handles both shared and daily un-completion
-                    } else {
-                        completeTask(id); // Handles both shared and daily completion
-                    }
+                    // For quests in the shared list, a click on the body shows actions.
+                    // The complete button handles completion toggling.
+                    toggleTaskActions(taskItem);
                 } else if (type === 'daily' && task.completedToday) {
                     // For a COMPLETED daily quest, a click on the body un-completes it.
                     uncompleteDailyTask(id);
