@@ -704,10 +704,8 @@ async function initializeAppLogic(initialUser) {
     const renderSharedQuests = () => {
         sharedQuestsContainer.innerHTML = '';
         
-        // Filter for active shared quests (status 'active')
-        const activeSharedQuests = sharedQuests.filter(q => q.status === 'active');
-
-        const groupedSharedQuests = activeSharedQuests.reduce((acc, quest) => {
+        // The `sharedQuests` array is already filtered for active/completed quests by the listener.
+        const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
             const groupName = quest.sharedGroupName || 'Individual Shared Quests';
             if (!acc[groupName]) {
                 acc[groupName] = [];
@@ -1991,14 +1989,6 @@ async function initializeAppLogic(initialUser) {
             debouncedRenderFriends();
         }));
 
-        // Listener for incoming SHARED quests
-        const incomingSharesQuery = query(collection(db, "sharedQuests"), where("participants", "array-contains", user.uid), where("status", "==", "pending"));
-        listeners.push(onSnapshot(incomingSharesQuery, (snapshot) => {
-            const allPendingForUser = snapshot.docs.map(d => ({ ...d.data(), questId: d.id }));
-            incomingSharedQuests = allPendingForUser.filter(q => q.friendUid === user.uid);
-            renderIncomingShares();
-        }));
-
         // NEW: Listener for friend removals initiated by other users.
         const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
         listeners.push(onSnapshot(removalsQuery, async (snapshot) => {
@@ -2431,13 +2421,13 @@ async function initializeAppLogic(initialUser) {
         let questsMap = new Map();
         let unsubscribers = [];
 
-        const handleSnapshot = (querySnapshot) => {
+        const handleSnapshot = (querySnapshot) => { // PERF: Combined multiple listeners into one.
             // Process changes to update the map
             querySnapshot.docChanges().forEach((change) => {
                 if (change.type === 'removed') {
                     questsMap.delete(change.doc.id);
                 } else { // 'added' or 'modified'
-                    const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
+                    const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
                     // NEW: Handle rejection by owner ('cancelled') or by friend ('rejected')
                     if ((newQuest.status === 'rejected' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
@@ -2474,39 +2464,25 @@ async function initializeAppLogic(initialUser) {
                 }
             });
             
-            // Update the global list and re-render
-            sharedQuests = Array.from(questsMap.values());
+            const allQuestsFromListener = Array.from(questsMap.values());
+        
+            // Filter for active/completed quests for the main shared list
+            sharedQuests = allQuestsFromListener.filter(q => q.status === 'active' || q.status === 'completed');
+    
+            // Filter for pending quests for the incoming shares tab
+            incomingSharedQuests = allQuestsFromListener.filter(q => q.status === 'pending' && q.friendUid === user.uid);
+    
             renderAllLists();
         };
 
-        // Create a listener for 'active' quests
-        const activeQuery = query(
+        // A single listener for all relevant statuses
+        const allSharedQuestsQuery = query(
             collection(db, "sharedQuests"), 
             where("participants", "array-contains", user.uid),
-            where("status", "==", "active")
+            where("status", "in", ["pending", "active", "completed", "rejected", "cancelled"])
         );
-        unsubscribers.push(onSnapshot(activeQuery, handleSnapshot, (error) => {
-            console.error("Error listening for active shared quests:", getCoolErrorMessage(error));
-        }));
-
-        // Create a listener for 'completed' quests
-        const completedQuery = query(
-            collection(db, "sharedQuests"), 
-            where("participants", "array-contains", user.uid),
-            where("status", "==", "completed")
-        );
-        unsubscribers.push(onSnapshot(completedQuery, handleSnapshot, (error) => {
-            console.error("Error listening for completed quests:", getCoolErrorMessage(error));
-        }));
-
-        // NEW: Create a listener for 'rejected' and 'cancelled' quests
-        const rejectedQuery = query(
-            collection(db, "sharedQuests"),
-            where("participants", "array-contains", user.uid),
-            where("status", "in", ["rejected", "cancelled"])
-        );
-        unsubscribers.push(onSnapshot(rejectedQuery, handleSnapshot, (error) => {
-            console.error("Error listening for rejected/cancelled shared quests:", getCoolErrorMessage(error));
+        unsubscribers.push(onSnapshot(allSharedQuestsQuery, handleSnapshot, (error) => {
+            console.error("Error listening for shared quests:", getCoolErrorMessage(error));
         }));
 
         unsubscribeFromSharedQuests = () => unsubscribers.forEach(unsub => unsub());
