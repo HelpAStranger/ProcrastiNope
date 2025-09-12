@@ -1114,11 +1114,12 @@ async function initializeAppLogic(initialUser) {
     const revertSharedQuest = (originalTaskId) => {
         if (!originalTaskId) return;
         const { task } = findTaskAndContext(originalTaskId);
-        if (task?.isShared) {
+        if (task?.isShared) { // Explicitly check for shared status
             task.isShared = false;
             delete task.sharedQuestId;
             saveState();
             renderAllLists();
+            playSound('delete'); // Play sound on successful revert
         }
     };
 
@@ -1143,7 +1144,7 @@ async function initializeAppLogic(initialUser) {
                 const sharedQuestDocToUpdate = querySnapshot.docs[0];
                 // Instead of deleting directly, update the status. The listener will handle cleanup.
                 await updateDoc(sharedQuestDocToUpdate.ref, { status: 'cancelled' });
-                playSound('delete');
+                // The listener now handles all UI changes and sound feedback.
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
                 showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
@@ -2376,7 +2377,6 @@ async function initializeAppLogic(initialUser) {
                         revertSharedQuest(newQuest.originalTaskId);
                         // After reverting, delete the sharedQuest document.
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
-                        playSound('delete');
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
                     }
