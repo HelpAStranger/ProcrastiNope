@@ -886,7 +886,7 @@ async function initializeAppLogic(initialUser) {
                 const buttonWrapper = li.querySelector('.task-buttons-wrapper');
                 if (buttonWrapper) {
                     buttonWrapper.innerHTML = `
-                        <button class="btn icon-btn unshare-btn" aria-label="Cancel Share" title="Cancel Share"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>
+                        <button class="btn icon-btn unshare-btn" data-shared-quest-id="${task.sharedQuestId}" aria-label="Cancel Share" title="Cancel Share"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>
                     `;
                 }
             } else { // Active or completed shared task
