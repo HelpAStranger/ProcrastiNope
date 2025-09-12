@@ -1509,15 +1509,21 @@ async function initializeAppLogic(initialUser) {
                 }
             } else {
                 // If the click was not on a button, decide whether to toggle completion or show actions.
-                // Show actions for all tasks except those in the dedicated shared quest list.
-                if (type !== 'shared') {
-                    toggleTaskActions(taskItem);
-                } else { 
-                    // Toggle completion for quests in the shared list.
+                if (type === 'shared') {
+                    // For quests in the shared list, a click on the body toggles completion.
                     if (isMyPartCompleted()) {
                         uncompleteDailyTask(id); // Handles both shared and daily un-completion
                     } else {
                         completeTask(id); // Handles both shared and daily completion
+                    }
+                } else if (type === 'daily' && task.completedToday) {
+                    // For a COMPLETED daily quest, a click on the body un-completes it.
+                    uncompleteDailyTask(id);
+                } else {
+                    // For all other quests (uncompleted daily, main quests), a click on the body shows the actions.
+                    // Do not show actions if the task is already pending deletion (undo state).
+                    if (task && !task.pendingDeletion) {
+                        toggleTaskActions(taskItem);
                     }
                 }
             }
