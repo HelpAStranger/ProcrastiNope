@@ -1320,6 +1320,9 @@ async function initializeAppLogic(initialUser) {
                 return task.completedToday;
             };
             
+            // NEW: Handle undo button click
+            if (e.target.closest('.undo-btn')) {
+                undoCompleteMainQuest(id);
             const toggleCompletion = () => {
                 if (isMyPartCompleted()) uncompleteDailyTask(id);
                 else completeTask(id);
@@ -1334,17 +1337,68 @@ async function initializeAppLogic(initialUser) {
                 }
                 return;
             }
+            
 
             // Case 2: Click was on the main complete button (checkmark)
             if (e.target.closest('.complete-btn')) {
                 if (type === 'daily' || type === 'shared') {
+                    if (isMyPartCompleted()) {
+                        uncompleteDailyTask(id); // This function will handle both daily and shared uncompletion
+                    } else {
+                        completeTask(id); // This function will handle both daily and shared completion
+                    }
                     toggleCompletion();
                 } else {
+                    // For standalone and grouped main quests, completion means deletion.
+                    // There's no "uncomplete" for these, as they are removed upon completion.
+                    completeTask(id);
                     completeTask(id); // Main quests are deleted on completion
                 }
                 return;
             }
+            
+            if(e.target.closest('button')) {
+                currentEditingTaskId = id;
+                if (e.target.closest('.delete-btn')) deleteTask(id);
+                else if (e.target.closest('.view-shared-quest-btn')) {
+                    const viewBtn = e.target.closest('.view-shared-quest-btn');
+                    const sharedQuestId = viewBtn.dataset.sharedQuestId;
+                    const sharedQuestEl = document.querySelector(`.task-item.shared-quest[data-id="${sharedQuestId}"]`);
+                    if (sharedQuestEl) {
+                        const isMobile = window.matchMedia("(max-width: 1023px)").matches;
+                        const dailySection = document.querySelector('.task-group[data-section="daily"]');
+                        let sectionWasSwitched = false;
 
+                        // If on mobile and the daily section is not visible, switch to it.
+                        if (isMobile && dailySection && !dailySection.classList.contains('mobile-visible')) {
+                            sectionWasSwitched = true;
+                            
+                            // Switch visible section
+                            document.querySelectorAll('.task-group').forEach(group => {
+                                group.classList.toggle('mobile-visible', group.dataset.section === 'daily');
+                            });
+
+                            // Switch active nav button
+                            mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+                                btn.classList.toggle('active', btn.dataset.section === 'daily');
+                            });
+                            
+                            lastSection = 'daily';
+                            playSound('toggle');
+                        }
+
+                        const scrollAndAnimate = () => {
+                            sharedQuestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            sharedQuestEl.classList.add('friend-completed-pulse');
+                            sharedQuestEl.addEventListener('animationend', () => sharedQuestEl.classList.remove('friend-completed-pulse'), { once: true });
+                        };
+
+                        if (sectionWasSwitched) {
+                            // Use a small timeout to allow the DOM to update if the section was hidden
+                            setTimeout(scrollAndAnimate, 50);
+                        } else {
+                            scrollAndAnimate();
+                        }
             // Case 3: Click was on an action button (edit, delete, etc.)
             currentEditingTaskId = id;
             if (e.target.closest('.undo-btn')) undoCompleteMainQuest(id);
@@ -1364,6 +1418,10 @@ async function initializeAppLogic(initialUser) {
                         lastSection = 'daily';
                         playSound('toggle');
                     }
+                    if (taskItem.classList.contains('actions-visible')) {
+                        toggleTaskActions(taskItem);
+                    }
+                    return;
                     const scrollAndAnimate = () => {
                         sharedQuestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         sharedQuestEl.classList.add('friend-completed-pulse');
@@ -1372,6 +1430,50 @@ async function initializeAppLogic(initialUser) {
                     if (sectionWasSwitched) setTimeout(scrollAndAnimate, 50);
                     else scrollAndAnimate();
                 }
+                else if (e.target.closest('.unshare-btn')) {
+                    cancelShare(id);
+                }
+                else if (e.target.closest('.share-btn')) {
+                    if (task && task.isShared) { 
+                        showConfirm("Shared Quest", "This quest has already been shared.", () => {});
+                        return; 
+                    }
+                    openShareModal(id);
+                }
+                else if (e.target.closest('.timer-clock-btn')) { 
+                    if (task && task.isShared) { 
+                        showConfirm("Cannot Set Timer", "This quest has been shared. Timers can only be set on personal quests.", () => {});
+                        return; 
+                    }
+                    if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal); 
+                }
+                else if (e.target.closest('.edit-btn')) {
+                    if (task) {
+                        if (task.isShared) { 
+                            showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => {});
+                            return; 
+                        }
+                        editTaskIdInput.value = task.id;
+                        editTaskInput.value = task.text;
+                        editTaskModal.querySelector('#edit-task-modal-title').textContent = (type === 'daily') ? 'Edit Daily Quest' : 'Edit Main Quest';
+                        if (type === 'daily') {
+                            const goal = task.weeklyGoal || 0;
+                            editWeeklyGoalSlider.value = goal;
+                            editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
+                            editWeeklyGoalContainer.style.display = 'block';
+                        } else {
+                            editWeeklyGoalContainer.style.display = 'none';
+                        }
+                        openModal(editTaskModal);
+                        focusOnDesktop(editTaskInput);
+                    }
+                }
+            } else {
+                // If the click was not on a button, handle it based on task type.
+                if (type === 'daily' || type === 'shared') {
+                    // For daily and shared quests, clicking the body toggles completion status.
+                    if (isMyPartCompleted()) {
+                        uncompleteDailyTask(id);
                 if (taskItem.classList.contains('actions-visible')) toggleTaskActions(taskItem);
             }
             else if (e.target.closest('.unshare-btn')) cancelShare(id);
@@ -1395,8 +1497,12 @@ async function initializeAppLogic(initialUser) {
                         editWeeklyGoalDisplay.textContent = goal > 0 ? `${goal}` : 'None';
                         editWeeklyGoalContainer.style.display = 'block';
                     } else {
+                        completeTask(id);
                         editWeeklyGoalContainer.style.display = 'none';
                     }
+                } else {
+                    // For other quest types (main, standalone), show the action buttons.
+                    toggleTaskActions(taskItem);
                     openModal(editTaskModal);
                     focusOnDesktop(editTaskInput);
                 }
