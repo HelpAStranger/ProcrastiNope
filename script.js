@@ -1780,6 +1780,27 @@ async function initializeAppLogic(initialUser) {
             renderIncomingShares();
         }));
 
+        // NEW: Listener for friend removals initiated by other users.
+        const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
+        listeners.push(onSnapshot(removalsQuery, (snapshot) => {
+            if (snapshot.empty) return;
+
+            const batch = writeBatch(db);
+            const currentUserRef = doc(db, "users", user.uid);
+
+            snapshot.forEach(removalDoc => {
+                const removerUid = removalDoc.data().removerUid;
+                // Remove the friend who initiated the removal from my list.
+                batch.update(currentUserRef, { friends: arrayRemove(removerUid) });
+                // Delete the trigger document to clean up.
+                batch.delete(removalDoc.ref);
+            });
+
+            batch.commit().catch(error => {
+                console.error("Error processing friend removal:", getCoolErrorMessage(error));
+            });
+        }));
+
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
     }
 
@@ -1999,17 +2020,23 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
-            const friendUserRef = doc(db, "users", friendUidToRemove);
 
             const batch = writeBatch(db);
             
-            // REFACTOR: Atomically remove the friendship from both users' documents.
             // 1. Remove friend from my list.
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
-            // 2. Remove me from my friend's list.
-            batch.update(friendUserRef, { friends: arrayRemove(user.uid) });
 
-            // 3. Query for and delete all shared quests between these two users
+            // 2. Create a removal trigger document for the other user to process.
+            // This is necessary because security rules prevent us from writing to another user's document.
+            const removalId = [user.uid, friendUidToRemove].join('_');
+            const removalRef = doc(db, "friendRemovals", removalId);
+            batch.set(removalRef, {
+                removerUid: user.uid,
+                removeeUid: friendUidToRemove,
+                createdAt: Date.now()
+            });
+
+            // 3. Query for and delete all shared quests between these two users.
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
             const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
 
@@ -2019,7 +2046,6 @@ async function initializeAppLogic(initialUser) {
             querySnapshot2.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
-            // The onSnapshot listeners on both clients will handle UI updates automatically.
         });
     }
 
