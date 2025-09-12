@@ -319,7 +319,7 @@
                 <h3>Sound Volume</h3>
                 <div class="volume-slider-container"><input type="range" id="volume-slider" min="0" max="1" step="0.01" aria-label="Volume"></div>
             </div>
-             <div class="settings-group">
+             <div id="guest-data-management" class="settings-group">
                 <h3 id="data-management-heading">Data (Local)</h3>
                 <div class="data-actions">
                     <button id="export-data-btn" class="btn">Export Guest Data</button>
@@ -399,6 +399,12 @@
                     </div>
                 </form>
                 
+                <div class="settings-group">
+                    <h3>Reset Data</h3>
+                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">This will reset all your quests and progress in the cloud. It cannot be undone.</p>
+                    <button type="button" id="reset-cloud-data-btn" class="btn" style="width: 100%;">Reset Cloud Data</button>
+                </div>
+
                 <div class="settings-group">
                     <h3>Delete Account</h3>
                     <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">This is permanent and cannot be undone. All your data will be erased.</p>

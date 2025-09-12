@@ -372,7 +372,7 @@ async function initializeAppLogic(initialUser) {
     const exportDataBtn = document.getElementById('export-data-btn');
     const importDataBtn = document.getElementById('import-data-btn');
     const importFileInput = document.getElementById('import-file-input');
-    const dataManagementHeading = document.getElementById('data-management-heading');
+    const guestDataManagementGroup = document.getElementById('guest-data-management');
     const settingsLoginBtn = document.getElementById('settings-login-btn');
     const manageAccountBtn = document.getElementById('manage-account-btn');
     const logoutBtn = document.getElementById('logout-btn');
@@ -402,6 +402,7 @@ async function initializeAppLogic(initialUser) {
     const friendRequestsContainer = friendsModal.querySelector('.friend-requests-container');
     const deleteAccountBtn = document.getElementById('delete-account-btn');
 
+    const resetCloudDataBtn = document.getElementById('reset-cloud-data-btn');
     const shareQuestModal = document.getElementById('share-quest-modal');
     const shareQuestFriendList = document.getElementById('share-quest-friend-list');
     const shareQuestIdInput = document.getElementById('share-quest-id-input');
@@ -607,6 +608,7 @@ async function initializeAppLogic(initialUser) {
             settingsLoginBtn.style.display = 'none';
             logoutBtn.style.display = 'inline-flex';
             manageAccountBtn.style.display = 'inline-flex';
+            guestDataManagementGroup.style.display = 'none';
 
             const userDocRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(userDocRef);
@@ -614,10 +616,6 @@ async function initializeAppLogic(initialUser) {
 
             userDisplay.textContent = `Logged in as: ${username}`;
             userDisplay.style.display = 'flex';
-            dataManagementHeading.textContent = "Cloud Data";
-            exportDataBtn.style.display = 'none';
-            importDataBtn.style.display = 'none';
-            resetProgressBtn.textContent = 'Reset Cloud Data';
             
             mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
 
@@ -625,12 +623,9 @@ async function initializeAppLogic(initialUser) {
             settingsLoginBtn.style.display = 'inline-flex';
             logoutBtn.style.display = 'none';
             manageAccountBtn.style.display = 'none';
+            guestDataManagementGroup.style.display = 'block';
             userDisplay.textContent = 'Playing as Guest';
             userDisplay.style.display = 'flex';
-            dataManagementHeading.textContent = "Guest Data (Local)";
-            exportDataBtn.style.display = 'inline-flex';
-            importDataBtn.style.display = 'inline-flex';
-            resetProgressBtn.textContent = 'Reset Progress';
             
             mobileNav.querySelector('[data-section="friends"]').style.display = 'none';
         }
@@ -1475,6 +1470,17 @@ async function initializeAppLogic(initialUser) {
     
     resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
     exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
+    resetCloudDataBtn.addEventListener('click', () => {
+        showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => {
+            playerData = { level: 1, xp: 0 };
+            dailyTasks = [];
+            standaloneMainQuests = [];
+            generalTaskGroups = [];
+            renderAllLists();
+            saveState(); // This will save the empty state to Firestore because `user` is not null
+            playSound('delete');
+        });
+    });
     importDataBtn.addEventListener('click', () => importFileInput.click());
     importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
     document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
