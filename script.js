@@ -101,16 +101,9 @@ service cloud.firestore {
 
     // Shared quests between friends
     match /sharedQuests/{questId} {
-      // Participants can read a quest.
-      allow read: if request.auth != null &&
-                   request.auth.uid in resource.data.participants;
-
-      // Participants can update a quest.
-      allow update: if request.auth != null &&
-                      (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
-
-      // A participant can delete a quest.
-      allow delete: if request.auth != null &&
+      // Participants can read, update, and delete. This explicit check is more reliable
+      // than checking the 'participants' array for all operations.
+      allow read, update, delete: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
 
       // Only the owner can create a shared quest
