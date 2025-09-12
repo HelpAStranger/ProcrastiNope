@@ -113,25 +113,6 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                     request.auth.uid == request.resource.data.ownerUid;
     }
-
-    // Shared groups between friends
-    match /sharedGroups/{groupId} {
-      // Participants can read the group
-      allow read: if request.auth != null &&
-                   request.auth.uid in resource.data.participants;
-
-      // Participants can update the group (e.g., to complete tasks, or abandon)
-      allow update: if request.auth != null &&
-                      request.auth.uid in resource.data.participants;
-
-      // Only the owner can delete the group (unshare)
-      allow delete: if request.auth != null &&
-                    request.auth.uid == resource.data.ownerUid;
-
-      // Only the owner can create a shared group
-      allow create: if request.auth != null &&
-                    request.auth.uid == request.resource.data.ownerUid;
-    }
   }
 }
 
