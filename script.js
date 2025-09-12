@@ -1942,21 +1942,22 @@ async function initializeAppLogic(initialUser) {
         listeners.push(onSnapshot(removalsQuery, async (snapshot) => {
             if (snapshot.empty) return;
 
+            // Use a write batch to handle all Firestore changes atomically for this snapshot.
+            const batch = writeBatch(db);
+            let localStateChanged = false;
+
             for (const change of snapshot.docChanges()) {
                 if (change.type !== 'added') continue;
 
                 const removalDoc = change.doc;
                 const removalData = removalDoc.data();
                 const removerUid = removalData.removerUid;
-                const sharedQuestIds = removalData.sharedQuestIds || [];
+                // Use the new sharedQuestsData package instead of just IDs
+                const sharedQuestsData = removalData.sharedQuestsData || [];
 
-                let localStateChanged = false;
-                if (sharedQuestIds.length > 0) {
-                    const questsQuery = query(collection(db, "sharedQuests"), where(documentId(), 'in', sharedQuestIds));
-                    const questsSnap = await getDocs(questsQuery);
-
-                    for (const questDoc of questsSnap.docs) {
-                        const questData = questDoc.data();
+                // Revert any quests owned by the current user (the one being removed)
+                if (sharedQuestsData.length > 0) {
+                    for (const questData of sharedQuestsData) {
                         if (questData.ownerUid === user.uid) {
                             const { task } = findTaskAndContext(questData.originalTaskId);
                             if (task) {
@@ -1968,20 +1969,27 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
 
-                const batch = writeBatch(db);
+                // Add operations to the main batch
                 const currentUserRef = doc(db, "users", user.uid);
                 batch.update(currentUserRef, { friends: arrayRemove(removerUid) });
-                sharedQuestIds.forEach(id => batch.delete(doc(db, "sharedQuests", id)));
+
+                // Delete the shared quests using the IDs from the data package
+                const sharedQuestIdsToDelete = sharedQuestsData.map(q => q.id);
+                sharedQuestIdsToDelete.forEach(id => batch.delete(doc(db, "sharedQuests", id)));
+
+                // Delete the removal trigger document itself
                 batch.delete(removalDoc.ref);
+            }
 
-                await batch.commit().catch(error => {
-                    console.error("Error processing friend removal:", getCoolErrorMessage(error));
-                });
+            // Commit all batched writes for this snapshot at once.
+            await batch.commit().catch(error => {
+                console.error("Error processing friend removal batch:", getCoolErrorMessage(error));
+            });
 
-                if (localStateChanged) {
-                    saveState();
-                    renderAllLists();
-                }
+            // If local state was changed, save and re-render after the batch commit.
+            if (localStateChanged) {
+                saveState();
+                renderAllLists();
             }
         }));
 
@@ -2196,17 +2204,26 @@ async function initializeAppLogic(initialUser) {
         showConfirm("Remove Friend?", "Shared quests will be converted back to normal quests for both of you. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
 
-            // 1. Find all shared quests to pass their IDs to the removal trigger.
+            // 1. Find all shared quests and package their necessary data.
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
             const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
             const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
             const sharedQuestDocs = [...snap1.docs, ...snap2.docs];
-            const sharedQuestIds = sharedQuestDocs.map(d => d.id);
+
+            // Create a package of data needed by the other client to avoid a second fetch.
+            const sharedQuestsDataForRemoval = sharedQuestDocs.map(d => {
+                const data = d.data();
+                return {
+                    id: d.id,
+                    ownerUid: data.ownerUid,
+                    originalTaskId: data.originalTaskId
+                };
+            });
+
 
             // 2. Revert quests that I own in my local state.
             let localStateChanged = false;
-            for (const questDoc of sharedQuestDocs) {
-                const questData = questDoc.data();
+            for (const questData of sharedQuestsDataForRemoval) {
                 if (questData.ownerUid === user.uid) {
                     const { task } = findTaskAndContext(questData.originalTaskId);
                     if (task) {
@@ -2226,7 +2243,7 @@ async function initializeAppLogic(initialUser) {
             batch.set(removalRef, {
                 removerUid: user.uid,
                 removeeUid: friendUidToRemove,
-                sharedQuestIds: sharedQuestIds,
+                sharedQuestsData: sharedQuestsDataForRemoval, // Use the new data package
                 createdAt: Date.now()
             });
 
