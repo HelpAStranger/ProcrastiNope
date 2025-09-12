@@ -1076,22 +1076,6 @@ TASK LIST & ITEMS
     opacity: 0.8;
 }
 
-/* NEW: Styles for group headers marked as shared in their original lists */
-.main-quest-group-header.is-shared-group {
-    opacity: 0.7;
-    filter: grayscale(0.3);
-    border-style: dashed;
-    border-color: var(--accent-blue);
-    --shadow-color: var(--accent-blue);
-    cursor: default;
-}
-
-.main-quest-group-header.is-shared-group.pending-share {
-    border-style: dotted;
-    border-color: var(--accent-orange);
-    --shadow-color: var(--accent-orange);
-    opacity: 0.8;
-}
 /*
 ==========================================================================
 SHARED QUESTS
