@@ -1126,36 +1126,37 @@ async function initializeAppLogic(initialUser) {
     const cancelShare = async (originalTaskId) => {
         if (!originalTaskId) return;
 
-        const { task } = findTaskAndContext(originalTaskId);
-        if (!task || !task.isShared) {
-            console.error("Could not find original task to cancel share.");
-            return;
-        }
-
-        // Get the ID from the canonical state object, not the DOM, for robustness.
-        const sharedQuestId = task.sharedQuestId;
-
-        // Defensive check for an invalid or missing ID on the state object.
-        if (!sharedQuestId || sharedQuestId === 'undefined') {
-            console.error("cancelShare aborted: sharedQuestId is missing from the task state.", { originalTaskId });
-            showConfirm("Error", "Could not cancel share due to an internal ID mismatch. Please refresh and try again.", () => {});
-            return;
-        }
-
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
-                await deleteDoc(doc(db, "sharedQuests", sharedQuestId));
+                // Query Firestore to find the shared quest document to delete, making this more robust.
+                const q = query(
+                    collection(db, "sharedQuests"), 
+                    where("originalTaskId", "==", originalTaskId),
+                    where("ownerUid", "==", user.uid),
+                    where("status", "==", "pending")
+                );
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    throw new Error("Could not find the pending share to cancel. It might have been accepted or cancelled already.");
+                }
+
+                const sharedQuestDocToDelete = querySnapshot.docs[0];
+                await deleteDoc(sharedQuestDocToDelete.ref);
                 
                 // If successful, revert the local task
-                task.isShared = false;
-                delete task.sharedQuestId;
+                const { task } = findTaskAndContext(originalTaskId);
+                if (task) {
+                    task.isShared = false;
+                    delete task.sharedQuestId;
+                }
 
                 saveState();
                 renderAllLists();
                 playSound('delete');
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not cancel the share. Please try again.", () => {});
+                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
             }
         });
     };
