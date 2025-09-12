@@ -1845,7 +1845,7 @@ async function initializeAppLogic(initialUser) {
         }));
 
         // NEW: Listener for friend removals initiated by other users.
-        const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid), where("status", "ne", "processed"));
+        const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
         listeners.push(onSnapshot(removalsQuery, async (snapshot) => {
             if (snapshot.empty) return;
 
