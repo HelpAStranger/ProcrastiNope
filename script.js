@@ -852,7 +852,8 @@ async function initializeAppLogic(initialUser) {
             li.classList.add('is-shared-task');
             const sharedQuest = sharedQuests.find(sq => sq.id === task.sharedQuestId);
 
-            if (sharedQuest && sharedQuest.status === 'pending') {
+            // If the shared quest is not in our list of active/completed quests, it's pending.
+            if (!sharedQuest) {
                 li.classList.add('pending-share');
                 const buttonWrapper = li.querySelector('.task-buttons-wrapper');
                 if (buttonWrapper) {
