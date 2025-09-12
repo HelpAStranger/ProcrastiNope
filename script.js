@@ -1114,12 +1114,11 @@ async function initializeAppLogic(initialUser) {
     const revertSharedQuest = (originalTaskId) => {
         if (!originalTaskId) return;
         const { task } = findTaskAndContext(originalTaskId);
-        if (task && task.isShared) {
+        if (task?.isShared) {
             task.isShared = false;
             delete task.sharedQuestId;
             saveState();
             renderAllLists();
-            playSound('delete');
         }
     };
 
@@ -1128,7 +1127,7 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
-                // Query Firestore to find the shared quest document to delete, making this more robust.
+                // Query Firestore to find the shared quest document to update.
                 const q = query(
                     collection(db, "sharedQuests"), 
                     where("originalTaskId", "==", originalTaskId),
@@ -1141,18 +1140,9 @@ async function initializeAppLogic(initialUser) {
                     throw new Error("Could not find the pending share to cancel. It might have been accepted or cancelled already.");
                 }
 
-                const sharedQuestDocToDelete = querySnapshot.docs[0];
-                await deleteDoc(sharedQuestDocToDelete.ref);
-                
-                // If successful, revert the local task
-                const { task } = findTaskAndContext(originalTaskId);
-                if (task) {
-                    task.isShared = false;
-                    delete task.sharedQuestId;
-                }
-
-                saveState();
-                renderAllLists();
+                const sharedQuestDocToUpdate = querySnapshot.docs[0];
+                // Instead of deleting directly, update the status. The listener will handle cleanup.
+                await updateDoc(sharedQuestDocToUpdate.ref, { status: 'cancelled' });
                 playSound('delete');
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
@@ -2381,11 +2371,12 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
 
-                    // NEW: Handle rejection by owner
-                    if (newQuest.status === 'rejected' && newQuest.ownerUid === user.uid) {
+                    // NEW: Handle rejection by owner ('cancelled') or by friend ('rejected')
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
                         // After reverting, delete the sharedQuest document.
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
+                        playSound('delete');
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
                     }
@@ -2441,14 +2432,14 @@ async function initializeAppLogic(initialUser) {
             console.error("Error listening for completed quests:", getCoolErrorMessage(error));
         }));
 
-        // NEW: Create a listener for 'rejected' quests
+        // NEW: Create a listener for 'rejected' and 'cancelled' quests
         const rejectedQuery = query(
             collection(db, "sharedQuests"),
             where("participants", "array-contains", user.uid),
-            where("status", "==", "rejected")
+            where("status", "in", ["rejected", "cancelled"])
         );
         unsubscribers.push(onSnapshot(rejectedQuery, handleSnapshot, (error) => {
-            console.error("Error listening for rejected shared quests:", getCoolErrorMessage(error));
+            console.error("Error listening for rejected/cancelled shared quests:", getCoolErrorMessage(error));
         }));
 
         unsubscribeFromSharedQuests = () => unsubscribers.forEach(unsub => unsub());
