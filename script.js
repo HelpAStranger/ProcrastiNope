@@ -1157,7 +1157,7 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
-                // Query Firestore to find the shared quest document to delete.
+                // Query Firestore to find the shared quest document to update.
                 const q = query(
                     collection(db, "sharedQuests"),
                     where("originalTaskId", "==", originalTaskId),
@@ -1167,18 +1167,12 @@ async function initializeAppLogic(initialUser) {
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
-                    // If the document is not found, it might have been accepted already.
-                    // In this case, we can just revert the local state as a cleanup.
-                    revertSharedQuest(originalTaskId);
                     throw new Error("Could not find the pending share to cancel. It might have been accepted or cancelled already.");
                 }
 
-                // Directly delete the document. This is allowed by the 'delete' security rule.
-                const sharedQuestDocToDelete = querySnapshot.docs[0];
-                await deleteDoc(sharedQuestDocToDelete.ref);
-
-                // Manually revert the local state of the original task.
-                revertSharedQuest(originalTaskId);
+                // Instead of deleting directly, update the status. The listener will handle cleanup.
+                const sharedQuestDocToUpdate = querySnapshot.docs[0];
+                await updateDoc(sharedQuestDocToUpdate.ref, { status: 'cancelled' });
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
