@@ -849,7 +849,11 @@ async function initializeAppLogic(initialUser) {
         if (task.pendingDeletion) li.classList.add('pending-deletion');
         if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
         if (task.timerFinished) li.classList.add('timer-finished');
-        if (task.timerStartTime && task.timerDuration) {
+
+        // REGRESSION TWEAK: A completed task should never display an active timer.
+        // This guard prevents the timer UI from showing even if timer properties were not cleared.
+        const isCompleted = task.completedToday || task.pendingDeletion;
+        if (task.timerStartTime && task.timerDuration && !isCompleted) {
             const elapsed = (Date.now() - task.timerStartTime) / 1000;
             const remaining = Math.max(0, task.timerDuration - elapsed);
             if (remaining > 0) {
@@ -1236,7 +1240,10 @@ async function initializeAppLogic(initialUser) {
         let needsSaveAndRender = false;
         [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
             // Only resume timers for non-shared tasks
-            if (t && t.timerStartTime && t.timerDuration && !t.isShared) {
+            // REGRESSION TWEAK: A completed task should never have its timer resumed.
+            // This guard prevents a timer from restarting on a completed task after a page reload.
+            const isCompleted = t.completedToday || t.pendingDeletion;
+            if (t && t.timerStartTime && t.timerDuration && !t.isShared && !isCompleted) {
                 const elapsed = (Date.now() - t.timerStartTime) / 1000;
                 const remaining = Math.max(0, t.timerDuration - elapsed);
                 
