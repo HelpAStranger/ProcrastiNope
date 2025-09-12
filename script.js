@@ -803,10 +803,12 @@ async function initializeAppLogic(initialUser) {
             const otherIdentifier = isOwner ? otherPlayerUsername : task.ownerUsername; // Corrected: should be owner's username if current user is friend
             
             const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-active-btn" aria-label="Unshare Quest" title="Unshare Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
+            const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-quest-btn" aria-label="Abandon Quest" title="Abandon Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
 
             const buttonsHTML = `
                 <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                 ${unshareBtnHTML}
+                ${abandonBtnHTML}
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
@@ -1199,6 +1201,22 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
+
+    const abandonQuest = async (questId) => {
+        const { task: sharedQuest } = findTaskAndContext(questId);
+        if (!sharedQuest || (user && sharedQuest.ownerUid === user.uid)) return; // Only friend can abandon
+
+        showConfirm("Abandon Quest?", "This will remove the quest from your list and the owner will be notified. Are you sure?", async () => {
+            try {
+                const sharedQuestRef = doc(db, "sharedQuests", questId);
+                await updateDoc(sharedQuestRef, { status: 'abandoned' });
+                playSound('delete');
+            } catch (error) {
+                console.error("Error abandoning quest:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not abandon the quest.", () => {});
+            }
+        });
+    };
     const cancelShare = async (originalTaskId) => {
         if (!originalTaskId) return;
 
@@ -1553,6 +1571,9 @@ async function initializeAppLogic(initialUser) {
                 }
                 else if (e.target.closest('.unshare-active-btn')) {
                     unshareQuest(id);
+                }
+                else if (e.target.closest('.abandon-quest-btn')) {
+                    abandonQuest(id);
                 }
                 else if (e.target.closest('.timer-clock-btn')) {
                     if (task && task.timerStartTime) openModal(timerMenuModal); else openModal(timerModal);
@@ -2480,10 +2501,9 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
-                    // NEW: Handle rejection by owner ('cancelled') or by friend ('rejected')
-                    if ((newQuest.status === 'rejected' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
+                    // NEW: Handle rejection by owner ('cancelled'), by friend ('rejected'), or abandonment by friend ('abandoned')
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'cancelled' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
-                        // After reverting, delete the sharedQuest document.
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
@@ -2530,7 +2550,7 @@ async function initializeAppLogic(initialUser) {
         const allSharedQuestsQuery = query(
             collection(db, "sharedQuests"), 
             where("participants", "array-contains", user.uid),
-            where("status", "in", ["pending", "active", "completed", "rejected", "cancelled"])
+            where("status", "in", ["pending", "active", "completed", "rejected", "cancelled", "abandoned"])
         );
         unsubscribers.push(onSnapshot(allSharedQuestsQuery, handleSnapshot, (error) => {
             console.error("Error listening for shared quests:", getCoolErrorMessage(error));
