@@ -314,15 +314,18 @@ async function initializeAppLogic(initialUser) {
 
     let user = initialUser;
     // audioCtx is now created in initAudioContext on first user gesture.
-    
+
     let lastSection = 'daily';
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [], outgoingFriendRequests = [];
+    let confirmedFriendUIDs = []; // NEW: Centralized state for friend UIDs
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
     const activeTimers = {};
     let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
+
+    const debouncedRenderFriends = debounce(renderFriendsList, 100);
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
@@ -1771,10 +1774,11 @@ async function initializeAppLogic(initialUser) {
 
         // Listener for the user's own document to get their friends list
         const userDocRef = doc(db, "users", user.uid);
-        listeners.push(onSnapshot(userDocRef, (docSnap) => {
+        listeners.push(onSnapshot(userDocRef, (docSnap) => { // This listener handles confirmed friends
             if (docSnap.exists()) {
                 const userData = docSnap.data();
-                renderFriendsList(userData.friends || []);
+                confirmedFriendUIDs = userData.friends || [];
+                debouncedRenderFriends();
             }
         }));
 
@@ -1828,15 +1832,8 @@ async function initializeAppLogic(initialUser) {
                 }
             });
 
-            // Re-render the main friends list to show pending outgoing requests
-            // The userDoc listener will also trigger this, but calling it here ensures
-            // the pending list is up-to-date immediately after a request is sent/received.
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-                renderFriendsList(userDoc.data().friends || []);
-            } else {
-                renderFriendsList([]);
-            }
+            // Trigger a debounced render to update the list with new pending requests
+            debouncedRenderFriends();
         }));
 
         // Listener for incoming SHARED quests
@@ -1898,13 +1895,13 @@ async function initializeAppLogic(initialUser) {
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
     }
 
-    async function renderFriendsList(friendUIDs) {
+    async function renderFriendsList() {
         if (!user) return;
 
         friendsListContainer.innerHTML = ''; // Start fresh
 
         // Defensively ensure friendUIDs are unique to prevent issues from upstream.
-        const uniqueFriendUIDs = friendUIDs ? [...new Set(friendUIDs)] : [];
+        const uniqueFriendUIDs = confirmedFriendUIDs ? [...new Set(confirmedFriendUIDs)] : [];
 
         // 1. Fetch confirmed friends data
         let confirmedFriends = [];
