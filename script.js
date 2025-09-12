@@ -1113,6 +1113,10 @@ async function initializeAppLogic(initialUser) {
         if (task.completedToday) {
             task.completedToday = false;
             delete task.timerFinished;
+            // FIX: Ensure timer properties are cleared when un-completing a task
+            // to prevent it from resuming on page reload.
+            delete task.timerStartTime;
+            delete task.timerDuration;
             if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
                 task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
             }
