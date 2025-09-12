@@ -1092,6 +1092,14 @@ body.is-dragging .main-quest-group {
     box-shadow: 4px 4px 0 var(--shadow-color);
 }
 
+/* NEW: Style for tasks pending a share acceptance */
+.task-item.is-shared-task.pending-share {
+    border-style: dotted;
+    border-color: var(--accent-orange);
+    --shadow-color: var(--accent-orange);
+    opacity: 0.8;
+}
+
 /*
 ==========================================================================
 SHARED QUESTS

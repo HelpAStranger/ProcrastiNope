@@ -848,15 +848,27 @@ async function initializeAppLogic(initialUser) {
         // We still render them, but with a different style and disabled interactions.
         if (task.isShared) {
             li.classList.add('is-shared-task');
-            const completeBtn = li.querySelector('.complete-btn');
-            if (completeBtn) {
-                completeBtn.disabled = true;
-                completeBtn.title = 'This is a shared quest, manage its completion in the Shared Quests section.';
+            const sharedQuest = sharedQuests.find(sq => sq.id === task.sharedQuestId);
+
+            if (sharedQuest && sharedQuest.status === 'pending') {
+                li.classList.add('pending-share');
+                const buttonWrapper = li.querySelector('.task-buttons-wrapper');
+                if (buttonWrapper) {
+                    buttonWrapper.innerHTML = `
+                        <button class="btn icon-btn unshare-btn" aria-label="Cancel Share" title="Cancel Share"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>
+                    `;
+                }
+            } else { // Active or completed shared task
+                const completeBtn = li.querySelector('.complete-btn');
+                if (completeBtn) {
+                    completeBtn.disabled = true;
+                    completeBtn.title = 'This is a shared quest, manage its completion in the Shared Quests section.';
+                }
+                li.querySelectorAll('.timer-clock-btn, .share-btn, .edit-btn').forEach(btn => {
+                    btn.disabled = true;
+                    btn.title = 'This quest has been shared. Interactions are disabled here.';
+                });
             }
-            li.querySelectorAll('.timer-clock-btn, .share-btn, .edit-btn').forEach(btn => {
-                btn.disabled = true;
-                btn.title = 'This quest has been shared. Interactions are disabled here.';
-            });
         }
 
         return li;
@@ -1056,6 +1068,39 @@ async function initializeAppLogic(initialUser) {
             if (type === 'daily') task.weeklyGoal = goal;
             saveState();
             renderAllLists();
+        }
+    };
+    const revertSharedQuest = (originalTaskId) => {
+        if (!originalTaskId) return;
+        const { task } = findTaskAndContext(originalTaskId);
+        if (task && task.isShared) {
+            task.isShared = false;
+            delete task.sharedQuestId;
+            saveState();
+            renderAllLists();
+            playSound('delete');
+        }
+    };
+
+    const cancelShare = async (originalTaskId) => {
+        const { task } = findTaskAndContext(originalTaskId);
+        if (!task || !task.isShared || !task.sharedQuestId) return;
+
+        const sharedQuestId = task.sharedQuestId;
+
+        // Revert the local task first
+        task.isShared = false;
+        delete task.sharedQuestId;
+
+        try {
+            await deleteDoc(doc(db, "sharedQuests", sharedQuestId));
+            saveState();
+            renderAllLists();
+            playSound('delete');
+        } catch (error) {
+            console.error("Error cancelling share:", getCoolErrorMessage(error));
+            task.isShared = true;
+            task.sharedQuestId = sharedQuestId;
         }
     };
     function finishTimer(id) {
@@ -1297,6 +1342,9 @@ async function initializeAppLogic(initialUser) {
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.delete-btn')) deleteTask(id);
+                else if (e.target.closest('.unshare-btn')) {
+                    cancelShare(id);
+                }
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) { 
                         showConfirm("Shared Quest", "This quest has already been shared.", () => {});
@@ -1781,24 +1829,51 @@ async function initializeAppLogic(initialUser) {
         }));
 
         // NEW: Listener for friend removals initiated by other users.
-        const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
-        listeners.push(onSnapshot(removalsQuery, (snapshot) => {
+        const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid), where("status", "ne", "processed"));
+        listeners.push(onSnapshot(removalsQuery, async (snapshot) => {
             if (snapshot.empty) return;
 
-            const batch = writeBatch(db);
-            const currentUserRef = doc(db, "users", user.uid);
+            for (const change of snapshot.docChanges()) {
+                if (change.type !== 'added') continue;
 
-            snapshot.forEach(removalDoc => {
-                const removerUid = removalDoc.data().removerUid;
-                // Remove the friend who initiated the removal from my list.
+                const removalDoc = change.doc;
+                const removalData = removalDoc.data();
+                const removerUid = removalData.removerUid;
+                const sharedQuestIds = removalData.sharedQuestIds || [];
+
+                let localStateChanged = false;
+                if (sharedQuestIds.length > 0) {
+                    const questsQuery = query(collection(db, "sharedQuests"), where(documentId(), 'in', sharedQuestIds));
+                    const questsSnap = await getDocs(questsQuery);
+
+                    for (const questDoc of questsSnap.docs) {
+                        const questData = questDoc.data();
+                        if (questData.ownerUid === user.uid) {
+                            const { task } = findTaskAndContext(questData.originalTaskId);
+                            if (task) {
+                                task.isShared = false;
+                                delete task.sharedQuestId;
+                                localStateChanged = true;
+                            }
+                        }
+                    }
+                }
+
+                const batch = writeBatch(db);
+                const currentUserRef = doc(db, "users", user.uid);
                 batch.update(currentUserRef, { friends: arrayRemove(removerUid) });
-                // Delete the trigger document to clean up.
+                sharedQuestIds.forEach(id => batch.delete(doc(db, "sharedQuests", id)));
                 batch.delete(removalDoc.ref);
-            });
 
-            batch.commit().catch(error => {
-                console.error("Error processing friend removal:", getCoolErrorMessage(error));
-            });
+                await batch.commit().catch(error => {
+                    console.error("Error processing friend removal:", getCoolErrorMessage(error));
+                });
+
+                if (localStateChanged) {
+                    saveState();
+                    renderAllLists();
+                }
+            }
         }));
 
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
@@ -2169,6 +2244,16 @@ async function initializeAppLogic(initialUser) {
                     questsMap.delete(change.doc.id);
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id };
+
+                    // NEW: Handle rejection by owner
+                    if (newQuest.status === 'rejected' && newQuest.ownerUid === user.uid) {
+                        revertSharedQuest(newQuest.originalTaskId);
+                        // After reverting, delete the sharedQuest document.
+                        deleteDoc(doc(db, "sharedQuests", newQuest.id));
+                        questsMap.delete(change.doc.id); // Ensure it's removed from the local map
+                        return; // Stop processing this change
+                    }
+
                     const oldQuest = questsMap.get(change.doc.id);
                     if (oldQuest && change.type === 'modified') {
                          const isOwner = newQuest.ownerUid === user.uid;
@@ -2210,6 +2295,16 @@ async function initializeAppLogic(initialUser) {
         );
         unsubscribers.push(onSnapshot(completedQuery, handleSnapshot, (error) => {
             console.error("Error listening for completed quests:", getCoolErrorMessage(error));
+        }));
+
+        // NEW: Create a listener for 'rejected' quests
+        const rejectedQuery = query(
+            collection(db, "sharedQuests"),
+            where("participants", "array-contains", user.uid),
+            where("status", "==", "rejected")
+        );
+        unsubscribers.push(onSnapshot(rejectedQuery, handleSnapshot, (error) => {
+            console.error("Error listening for rejected shared quests:", getCoolErrorMessage(error));
         }));
 
         unsubscribeFromSharedQuests = () => unsubscribers.forEach(unsub => unsub());
@@ -2565,9 +2660,11 @@ async function initializeAppLogic(initialUser) {
     async function denySharedQuest(questId) {
         if (!user) return;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
-        showConfirm("Deny Shared Quest?", "This will remove the quest from your shares. The owner will still see it as pending.", async () => {
+        showConfirm("Deny Shared Quest?", "The owner will be notified and the quest will revert to a normal quest for them.", async () => {
             try {
-                await deleteDoc(sharedQuestRef);
+                // Instead of deleting, update the status to 'rejected'.
+                // The owner's client will listen for this change and clean up.
+                await updateDoc(sharedQuestRef, { status: 'rejected' });
                 playSound('delete');
             } catch (error) {
                 console.error("Error denying shared quest:", getCoolErrorMessage(error));
