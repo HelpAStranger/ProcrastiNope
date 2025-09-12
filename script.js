@@ -859,10 +859,10 @@ async function initializeAppLogic(initialUser) {
                     completeBtn.disabled = true;
                     completeBtn.title = 'This is a shared quest, manage its completion in the Shared Quests section.';
                 }
-                li.querySelectorAll('.timer-clock-btn, .share-btn, .edit-btn').forEach(btn => {
-                    btn.disabled = true;
-                    btn.title = 'This quest has been shared. Interactions are disabled here.';
-                });
+                const buttonWrapper = li.querySelector('.task-buttons-wrapper');
+                if (buttonWrapper) {
+                    buttonWrapper.innerHTML = `<button class="btn view-shared-quest-btn" data-shared-quest-id="${task.sharedQuestId}">View Share</button>`;
+                }
             }
         }
 
@@ -1337,6 +1337,19 @@ async function initializeAppLogic(initialUser) {
             if(e.target.closest('button')) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.delete-btn')) deleteTask(id);
+                else if (e.target.closest('.view-shared-quest-btn')) {
+                    const sharedQuestId = e.target.dataset.sharedQuestId;
+                    const sharedQuestEl = document.querySelector(`.task-item.shared-quest[data-id="${sharedQuestId}"]`);
+                    if (sharedQuestEl) {
+                        sharedQuestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        sharedQuestEl.classList.add('friend-completed-pulse');
+                        sharedQuestEl.addEventListener('animationend', () => sharedQuestEl.classList.remove('friend-completed-pulse'), { once: true });
+                    }
+                    if (taskItem.classList.contains('actions-visible')) {
+                        toggleTaskActions(taskItem);
+                    }
+                    return;
+                }
                 else if (e.target.closest('.unshare-btn')) {
                     cancelShare(id);
                 }
