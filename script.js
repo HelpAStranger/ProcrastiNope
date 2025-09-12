@@ -491,13 +491,17 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
-    function debounce(func, delay) {
+    function debounce(func, delay) { // MODIFIED: Added a cancel method
         let timeout;
-        return function(...args) {
+        const debounced = function(...args) {
             const context = this;
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(context, args), delay);
         };
+        debounced.cancel = function() {
+            clearTimeout(timeout);
+        };
+        return debounced;
     }
 
     async function saveData(data) {
@@ -2740,6 +2744,7 @@ async function initializeAppLogic(initialUser) {
     return {
         isPartial: false,
         shutdown: () => {
+             debouncedSaveData.cancel();
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
              if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares(); // Changed
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
