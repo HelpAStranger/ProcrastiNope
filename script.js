@@ -2100,34 +2100,49 @@ async function initializeAppLogic(initialUser) {
         if (!button) return;
         const friendUidToRemove = button.dataset.uid;
 
-        showConfirm("Remove Friend?", "This will also delete any active shared quests with this friend. Are you sure?", async () => {
+        showConfirm("Remove Friend?", "Shared quests will be converted back to normal quests for both of you. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
 
+            // 1. Find all shared quests to pass their IDs to the removal trigger.
+            const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
+            const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
+            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+            const sharedQuestDocs = [...snap1.docs, ...snap2.docs];
+            const sharedQuestIds = sharedQuestDocs.map(d => d.id);
+
+            // 2. Revert quests that I own in my local state.
+            let localStateChanged = false;
+            for (const questDoc of sharedQuestDocs) {
+                const questData = questDoc.data();
+                if (questData.ownerUid === user.uid) {
+                    const { task } = findTaskAndContext(questData.originalTaskId);
+                    if (task) {
+                        task.isShared = false;
+                        delete task.sharedQuestId;
+                        localStateChanged = true;
+                    }
+                }
+            }
+
+            // 3. Create a batch to update Firestore.
             const batch = writeBatch(db);
-            
-            // 1. Remove friend from my list.
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
 
-            // 2. Create a removal trigger document for the other user to process.
-            // This is necessary because security rules prevent us from writing to another user's document.
-            const removalId = [user.uid, friendUidToRemove].join('_');
+            const removalId = [user.uid, friendUidToRemove].sort().join('_');
             const removalRef = doc(db, "friendRemovals", removalId);
             batch.set(removalRef, {
                 removerUid: user.uid,
                 removeeUid: friendUidToRemove,
+                sharedQuestIds: sharedQuestIds,
                 createdAt: Date.now()
             });
 
-            // 3. Query for and delete all shared quests between these two users.
-            const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
-            const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
-
-            const [querySnapshot1, querySnapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-
-            querySnapshot1.forEach(doc => batch.delete(doc.ref));
-            querySnapshot2.forEach(doc => batch.delete(doc.ref));
-
             await batch.commit();
+
+            if (localStateChanged) {
+                saveState();
+                renderAllLists();
+            }
         });
     }
 
