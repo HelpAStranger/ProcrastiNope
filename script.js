@@ -1055,7 +1055,6 @@ async function initializeAppLogic(initialUser) {
             }
         } else {
             task.pendingDeletion = true;
-            createConfetti(document.querySelector(`.task-item[data-id="${id}"]`));
 
             if (undoTimeoutMap.has(id)) {
                 clearTimeout(undoTimeoutMap.get(id));
@@ -1079,7 +1078,19 @@ async function initializeAppLogic(initialUser) {
             undoTimeoutMap.set(id, timeoutId);
         }
         if (type === 'daily') saveState();
-        renderAllLists();
+
+        // Replace the element directly to stop animations and update state instantly.
+        const oldTaskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+        if (oldTaskEl) {
+            const newTaskEl = createTaskElement(task, type);
+            oldTaskEl.replaceWith(newTaskEl);
+            if (type !== 'daily') { // Main quest completion
+                createConfetti(newTaskEl);
+            }
+        } else {
+            renderAllLists(); // Fallback if element not found
+        }
+
         const { allDailiesDone, allTasksDone } = checkAllTasksCompleted();
         if (allTasksDone) createFullScreenConfetti(true);
         else if (allDailiesDone) createFullScreenConfetti(false);
@@ -1108,7 +1119,15 @@ async function initializeAppLogic(initialUser) {
             addXp(-XP_PER_TASK);
             playSound('delete');
             saveState();
-            renderAllLists();
+
+            // Replace the element directly to stop animations and update state instantly.
+            const oldTaskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+            if (oldTaskEl) {
+                const newTaskEl = createTaskElement(task, type);
+                oldTaskEl.replaceWith(newTaskEl);
+            } else {
+                renderAllLists(); // Fallback if element not found
+            }
         }
     };
     const editTask = (id, text, goal) => {
