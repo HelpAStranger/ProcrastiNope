@@ -101,9 +101,12 @@ service cloud.firestore {
 
     // Shared quests between friends
     match /sharedQuests/{questId} {
-      // Participants can read, update, and delete. This explicit check is more reliable
-      // than checking the 'participants' array for all operations.
-      allow read, update, delete: if request.auth != null &&
+      // Rule for collection queries and single-doc reads. Must match the query structure.
+      allow read: if request.auth != null &&
+                   request.auth.uid in resource.data.participants;
+
+      // Rule for single-doc updates and deletes. This explicit check is more robust.
+      allow update, delete: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
 
       // Only the owner can create a shared quest
