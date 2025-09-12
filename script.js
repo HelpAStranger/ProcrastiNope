@@ -2312,6 +2312,14 @@ async function initializeAppLogic(initialUser) {
                         return; // Stop processing this change
                     }
 
+                    // NEW: If a quest is newly marked as 'completed', trigger the finish animation for both users.
+                    if (newQuest.status === 'completed') {
+                        const oldQuest = questsMap.get(change.doc.id);
+                        if (!oldQuest || oldQuest.status !== 'completed') {
+                            finishSharedQuestAnimation(newQuest);
+                        }
+                    }
+
                     const oldQuest = questsMap.get(change.doc.id);
                     if (oldQuest && change.type === 'modified') {
                          const isOwner = newQuest.ownerUid === user.uid;
@@ -2521,29 +2529,42 @@ async function initializeAppLogic(initialUser) {
 
         // Fetch the updated document to check if both are completed
         const updatedDoc = await getDoc(sharedQuestRef);
-        if(updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
-            finishSharedQuest({ ...updatedDoc.data(), id: questId });
+        if (updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
+            // Now, just update the status. The onSnapshot listener will handle the animation.
+            await updateDoc(sharedQuestRef, { status: 'completed' });
         }
     }
     
-    async function finishSharedQuest(questData) {
+    async function finishSharedQuestAnimation(questData) {
         playSound('sharedQuestFinish');
-        
-        // Update the status to 'completed' first
-        const sharedQuestRef = doc(db, "sharedQuests", questData.id);
-        await updateDoc(sharedQuestRef, { status: 'completed' });
-
         const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
+        
         if (taskEl) {
             taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
             taskEl.addEventListener('animationend', async () => {
-                // Only delete the document after the animation
-                await deleteDoc(sharedQuestRef);
+                // Only the owner deletes the document to prevent race conditions.
+                const isOwner = user && questData.ownerUid === user.uid;
+                if (isOwner) {
+                    const sharedQuestRef = doc(db, "sharedQuests", questData.id);
+                    await deleteDoc(sharedQuestRef).catch(err => {
+                        if (err.code !== 'not-found') {
+                            console.error("Error deleting shared quest:", getCoolErrorMessage(err));
+                        }
+                    });
+                }
             }, { once: true });
         } else {
-            // If element not found (e.g., user on different screen), delete immediately
-            await deleteDoc(sharedQuestRef);
+            // If element not found (e.g., user on different screen), owner still cleans up.
+            const isOwner = user && questData.ownerUid === user.uid;
+            if (isOwner) {
+                const sharedQuestRef = doc(db, "sharedQuests", questData.id);
+                await deleteDoc(sharedQuestRef).catch(err => {
+                    if (err.code !== 'not-found') {
+                        console.error("Error deleting shared quest:", getCoolErrorMessage(err));
+                    }
+                });
+            }
         }
     }
 
