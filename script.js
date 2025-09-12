@@ -1348,9 +1348,40 @@ async function initializeAppLogic(initialUser) {
                     const sharedQuestId = e.target.dataset.sharedQuestId;
                     const sharedQuestEl = document.querySelector(`.task-item.shared-quest[data-id="${sharedQuestId}"]`);
                     if (sharedQuestEl) {
-                        sharedQuestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        sharedQuestEl.classList.add('friend-completed-pulse');
-                        sharedQuestEl.addEventListener('animationend', () => sharedQuestEl.classList.remove('friend-completed-pulse'), { once: true });
+                        const isMobile = window.matchMedia("(max-width: 1023px)").matches;
+                        const dailySection = document.querySelector('.task-group[data-section="daily"]');
+                        let sectionWasSwitched = false;
+
+                        // If on mobile and the daily section is not visible, switch to it.
+                        if (isMobile && dailySection && !dailySection.classList.contains('mobile-visible')) {
+                            sectionWasSwitched = true;
+                            
+                            // Switch visible section
+                            document.querySelectorAll('.task-group').forEach(group => {
+                                group.classList.toggle('mobile-visible', group.dataset.section === 'daily');
+                            });
+
+                            // Switch active nav button
+                            mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+                                btn.classList.toggle('active', btn.dataset.section === 'daily');
+                            });
+                            
+                            lastSection = 'daily';
+                            playSound('toggle');
+                        }
+
+                        const scrollAndAnimate = () => {
+                            sharedQuestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            sharedQuestEl.classList.add('friend-completed-pulse');
+                            sharedQuestEl.addEventListener('animationend', () => sharedQuestEl.classList.remove('friend-completed-pulse'), { once: true });
+                        };
+
+                        if (sectionWasSwitched) {
+                            // Use a small timeout to allow the DOM to update if the section was hidden
+                            setTimeout(scrollAndAnimate, 50);
+                        } else {
+                            scrollAndAnimate();
+                        }
                     }
                     if (taskItem.classList.contains('actions-visible')) {
                         toggleTaskActions(taskItem);
