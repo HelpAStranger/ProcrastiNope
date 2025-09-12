@@ -136,6 +136,7 @@ let currentUser = null;
 let unsubscribeFromFirestore = null;
 let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFriends
 let unsubscribeFromSharedQuests = null;
+let unsubscribeFromSharedGroups = null; // NEW
 let appController = null;
 
 let activeMobileActionsItem = null; 
@@ -212,6 +213,10 @@ try {
         if (unsubscribeFromSharedQuests) {
             unsubscribeFromSharedQuests();
             unsubscribeFromSharedQuests = null;
+        }
+        if (unsubscribeFromSharedGroups) {
+            unsubscribeFromSharedGroups();
+            unsubscribeFromSharedGroups = null;
         }
         
         currentUser = user;
@@ -321,7 +326,7 @@ async function initializeAppLogic(initialUser) {
 
     let lastSection = 'daily';
 
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedQuests = [], incomingFriendRequests = [], outgoingFriendRequests = [];
+    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], sharedGroups = [], incomingSharedQuests = [], outgoingFriendRequests = [];
     let confirmedFriendUIDs = []; // NEW: Centralized state for friend UIDs
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
@@ -331,7 +336,8 @@ async function initializeAppLogic(initialUser) {
 
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
     
-    const sharedQuestsContainer = document.getElementById('shared-quests-container');
+    const sharedDailyQuestsContainer = document.getElementById('shared-daily-quests-container');
+    const sharedMainQuestsContainer = document.getElementById('shared-main-quests-container');
     const dailyTaskListContainer = document.getElementById('daily-task-list');
     const standaloneTaskListContainer = document.getElementById('standalone-task-list');
     const generalTaskListContainer = document.getElementById('general-task-list-container');
@@ -589,6 +595,8 @@ async function initializeAppLogic(initialUser) {
             
             // Listen for friend requests and incoming shared quests
             listenForFriendsAndShares(); 
+            // Listen for shared groups
+            listenForSharedGroups();
             // Listen for active shared quests (those accepted by both)
             listenForSharedQuests();
 
@@ -701,31 +709,44 @@ async function initializeAppLogic(initialUser) {
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    const renderSharedQuests = () => {
-        sharedQuestsContainer.innerHTML = '';
-        
-        // The `sharedQuests` array is already filtered for active/completed quests by the listener.
-        const groupedSharedQuests = sharedQuests.reduce((acc, quest) => {
+    const renderSharedContent = () => {
+        sharedDailyQuestsContainer.innerHTML = '';
+        sharedMainQuestsContainer.innerHTML = '';
+
+        const activeSharedQuests = sharedQuests.filter(q => q.status === 'active' || q.status === 'completed');
+        const dailyShared = activeSharedQuests.filter(q => q.originalTaskType === 'daily');
+        const mainShared = activeSharedQuests.filter(q => q.originalTaskType !== 'daily');
+
+        const renderGroupedQuests = (quests, container) => {
+            const grouped = quests.reduce((acc, quest) => {
             const groupName = quest.sharedGroupName || 'Individual Shared Quests';
             if (!acc[groupName]) {
                 acc[groupName] = [];
             }
             acc[groupName].push(quest);
             return acc;
-        }, {});
+            }, {});
 
-        for (const groupName in groupedSharedQuests) {
-            const groupEl = document.createElement('div');
-            groupEl.className = 'shared-quest-group';
-            if (groupName !== 'Individual Shared Quests') {
-                groupEl.innerHTML = `<h3 class="shared-group-title">${groupName}</h3>`;
+            for (const groupName in grouped) {
+                const groupEl = document.createElement('div');
+                groupEl.className = 'shared-quest-group';
+                if (groupName !== 'Individual Shared Quests') {
+                    groupEl.innerHTML = `<h3 class="shared-group-title">${groupName}</h3>`;
+                }
+                const ul = document.createElement('ul');
+                ul.className = 'shared-quest-list';
+                grouped[groupName].forEach(task => ul.appendChild(createTaskElement(task, 'shared')));
+                groupEl.appendChild(ul);
+                container.appendChild(groupEl);
             }
-            const ul = document.createElement('ul');
-            ul.className = 'shared-quest-list';
-            groupedSharedQuests[groupName].forEach(task => ul.appendChild(createTaskElement(task, 'shared')));
-            groupEl.appendChild(ul);
-            sharedQuestsContainer.appendChild(groupEl);
         }
+
+        renderGroupedQuests(dailyShared, sharedDailyQuestsContainer);
+        renderGroupedQuests(mainShared, sharedMainQuestsContainer);
+
+        sharedGroups.filter(g => g.status === 'active' || g.status === 'completed').forEach(group => {
+            sharedMainQuestsContainer.appendChild(createSharedGroupElement(group));
+        });
     };
     
     // FIX: Updated rendering functions to correctly display tasks based on data
@@ -735,7 +756,7 @@ async function initializeAppLogic(initialUser) {
         // The placeholder for pending shares should still be rendered.
         const tasksToRender = dailyTasks.filter(task => {
             if (!task.isShared) return true; // Render normal tasks
-            // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
+            // If individually shared, only render if it's still pending
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
         });
 
@@ -746,7 +767,10 @@ async function initializeAppLogic(initialUser) {
         standaloneTaskListContainer.innerHTML = '';
         const tasksToRender = standaloneMainQuests.filter(task => {
             if (!task.isShared) return true;
-            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            // If individually shared, only render if it's still pending
+            const isIndividuallyShared = sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            // A task in a shared group is not handled here, its original group is.
+            return !isIndividuallyShared;
         });
         tasksToRender.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone')));
     };
@@ -758,30 +782,113 @@ async function initializeAppLogic(initialUser) {
         });
 
         const hasVisibleStandalone = standaloneMainQuests.some(task => {
-            if (!task.isShared) return true;
-            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            return !task.isShared;
         });
 
         const hasVisibleGrouped = generalTaskGroups.some(g =>
-            g.tasks && g.tasks.some(task => {
-                if (!task.isShared) return true;
-                return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
-            })
+            !g.isShared && g.tasks && g.tasks.length > 0
         );
 
         noGeneralTasksMessage.style.display = (hasVisibleStandalone || hasVisibleGrouped) ? 'none' : 'block';
     };
     const createGroupElement = (group) => {
+        // Don't render the original group if it has been shared. It's replaced by the shared version.
+        // The `isShared` property is a placeholder on the owner's side.
+        if (group.isShared) {
+            const sharedGroup = sharedGroups.find(sg => sg.id === group.sharedGroupId);
+            // Only render the placeholder if the share is pending. Active shares are rendered separately.
+            if (!sharedGroup || sharedGroup.status !== 'pending') {
+                return document.createDocumentFragment(); // Return an empty fragment
+            }
+        }
+
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        
+        let headerClass = 'main-quest-group-header';
+        let buttonsHTML = '';
+
+        if (group.isShared) {
+            headerClass += ' is-shared-group';
+            const sharedGroup = sharedGroups.find(sg => sg.id === group.sharedGroupId);
+            if (sharedGroup && sharedGroup.status === 'pending') {
+                headerClass += ' pending-share';
+                buttonsHTML = `<button class="btn unshare-group-btn" data-shared-group-id="${group.sharedGroupId}">Cancel Share</button>`;
+            } else {
+                buttonsHTML = `<button class="btn view-shared-group-btn" data-shared-group-id="${group.sharedGroupId}">View Share</button>`;
+            }
+        } else {
+            buttonsHTML = `
+                <button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                <button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                <button class="btn add-task-to-group-btn" aria-label="Add task">+</button>
+            `;
+        }
+
+        el.innerHTML = `<header class="${headerClass}"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions">${buttonsHTML}</div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
-            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            // Don't render tasks that are part of an *individual* share from within a group
+            return !sharedQuests.some(sq => sq.id === task.sharedQuestId); 
         });
         tasksToRender.forEach(task => ul.appendChild(createTaskElement(task, 'group')));
         return el;
     };
+
+    const createSharedGroupElement = (group) => {
+        const el = document.createElement('div');
+        el.className = 'main-quest-group shared-group expanded'; // Shared groups are always expanded
+        el.dataset.sharedGroupId = group.id;
+
+        const isOwner = user.uid === group.ownerUid;
+        const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
+
+        const unshareBtn = isOwner ? `<button class="btn icon-btn unshare-group-btn" aria-label="Unshare Group" title="Unshare Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
+        const abandonBtn = !isOwner ? `<button class="btn icon-btn abandon-group-btn" aria-label="Abandon Group" title="Abandon Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
+
+        el.innerHTML = `
+            <header class="main-quest-group-header">
+                <div class="group-title-container">
+                    <h3>${group.groupName}</h3>
+                    <span class="shared-with-tag" style="margin-left: 1rem; opacity: 1;">with ${otherPlayerUsername}</span>
+                </div>
+                <div class="group-actions" style="opacity: 1; pointer-events: auto; position: static; background: transparent; backdrop-filter: none;">
+                    ${unshareBtn}
+                    ${abandonBtn}
+                </div>
+            </header>
+            <ul class="task-list-group" style="max-height: 1000px; margin-top: 1rem; padding-right: 0.5rem; padding-bottom: 0.5rem;"></ul>
+        `;
+
+        const ul = el.querySelector('ul');
+        group.tasks.forEach(task => {
+            const taskEl = document.createElement('li');
+            taskEl.className = 'task-item';
+            taskEl.dataset.id = task.id;
+            taskEl.dataset.sharedGroupId = group.id;
+
+            const myPartCompleted = isOwner ? task.ownerCompleted : task.friendCompleted;
+
+            taskEl.innerHTML = `
+                <button class="complete-btn"></button>
+                <div class="task-content"><span class="task-text">${task.text}</span></div>
+                <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
+                    <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
+                    <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
+                </div>
+            `;
+            if (myPartCompleted) {
+                taskEl.querySelector('.complete-btn').classList.add('checked');
+                taskEl.classList.add('my-part-completed');
+            }
+            ul.appendChild(taskEl);
+        });
+
+        return el;
+    };
+
     const createTaskElement = (task, type) => {
         const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
         
@@ -969,7 +1076,7 @@ async function initializeAppLogic(initialUser) {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
         for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } 
-        task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
+        task = sharedQuests.find(t => t && t.id === id); if (task) return { task, list: sharedQuests, type: 'shared' };
         return {};
     };
     const deleteTask = (id) => { 
@@ -1140,7 +1247,7 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
-    const editTask = async (id, text, goal) => {
+    const editTask = async (id, text, goal, typeFromContext) => {
         const { task, type } = findTaskAndContext(id);
         if (task) {
             if (type === 'shared') {
@@ -1164,7 +1271,7 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
             task.text = text;
-            if (type === 'daily') task.weeklyGoal = goal;
+            if (typeFromContext === 'daily') task.weeklyGoal = goal;
             saveState();
             renderAllLists();
         }
@@ -2485,6 +2592,7 @@ async function initializeAppLogic(initialUser) {
     
     // --- SHARED QUESTS LOGIC ---
     
+    // This listener now only handles individually shared quests.
     function listenForSharedQuests() {
         if (!user) return;
         if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
@@ -2493,7 +2601,7 @@ async function initializeAppLogic(initialUser) {
         let questsMap = new Map();
         let unsubscribers = [];
 
-        const handleSnapshot = (querySnapshot) => { // PERF: Combined multiple listeners into one.
+        const handleSnapshot = (querySnapshot) => {
             // Process changes to update the map
             querySnapshot.docChanges().forEach((change) => {
                 if (change.type === 'removed') {
@@ -2637,7 +2745,7 @@ async function initializeAppLogic(initialUser) {
         const sharedQuestRef = doc(collection(db, "sharedQuests"));
 
         const sharedQuestData = {
-            text: task.text,
+            text: task.text, // This is for an individual quest
             ownerUid: user.uid,
             ownerUsername: ownerUsername,
             friendUid: friendUid,
@@ -2646,7 +2754,7 @@ async function initializeAppLogic(initialUser) {
             friendCompleted: false,
             createdAt: Date.now(),
             participants: [user.uid, friendUid],
-            status: 'pending', // NEW: Initial status is pending
+            status: 'pending',
             originalTaskId: task.id,
             originalTaskType: type,
             originalGroupId: group ? group.id : null
@@ -2676,7 +2784,7 @@ async function initializeAppLogic(initialUser) {
     }
     
     async function completeSharedQuestPart(task, uncompleting = false) {
-        const questId = task.questId;
+        const questId = task.id;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
         
@@ -2754,8 +2862,11 @@ async function initializeAppLogic(initialUser) {
     async function openShareGroupModal(groupId) {
         if (!user) return; 
         const group = generalTaskGroups.find(g => g.id === groupId);
-        if (!group || !group.tasks || group.tasks.filter(t => !t.isShared).length === 0) {
-            showConfirm("Cannot Share Group", "This group has no non-shared tasks to share.", () => {});
+        if (!group) return;
+
+        const tasksToShare = group.tasks ? group.tasks.filter(t => !t.isShared) : [];
+        if (tasksToShare.length === 0) {
+            showConfirm("Cannot Share Group", "This group has no available quests to share.", () => {});
             return;
         }
 
@@ -2763,60 +2874,50 @@ async function initializeAppLogic(initialUser) {
         shareGroupIdInput.value = groupId;
         shareGroupFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
         openModal(shareGroupModal);
-
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        const friendUIDs = userDoc.data().friends || [];
         
-        if (friendUIDs.length === 0) {
+        if (confirmedFriendUIDs.length === 0) {
             shareGroupFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share groups with!</p>';
             return;
         }
 
         shareGroupFriendList.innerHTML = '';
-        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', confirmedFriendUIDs));
         const friendDocs = await getDocs(friendsQuery);
 
         friendDocs.forEach(friendDoc => {
             const friendData = friendDoc.data();
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
-            friendEl.innerHTML = `
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
-                <span class="friend-name">${friendData.username}</span>
-                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
-            `;
+            friendEl.innerHTML = `<div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div><span class="friend-name">${friendData.username}</span><button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>`;
             shareGroupFriendList.appendChild(friendEl);
         });
     }
 
     shareGroupFriendList.addEventListener('click', async (e) => {
         const button = e.target.closest('.share-btn-action');
-        if (button) {
-            button.disabled = true;
-            button.textContent = 'Sharing...';
-            const groupId = shareGroupIdInput.value;
-            const friendUid = button.dataset.uid;
-            const friendUsername = button.dataset.username;
+        if (!button) return;
+        button.disabled = true;
+        button.textContent = 'Sharing...';
+        const groupId = shareGroupIdInput.value;
+        const friendUid = button.dataset.uid;
+        const friendUsername = button.dataset.username;
 
-            try {
-                await shareGroup(groupId, friendUid, friendUsername);
-                closeModal(shareGroupModal);
-            } catch (error) {
-                console.error("Failed to share group:", error);
-                showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => {});
-                button.disabled = false;
-                button.textContent = 'Share';
-            }
+        try {
+            await shareGroup(groupId, friendUid, friendUsername);
+            closeModal(shareGroupModal);
+        } catch (error) {
+            console.error("Failed to share group:", error);
+            showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => {});
+            button.disabled = false;
+            button.textContent = 'Share';
         }
     });
 
     async function shareGroup(groupId, friendUid, friendUsername) {
         if (!user) return;
 
-        const groupIndex = generalTaskGroups.findIndex(g => g.id === groupId);
-        if (groupIndex === -1) return;
-
-        const groupToShare = generalTaskGroups[groupIndex];
+        const groupToShare = generalTaskGroups.find(g => g.id === groupId);
+        if (!groupToShare) return;
         const tasksToShare = groupToShare.tasks.filter(t => !t.isShared);
 
         if (tasksToShare.length === 0) {
@@ -2829,42 +2930,39 @@ async function initializeAppLogic(initialUser) {
 
         const batch = writeBatch(db);
 
-        for (const task of tasksToShare) {
-            const sharedQuestRef = doc(collection(db, "sharedQuests"));
-            const sharedQuestData = {
-                text: task.text,
-                ownerUid: user.uid,
-                ownerUsername: ownerUsername,
-                friendUid: friendUid,
-                friendUsername: friendUsername,
-                ownerCompleted: false,
-                friendCompleted: false,
-                createdAt: Date.now(),
-                participants: [user.uid, friendUid],
-                status: 'pending', // NEW: Initial status is pending
-                originalTaskId: task.id,
-                originalTaskType: 'group',
-                originalGroupId: groupId,
-                sharedGroupName: groupToShare.name
-            };
-            batch.set(sharedQuestRef, sharedQuestData);
+        const sharedGroupRef = doc(collection(db, "sharedGroups"));
 
-            // Mark the original task as shared
-            task.isShared = true;
-            task.sharedQuestId = sharedQuestRef.id;
-        }
-        
-        // BUG FIX: Removed the logic that removes shared tasks from the original group.
-        // They should remain in the list, but marked as shared.
-        // The rendering functions (renderStandaloneTasks, createGroupElement) have been updated
-        // to display shared tasks from the original lists with appropriate styling.
+        const tasksForDoc = tasksToShare.map(t => ({
+            id: t.id,
+            text: t.text,
+            ownerCompleted: false,
+            friendCompleted: false,
+        }));
+
+        const sharedGroupData = {
+            groupName: groupToShare.name,
+            ownerUid: user.uid,
+            ownerUsername: ownerUsername,
+            friendUid: friendUid,
+            friendUsername: friendUsername,
+            tasks: tasksForDoc,
+            createdAt: Date.now(),
+            participants: [user.uid, friendUid],
+            status: 'pending',
+            originalGroupId: groupId,
+        };
+        batch.set(sharedGroupRef, sharedGroupData);
+
+        // Mark the original group as shared
+        groupToShare.isShared = true;
+        groupToShare.sharedGroupId = sharedGroupRef.id;
 
         const dataToSave = { 
             dailyTasks: dailyTasks, 
             standaloneMainQuests: standaloneMainQuests, 
             generalTaskGroups: generalTaskGroups.map(({ isExpanded, ...rest }) => rest),
             playerData: playerData, 
-            settings: settings
+            settings: settings,
         };
         batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
 
@@ -2876,13 +2974,20 @@ async function initializeAppLogic(initialUser) {
 
     // NEW: Render incoming shared quests in the "Shares" tab
     function renderIncomingShares() {
+        const incomingGroups = sharedGroups.filter(g => g.status === 'pending' && g.friendUid === user.uid);
+        const allIncomingItems = [
+            ...incomingSharedQuests.map(q => ({...q, itemType: 'quest'})),
+            ...incomingGroups.map(g => ({...g, itemType: 'group'}))
+        ];
+
         incomingSharesContainer.innerHTML = '';
-        if (incomingSharedQuests.length === 0) {
+        if (allIncomingItems.length === 0) {
             incomingSharesContainer.innerHTML = `<p style="text-align: center; padding: 1rem;">No incoming shares.</p>`;
+            sharesRequestCountBadge.style.display = 'none';
             return;
         }
 
-        const sharesCount = incomingSharedQuests.length;
+        const sharesCount = allIncomingItems.length;
         if (sharesCount > 0) {
             sharesRequestCountBadge.textContent = sharesCount;
             sharesRequestCountBadge.style.display = 'flex';
@@ -2891,14 +2996,16 @@ async function initializeAppLogic(initialUser) {
         }
 
 
-        incomingSharedQuests.forEach(quest => {
+        allIncomingItems.forEach(item => {
             const shareItemEl = document.createElement('div');
             shareItemEl.className = 'incoming-share-item';
+            const text = item.itemType === 'quest' ? `Quest: "${item.text}"` : `Group: "${item.groupName}"`;
+            const id = item.itemType === 'quest' ? item.id : item.id;
             shareItemEl.innerHTML = `
-                <span>"${quest.text}" from ${quest.ownerUsername}</span>
+                <span>${text} from ${item.ownerUsername}</span>
                 <div class="incoming-share-actions">
-                    <button class="btn icon-btn accept-share-btn" data-quest-id="${quest.questId}" aria-label="Accept shared quest">&#10003;</button>
-                    <button class="btn icon-btn deny-share-btn" data-quest-id="${quest.questId}" aria-label="Deny shared quest">&times;</button>
+                    <button class="btn icon-btn accept-share-btn" data-id="${id}" data-type="${item.itemType}" aria-label="Accept Share">&#10003;</button>
+                    <button class="btn icon-btn deny-share-btn" data-id="${id}" data-type="${item.itemType}" aria-label="Deny Share">&times;</button>
                 </div>
             `;
             incomingSharesContainer.appendChild(shareItemEl);
@@ -2906,30 +3013,32 @@ async function initializeAppLogic(initialUser) {
     }
 
     // NEW: Accept a shared quest
-    async function acceptSharedQuest(questId) {
+    async function acceptSharedItem(id, type) {
         if (!user) return;
-        const sharedQuestRef = doc(db, "sharedQuests", questId);
+        const collectionName = type === 'quest' ? 'sharedQuests' : 'sharedGroups';
+        const itemRef = doc(db, collectionName, id);
         try {
-            await updateDoc(sharedQuestRef, { status: 'active' });
+            await updateDoc(itemRef, { status: 'active' });
             playSound('toggle'); // Use toggle sound for acceptance
         } catch (error) {
-            console.error("Error accepting shared quest:", getCoolErrorMessage(error));
-            showConfirm("Error", "Failed to accept quest. Please try again.", () => {});
+            console.error(`Error accepting shared ${type}:`, getCoolErrorMessage(error));
+            showConfirm("Error", `Failed to accept ${type}. Please try again.`, () => {});
         }
     }
 
     // NEW: Deny a shared quest
-    async function denySharedQuest(questId) {
+    async function denySharedItem(id, type) {
         if (!user) return;
-        const sharedQuestRef = doc(db, "sharedQuests", questId);
-        showConfirm("Deny Shared Quest?", "The owner will be notified and the quest will revert to a normal quest for them.", async () => {
+        const collectionName = type === 'quest' ? 'sharedQuests' : 'sharedGroups';
+        const itemRef = doc(db, collectionName, id);
+        showConfirm(`Deny Shared ${type}?`, `The owner will be notified and this will be removed.`, async () => {
             try {
                 // Instead of deleting, update the status to 'rejected'.
                 // The owner's client will listen for this change and clean up.
-                await updateDoc(sharedQuestRef, { status: 'rejected' });
+                await updateDoc(itemRef, { status: 'rejected' });
                 playSound('delete');
             } catch (error) {
-                console.error("Error denying shared quest:", getCoolErrorMessage(error));
+                console.error(`Error denying shared ${type}:`, getCoolErrorMessage(error));
                 showConfirm("Error", "Failed to deny quest. Please try again.", () => {});
             }
         });
@@ -2941,11 +3050,13 @@ async function initializeAppLogic(initialUser) {
         const denyBtn = e.target.closest('.deny-share-btn');
         
         if (acceptBtn) {
-            const questId = acceptBtn.dataset.questId;
-            acceptSharedQuest(questId);
+            const id = acceptBtn.dataset.id;
+            const type = acceptBtn.dataset.type;
+            acceptSharedItem(id, type);
         } else if (denyBtn) {
-            const questId = denyBtn.dataset.questId;
-            denySharedQuest(questId);
+            const id = denyBtn.dataset.id;
+            const type = denyBtn.dataset.type;
+            denySharedItem(id, type);
         }
     });
 
@@ -2981,6 +3092,7 @@ async function initializeAppLogic(initialUser) {
         shutdown: () => {
              debouncedSaveData.cancel();
              Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+             if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
              if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares(); // Changed
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
         },
@@ -2989,6 +3101,27 @@ async function initializeAppLogic(initialUser) {
             await loadUserSession();
         }
     };
+}
+
+function listenForSharedGroups() {
+    if (!currentUser) return;
+    if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
+
+    const q = query(
+        collection(db, "sharedGroups"),
+        where("participants", "array-contains", currentUser.uid)
+    );
+
+    unsubscribeFromSharedGroups = onSnapshot(q, (snapshot) => {
+        const newSharedGroups = [];
+        snapshot.forEach(doc => {
+            newSharedGroups.push({ ...doc.data(), id: doc.id });
+        });
+        appController.state.sharedGroups = newSharedGroups;
+        appController.renderAllLists();
+    }, (error) => {
+        console.error("Error listening for shared groups:", getCoolErrorMessage(error));
+    });
 }
 
 function getCoolErrorMessage(error) {
