@@ -697,16 +697,6 @@ async function initializeAppLogic(initialUser) {
         xpTextEl.textContent = `${Math.floor(playerData.xp)} / ${requiredXp} XP`;
         xpBarEl.style.width = `${progressPercent}%`;
     }
-    function checkOverdueTasks() {
-        const now = Date.now();
-        [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks)].forEach(task => {
-            // Only check overdue for non-shared tasks
-            if (!task || task.completedToday || task.isShared) return;
-            const taskEl = document.querySelector(`.task-item[data-id="${task.id}"]`);
-            if (!taskEl) return;
-            taskEl.classList.toggle('overdue', (now - task.createdAt) > 86400000);
-        });
-    }
     function checkAllTasksCompleted() {
         // Only consider non-shared tasks for "all tasks completed" logic
         const allDailiesDone = dailyTasks.length > 0 && dailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
@@ -904,6 +894,12 @@ async function initializeAppLogic(initialUser) {
                     buttonWrapper.innerHTML = `<button class="btn view-shared-quest-btn" data-shared-quest-id="${task.sharedQuestId}">View Share</button>`;
                 }
             }
+        }
+
+        // PERF: Check for overdue status at render time instead of with a setInterval.
+        // Only check for non-shared, non-completed tasks.
+        if (type !== 'shared' && !task.completedToday && !task.isShared && (Date.now() - task.createdAt) > 86400000) {
+            li.classList.add('overdue');
         }
 
         return li;
@@ -1821,8 +1817,8 @@ async function initializeAppLogic(initialUser) {
 
         const commonTaskOptions = {
             animation: 150,
-            delay: 500,
-            delayOnTouchOnly: false,
+            delay: 150, // PERF: Reduced delay for a more responsive feel.
+            delayOnTouchOnly: true, // PERF: Start drag immediately on desktop.
             onStart: (evt) => {
                 const taskId = evt.item.dataset.id;
                 const { task } = findTaskAndContext(taskId);
@@ -1830,7 +1826,7 @@ async function initializeAppLogic(initialUser) {
                     evt.cancel = true;
                     return;
                 }
-                document.body.classList.add('is-dragging');
+                // PERF: Removed adding a class to body to prevent expensive global animations.
             },
             onEnd: onTaskDrop 
         };
@@ -1843,11 +1839,10 @@ async function initializeAppLogic(initialUser) {
         new Sortable(generalTaskListContainer, {
             animation: 150,
             handle: '.main-quest-group-header',
-            delay: 500,
-            delayOnTouchOnly: false,
-            onStart: () => document.body.classList.add('is-dragging'),
+            delay: 150, // PERF: Reduced delay.
+            delayOnTouchOnly: true,
+            onStart: () => {}, // PERF: Removed adding a class to body.
             onEnd: (e) => {
-                document.body.classList.remove('is-dragging');
                 const [item] = generalTaskGroups.splice(e.oldIndex, 1);
                 generalTaskGroups.splice(e.newIndex, 0, item);
                 saveState();
@@ -1857,7 +1852,7 @@ async function initializeAppLogic(initialUser) {
 
     function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
     function createFullScreenConfetti(party, o = null) {
-        for (let i = 0; i < (party ? 200 : 100); i++) {
+        for (let i = 0; i < (party ? 150 : 50); i++) { // PERF: Reduced confetti particle count
             const c = document.createElement('div'); c.className = 'confetti';
             const sx = o ? o.x : Math.random()*window.innerWidth, sy = o ? o.y : -20;
             c.style.left=`${sx}px`; c.style.top=`${sy}px`; c.style.backgroundColor = ['var(--accent-pink)','var(--accent-blue)','var(--accent-green)','var(--accent-orange)','var(--accent-purple)'][Math.floor(Math.random()*5)];
@@ -1867,7 +1862,7 @@ async function initializeAppLogic(initialUser) {
         }
         if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
     }
-    const renderAllLists = () => { renderSharedQuests(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingShares(); checkOverdueTasks(); initSortable(); resumeTimers(); };
+    const renderAllLists = () => { renderSharedQuests(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingShares(); initSortable(); resumeTimers(); };
     
     settingsLoginBtn.addEventListener('click', () => {
         const accountModalContent = accountModal.querySelector('.modal-content');
@@ -2876,7 +2871,6 @@ async function initializeAppLogic(initialUser) {
     const initOnce = () => {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
         showRandomQuote();
-        setInterval(checkOverdueTasks, 60 * 1000);
     };
 
     const initAudioContext = () => {
