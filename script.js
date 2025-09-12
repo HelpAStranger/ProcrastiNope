@@ -1123,17 +1123,22 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
-    const cancelShare = async (originalTaskId, sharedQuestId) => {
-        // FIX: Add defensive check for invalid or "undefined" string for sharedQuestId
-        if (!originalTaskId || !sharedQuestId || sharedQuestId === 'undefined') {
-            console.error("cancelShare called with invalid IDs, aborting.", { originalTaskId, sharedQuestId });
-            showConfirm("Error", "Could not cancel share due to an internal ID mismatch. Please refresh and try again.", () => {});
-            return;
-        }
-        
+    const cancelShare = async (originalTaskId) => {
+        if (!originalTaskId) return;
+
         const { task } = findTaskAndContext(originalTaskId);
         if (!task || !task.isShared) {
             console.error("Could not find original task to cancel share.");
+            return;
+        }
+
+        // Get the ID from the canonical state object, not the DOM, for robustness.
+        const sharedQuestId = task.sharedQuestId;
+
+        // Defensive check for an invalid or missing ID on the state object.
+        if (!sharedQuestId || sharedQuestId === 'undefined') {
+            console.error("cancelShare aborted: sharedQuestId is missing from the task state.", { originalTaskId });
+            showConfirm("Error", "Could not cancel share due to an internal ID mismatch. Please refresh and try again.", () => {});
             return;
         }
 
@@ -1439,10 +1444,8 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
                 else if (e.target.closest('.unshare-btn')) {
-                    const unshareBtn = e.target.closest('.unshare-btn');
-                    const sharedQuestId = unshareBtn.dataset.sharedQuestId;
                     const originalTaskId = taskItem.dataset.id;
-                    cancelShare(originalTaskId, sharedQuestId);
+                    cancelShare(originalTaskId); // Pass only the original task ID for a more robust lookup.
                 }
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) { 
