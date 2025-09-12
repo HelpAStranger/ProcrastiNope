@@ -936,12 +936,22 @@ async function initializeAppLogic(initialUser) {
 
         // NEW: Only allow deletion of shared quests from the shared list if both completed.
         if (type === 'shared') {
-            if (task.status === 'active') {
+            const otherParticipantUid = user.uid === task.ownerUid ? task.friendUid : task.ownerUid;
+            const isFriend = confirmedFriendUIDs.includes(otherParticipantUid);
+
+            // Block deletion ONLY if the quest is active AND the other user is still a friend.
+            if (task.status === 'active' && isFriend) {
                 showConfirm("Cannot Delete Shared Quest", "This shared quest is still active. It can only be deleted once both participants have completed it.", () => {});
                 return;
             }
-            showConfirm("Delete Shared Quest?", "This will delete the quest for all participants.", async () => {
+            // For all other cases (pending, completed, rejected, or active but friend removed), allow deletion.
+            const confirmText = isFriend ? "This will delete the quest for all participants." : "This will remove the orphaned shared quest.";
+            showConfirm("Delete Shared Quest?", confirmText, async () => {
                 try {
+                    // When deleting an orphaned quest, we also need to revert the original task if we are the owner.
+                    if (!isFriend && task.ownerUid === user.uid) {
+                        revertSharedQuest(task.originalTaskId);
+                    }
                     const questDocRef = doc(db, "sharedQuests", id);
                     await deleteDoc(questDocRef);
                     // The onSnapshot listener will handle UI updates
