@@ -738,10 +738,6 @@ async function initializeAppLogic(initialUser) {
     
     // FIX: Updated rendering functions to correctly display tasks based on data
     const renderDailyTasks = () => { 
-        dailyTaskListContainer.innerHTML = ''; 
-        const nonSharedDailies = dailyTasks.filter(task => !task.isShared);
-        noDailyTasksMessage.style.display = nonSharedDailies.length === 0 ? 'block' : 'none'; 
-        dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); 
         dailyTaskListContainer.innerHTML = '';
         // Only render daily tasks that are NOT associated with an active or completed shared quest.
         // The placeholder for pending shares should still be rendered.
@@ -755,9 +751,6 @@ async function initializeAppLogic(initialUser) {
         noDailyTasksMessage.style.display = tasksToRender.length === 0 ? 'block' : 'none';
     };
     const renderStandaloneTasks = () => { 
-        standaloneTaskListContainer.innerHTML = ''; 
-        // BUG FIX: Removed filter for !t.isShared so shared standalone tasks are still rendered.
-        standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
         standaloneTaskListContainer.innerHTML = '';
         const tasksToRender = standaloneMainQuests.filter(task => {
             if (!task.isShared) return true;
@@ -770,10 +763,6 @@ async function initializeAppLogic(initialUser) {
         generalTaskGroups.forEach(group => {
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
-        }); 
-        // The message should only consider non-shared tasks for "no tasks"
-        const hasAnyNonSharedMainQuests = standaloneMainQuests.filter(t => !t.isShared).length > 0 || generalTaskGroups.some(g => g.tasks && g.tasks.filter(t => !t.isShared).length > 0);
-        noGeneralTasksMessage.style.display = hasAnyNonSharedMainQuests ? 'none' : 'block'; 
         });
 
         const hasVisibleStandalone = standaloneMainQuests.some(task => {
@@ -794,8 +783,6 @@ async function initializeAppLogic(initialUser) {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
-        // BUG FIX: Removed filter for !t.isShared so shared group tasks are still rendered.
-        group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
