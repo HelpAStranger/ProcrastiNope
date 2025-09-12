@@ -742,11 +742,28 @@ async function initializeAppLogic(initialUser) {
         const nonSharedDailies = dailyTasks.filter(task => !task.isShared);
         noDailyTasksMessage.style.display = nonSharedDailies.length === 0 ? 'block' : 'none'; 
         dailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily'))); 
+        dailyTaskListContainer.innerHTML = '';
+        // Only render daily tasks that are NOT associated with an active or completed shared quest.
+        // The placeholder for pending shares should still be rendered.
+        const tasksToRender = dailyTasks.filter(task => {
+            if (!task.isShared) return true; // Render normal tasks
+            // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
+            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        });
+
+        tasksToRender.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily')));
+        noDailyTasksMessage.style.display = tasksToRender.length === 0 ? 'block' : 'none';
     };
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = ''; 
         // BUG FIX: Removed filter for !t.isShared so shared standalone tasks are still rendered.
         standaloneMainQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone'))); 
+        standaloneTaskListContainer.innerHTML = '';
+        const tasksToRender = standaloneMainQuests.filter(task => {
+            if (!task.isShared) return true;
+            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        });
+        tasksToRender.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone')));
     };
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
@@ -757,6 +774,21 @@ async function initializeAppLogic(initialUser) {
         // The message should only consider non-shared tasks for "no tasks"
         const hasAnyNonSharedMainQuests = standaloneMainQuests.filter(t => !t.isShared).length > 0 || generalTaskGroups.some(g => g.tasks && g.tasks.filter(t => !t.isShared).length > 0);
         noGeneralTasksMessage.style.display = hasAnyNonSharedMainQuests ? 'none' : 'block'; 
+        });
+
+        const hasVisibleStandalone = standaloneMainQuests.some(task => {
+            if (!task.isShared) return true;
+            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        });
+
+        const hasVisibleGrouped = generalTaskGroups.some(g =>
+            g.tasks && g.tasks.some(task => {
+                if (!task.isShared) return true;
+                return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            })
+        );
+
+        noGeneralTasksMessage.style.display = (hasVisibleStandalone || hasVisibleGrouped) ? 'none' : 'block';
     };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
@@ -764,6 +796,11 @@ async function initializeAppLogic(initialUser) {
         const ul = el.querySelector('ul'); 
         // BUG FIX: Removed filter for !t.isShared so shared group tasks are still rendered.
         group.tasks.forEach(task => ul.appendChild(createTaskElement(task, 'group'))); 
+        const tasksToRender = group.tasks.filter(task => {
+            if (!task.isShared) return true;
+            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        });
+        tasksToRender.forEach(task => ul.appendChild(createTaskElement(task, 'group')));
         return el;
     };
     const createTaskElement = (task, type) => {
