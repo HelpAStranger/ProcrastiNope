@@ -1084,12 +1084,13 @@ body.is-dragging .main-quest-group {
     color: var(--text); /* Keep text color, but italicize */
 }
 
-.task-item.is-shared-task .task-buttons-wrapper .btn:not(.delete-btn) {
+/* For active (not pending) shared tasks, disable most action buttons */
+.task-item.is-shared-task:not(.pending-share) .task-buttons-wrapper .btn:not(.delete-btn) {
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
     transform: none;
-    box-shadow: 4px 4px 0 var(--shadow-color);
+    box-shadow: 4px 4px 0 var(--shadow-color); /* Keep shadow static */
 }
 
 /* NEW: Style for tasks pending a share acceptance */
