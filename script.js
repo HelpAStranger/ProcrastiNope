@@ -939,13 +939,23 @@ async function initializeAppLogic(initialUser) {
             undoTimeoutMap.delete(id);
         }
 
-        const { task } = findTaskAndContext(id);
+        const { task, type } = findTaskAndContext(id);
         if (task && task.pendingDeletion) {
             delete task.pendingDeletion;
             addXp(-XP_PER_TASK); // Revert XP gain
             playSound('delete'); // Use the 'delete' sound for undo
-            renderAllLists();
-            // No saveState needed, as the task was never removed from the array.
+
+            // Instead of a full re-render, specifically replace this one element.
+            // This is more efficient and guarantees the element with the animation is replaced.
+            const oldTaskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+            if (oldTaskEl) {
+                const newTaskEl = createTaskElement(task, type);
+                oldTaskEl.replaceWith(newTaskEl);
+            } else {
+                // Fallback to full render if the element wasn't found
+                renderAllLists();
+            }
+            saveState(); // Save the state to persist the undo.
         }
     };
     const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
