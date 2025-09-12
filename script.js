@@ -1171,10 +1171,32 @@ async function initializeAppLogic(initialUser) {
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
-                    // This is not a hard error, but a race condition. The friend likely accepted or
-                    // rejected the share just as the owner tried to cancel it. The UI will update
-                    // automatically via the Firestore listener, so we can just exit gracefully.
                     console.log("Attempted to cancel a share that was no longer pending. UI will update shortly.");
+
+                    // FIX: The listener might be delayed or have failed. Actively re-sync the state.
+                    const syncQuery = query(
+                        collection(db, "sharedQuests"),
+                        where("originalTaskId", "==", originalTaskId),
+                        where("ownerUid", "==", user.uid)
+                    );
+                    const syncSnapshot = await getDocs(syncQuery);
+
+                    if (syncSnapshot.empty) {
+                        // The sharedQuest doc is completely gone. This implies it was rejected/cancelled and deleted.
+                        // It's safe to revert the original task locally.
+                        revertSharedQuest(originalTaskId);
+                    } else {
+                        // The doc exists, but its status is not 'pending' (e.g., it's 'active').
+                        // Manually update the local state to reflect this and re-render.
+                        const activeQuest = { ...syncSnapshot.docs[0].data(), id: syncSnapshot.docs[0].id, questId: syncSnapshot.docs[0].id };
+                        const existingIndex = sharedQuests.findIndex(q => q.id === activeQuest.id);
+                        if (existingIndex === -1) {
+                            sharedQuests.push(activeQuest);
+                        } else {
+                            sharedQuests[existingIndex] = activeQuest;
+                        }
+                        renderAllLists();
+                    }
                     return;
                 }
 
