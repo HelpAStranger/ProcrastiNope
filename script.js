@@ -1168,7 +1168,6 @@ async function initializeAppLogic(initialUser) {
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
-                    throw new Error("Could not find the pending share to cancel. It might have been accepted or cancelled already.");
                     // This is not a hard error, but a race condition. The friend likely accepted or
                     // rejected the share just as the owner tried to cancel it. The UI will update
                     // automatically via the Firestore listener, so we can just exit gracefully.
