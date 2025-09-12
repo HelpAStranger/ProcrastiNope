@@ -1345,7 +1345,8 @@ async function initializeAppLogic(initialUser) {
                 currentEditingTaskId = id;
                 if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.view-shared-quest-btn')) {
-                    const sharedQuestId = e.target.dataset.sharedQuestId;
+                    const viewBtn = e.target.closest('.view-shared-quest-btn');
+                    const sharedQuestId = viewBtn.dataset.sharedQuestId;
                     const sharedQuestEl = document.querySelector(`.task-item.shared-quest[data-id="${sharedQuestId}"]`);
                     if (sharedQuestEl) {
                         const isMobile = window.matchMedia("(max-width: 1023px)").matches;
