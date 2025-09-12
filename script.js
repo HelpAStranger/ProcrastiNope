@@ -1432,8 +1432,10 @@ async function initializeAppLogic(initialUser) {
                 if ((type === 'daily' || type === 'shared') && isMyPartCompleted()) {
                     uncompleteDailyTask(id);
                 } else {
-                    // Otherwise, show the action buttons.
-                    toggleTaskActions(taskItem);
+                    // Otherwise, show the action buttons, but not for shared quests which have none.
+                    if (type !== 'shared') {
+                        toggleTaskActions(taskItem);
+                    }
                 }
             }
         } 
