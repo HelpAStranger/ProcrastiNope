@@ -1697,10 +1697,10 @@ async function initializeAppLogic(initialUser) {
 
                 const unshareBtn = e.target.closest('.unshare-group-btn');
                 if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
-
+                
                 const abandonBtn = e.target.closest('.abandon-group-btn');
                 if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
-                
+
                 if (!e.target.closest('button')) {
                     toggleTaskActions(groupHeader);
                 }
@@ -1771,7 +1771,7 @@ async function initializeAppLogic(initialUser) {
             }
             if (isCancelShareClick) {
                 const sharedGroupId = isCancelShareClick.dataset.sharedGroupId;
-                cancelSharedGroup(sharedGroupId); // This function needs to be created
+                cancelSharedGroup(sharedGroupId);
                 return;
             }
             
