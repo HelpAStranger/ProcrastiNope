@@ -168,7 +168,7 @@ let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 
 let audioCtx = null; // Will be initialized by the app logic
 
 function playSound(type) {
-    if (!audioCtx || settings.volume === 0) return;
+    if (!audioCtx || settings.volume === 0 || audioCtx.state === 'suspended') return;
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
     o.connect(g); g.connect(audioCtx.destination);
     let v = settings.volume, d = 0.2;
@@ -1458,55 +1458,74 @@ async function initializeAppLogic(initialUser) {
         });
     };
     const cancelShare = async (originalTaskId) => {
-        if (!originalTaskId) return;
+        const sharedQuestId = originalTaskId; // Correcting misleading parameter name
+        if (!sharedQuestId) return;
 
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
-                // Query Firestore to find the shared quest document to update.
-                const q = query(
-                    collection(db, "sharedQuests"),
-                    where("originalTaskId", "==", originalTaskId),
-                    where("ownerUid", "==", user.uid),
-                    where("status", "==", "pending")
-                );
-                const querySnapshot = await getDocs(q);
+                const sharedQuestRef = doc(db, "sharedQuests", sharedQuestId);
+                const sharedQuestSnap = await getDoc(sharedQuestRef);
 
-                if (querySnapshot.empty) {
+                if (!sharedQuestSnap.exists()) {
+                    console.log("Share to cancel not found, it was likely already handled.");
+                    // Revert the local task just in case the listener is slow or failed
+                    let originalTask;
+                    [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                        if (t && t.sharedQuestId === sharedQuestId) originalTask = t;
+                    });
+                    if (originalTask) revertSharedQuest(originalTask.id);
+                    return;
+                }
+
+                const questData = sharedQuestSnap.data();
+
+                if (questData.ownerUid !== user.uid) {
+                    showConfirm("Error", "You are not the owner of this share.", () => {});
+                    return;
+                }
+
+                if (questData.status !== 'pending') {
                     console.log("Attempted to cancel a share that was no longer pending. UI will update shortly.");
-
-                    // FIX: The listener might be delayed or have failed. Actively re-sync the state.
-                    const syncQuery = query(
-                        collection(db, "sharedQuests"),
-                        where("originalTaskId", "==", originalTaskId),
-                        where("ownerUid", "==", user.uid)
-                    );
-                    const syncSnapshot = await getDocs(syncQuery);
-
-                    if (syncSnapshot.empty) {
-                        // The sharedQuest doc is completely gone. This implies it was rejected/cancelled and deleted.
-                        // It's safe to revert the original task locally.
-                        revertSharedQuest(originalTaskId);
-                    } else {
-                        // The doc exists, but its status is not 'pending' (e.g., it's 'active').
-                        // Manually update the local state to reflect this and re-render.
-                        const activeQuest = { ...syncSnapshot.docs[0].data(), id: syncSnapshot.docs[0].id, questId: syncSnapshot.docs[0].id };
-                        const existingIndex = sharedQuests.findIndex(q => q.id === activeQuest.id);
-                        if (existingIndex === -1) {
-                            sharedQuests.push(activeQuest);
-                        } else {
-                            sharedQuests[existingIndex] = activeQuest;
-                        }
-                        renderAllLists();
-                    }
                     return;
                 }
 
                 // Instead of deleting directly, update the status. The listener will handle cleanup.
-                const sharedQuestDocToUpdate = querySnapshot.docs[0];
-                await updateDoc(sharedQuestDocToUpdate.ref, { status: 'cancelled' });
+                await updateDoc(sharedQuestRef, { status: 'cancelled' });
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
+                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
+            }
+        });
+    };
+    const cancelSharedGroup = async (sharedGroupId) => {
+        if (!sharedGroupId) return;
+
+        showConfirm("Cancel Share?", "This will cancel the pending group share request.", async () => {
+            try {
+                const sharedGroupRef = doc(db, "sharedGroups", sharedGroupId);
+                const sharedGroupSnap = await getDoc(sharedGroupRef);
+
+                if (!sharedGroupSnap.exists()) {
+                    console.log("Group share to cancel not found, it was likely already handled.");
+                    return;
+                }
+
+                const groupData = sharedGroupSnap.data();
+
+                if (groupData.ownerUid !== user.uid) {
+                    showConfirm("Error", "You are not the owner of this group share.", () => {});
+                    return;
+                }
+
+                if (groupData.status !== 'pending') {
+                    console.log("Attempted to cancel a group share that was no longer pending.");
+                    return;
+                }
+
+                await updateDoc(sharedGroupRef, { status: 'cancelled' });
+            } catch (error) {
+                console.error("Error cancelling group share:", getCoolErrorMessage(error));
                 showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
             }
         });
@@ -1698,7 +1717,7 @@ async function initializeAppLogic(initialUser) {
                 const unshareBtn = e.target.closest('.unshare-group-btn');
                 if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
 
-                const abandonBtn = e.target.closest('.abandon-group-btn');
+                const abandonBtn = e.target.closest('.abandon-group-btn'); // eslint-disable-line
                 if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
                 
                 if (!e.target.closest('button')) {
@@ -1914,7 +1933,7 @@ async function initializeAppLogic(initialUser) {
                 else if (e.target.closest('.unshare-btn')) { // For pending shares
                     const unshareBtn = e.target.closest('.unshare-btn');
                     const sharedQuestId = unshareBtn.dataset.sharedQuestId;
-                    cancelShare(sharedQuestId);
+                    cancelShare(sharedQuestId); // This was the call with the permission error
                 }
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) {
@@ -2793,6 +2812,50 @@ async function initializeAppLogic(initialUser) {
             }
         });
     }
+
+    const unshareSharedGroup = async (groupId) => {
+        const group = sharedGroups.find(g => g.id === groupId);
+        if (!group) return;
+
+        if (user.uid !== group.ownerUid) {
+            showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
+            return;
+        }
+
+        showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
+            try {
+                const originalGroup = generalTaskGroups.find(g => g.id === group.originalGroupId);
+                if (originalGroup) {
+                    delete originalGroup.isShared;
+                    delete originalGroup.sharedGroupId;
+                    saveState();
+                }
+
+                await deleteDoc(doc(db, "sharedGroups", groupId));
+                playSound('delete');
+                renderAllLists();
+            } catch (error) {
+                console.error("Error unsharing group:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not unshare the group.", () => {});
+            }
+        });
+    };
+
+    const abandonSharedGroup = async (groupId) => {
+        const group = sharedGroups.find(g => g.id === groupId);
+        if (!group || (user && group.ownerUid === user.uid)) return;
+
+        showConfirm("Abandon Group?", "This will remove the group from your list and the owner will be notified. Are you sure?", async () => {
+            try {
+                const sharedGroupRef = doc(db, "sharedGroups", groupId);
+                await updateDoc(sharedGroupRef, { status: 'abandoned' });
+                playSound('delete');
+            } catch (error) {
+                console.error("Error abandoning group:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not abandon the group.", () => {});
+            }
+        });
+    };
 
     friendsBtnDesktop.addEventListener('click', () => {
         openModal(friendsModal);
