@@ -1100,20 +1100,6 @@ SHARED QUESTS
     list-style: none;
     padding: 0;
 }
-
-.shared-group-header-wrapper {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: var(--border-width) solid var(--border);
-}
-.shared-group-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-
 .task-item.shared-quest {
     border-style: double;
     border-width: 4px;

@@ -828,7 +828,9 @@ async function initializeAppLogic(initialUser) {
     };
     const createSharedGroupElement = (group) => {
         const groupEl = document.createElement('div');
-        groupEl.className = 'shared-quest-group';
+        // Re-use main-quest-group for structure and styling
+        groupEl.className = 'main-quest-group shared-quest-group';
+        if (group.isExpanded) groupEl.classList.add('expanded');
         groupEl.dataset.sharedGroupId = group.id;
     
         const allCompleted = group.tasks.every(t => t.ownerCompleted && t.friendCompleted);
@@ -843,18 +845,21 @@ async function initializeAppLogic(initialUser) {
         const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-group-btn" data-shared-group-id="${group.id}" aria-label="Abandon Group" title="Abandon Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
 
         const headerHTML = `
-            <div class="shared-group-header-wrapper">
-                <h3 class="shared-group-title">${group.name} (with ${otherPlayerUsername})</h3>
-                <div class="shared-group-actions">
+            <header class="main-quest-group-header">
+                <div class="group-title-container">
+                    <div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div>
+                    <h3>${group.name} (with ${otherPlayerUsername})</h3>
+                </div>
+                <div class="group-actions">
                     ${unshareBtnHTML}
                     ${abandonBtnHTML}
                 </div>
-            </div>
+            </header>
         `;
         groupEl.innerHTML = headerHTML;
 
         const ul = document.createElement('ul');
-        ul.className = 'shared-quest-list';
+        ul.className = 'task-list-group shared-quest-list';
         group.tasks.forEach(task => {
             ul.appendChild(createSharedTaskElement(task, group));
         });
@@ -1542,27 +1547,50 @@ async function initializeAppLogic(initialUser) {
     }
 
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
-        const sharedGroupEl = e.target.closest('.shared-quest-group');
-        if (sharedGroupEl) {
-            const unshareBtn = e.target.closest('.unshare-group-btn');
-            const abandonBtn = e.target.closest('.abandon-group-btn');
-            if (unshareBtn) {
-                const groupId = unshareBtn.dataset.sharedGroupId;
-                unshareSharedGroup(groupId);
-                return;
-            }
-            if (abandonBtn) {
-                const groupId = abandonBtn.dataset.sharedGroupId;
-                abandonSharedGroup(groupId);
-                return;
-            }
-        }
-
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
         
         if (groupHeader) { 
-            const groupId = groupHeader.parentElement.dataset.groupId;
+            const parentEl = groupHeader.parentElement;
+
+            // NEW: Handle shared groups first
+            if (parentEl.classList.contains('shared-quest-group')) {
+                const sharedGroupId = parentEl.dataset.sharedGroupId;
+                const group = sharedGroups.find(g => g.id === sharedGroupId);
+
+                const isExpandClick = e.target.closest('.expand-icon-wrapper');
+                if (isExpandClick) {
+                    if (group) {
+                        group.isExpanded = !group.isExpanded;
+                        parentEl.classList.toggle('expanded', group.isExpanded);
+                    }
+                    // If actions are visible, keep the timeout running
+                    if (groupHeader.classList.contains('actions-visible')) {
+                        clearTimeout(actionsTimeoutId);
+                        actionsTimeoutId = setTimeout(() => {
+                            if(groupHeader.classList.contains('actions-visible')) {
+                                groupHeader.classList.remove('actions-visible');
+                                activeMobileActionsItem = null;
+                            }
+                        }, 3000);
+                    }
+                    return;
+                }
+
+                const unshareBtn = e.target.closest('.unshare-group-btn');
+                if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
+                
+                const abandonBtn = e.target.closest('.abandon-group-btn');
+                if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
+
+                if (!e.target.closest('button')) {
+                    toggleTaskActions(groupHeader);
+                }
+                return;
+            }
+
+            // It's a normal group header.
+            const groupId = parentEl.dataset.groupId;
             const g = generalTaskGroups.find(g => g.id === groupId);
 
             const isExpandClick = e.target.closest('.expand-icon-wrapper');
@@ -2779,8 +2807,10 @@ async function initializeAppLogic(initialUser) {
             sharedQuests = allQuestsFromListener.filter(q => q.status === 'active' || q.status === 'completed');
     
             // Filter for pending quests for the incoming shares tab
-            incomingSharedQuests = allQuestsFromListener.filter(q => q.status === 'pending' && q.friendUid === user.uid);
-    
+            const incomingQuests = allQuestsFromListener.filter(q => q.status === 'pending' && q.friendUid === user.uid);
+            const incomingGroups = allSharedGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
+            incomingSharedItems = [...incomingQuests, ...incomingGroups];
+
             renderAllLists();
         };
 
@@ -2814,6 +2844,12 @@ async function initializeAppLogic(initialUser) {
                     groupsMap.delete(change.doc.id);
                 } else {
                     const newGroup = { ...change.doc.data(), id: change.doc.id };
+
+                    // Preserve expanded state across re-renders from Firestore
+                    const oldGroup = groupsMap.get(change.doc.id);
+                    if (oldGroup && oldGroup.isExpanded) {
+                        newGroup.isExpanded = true;
+                    }
 
                     if ((newGroup.status === 'rejected' || newGroup.status === 'cancelled' || newGroup.status === 'abandoned') && newGroup.ownerUid === user.uid) {
                         // Revert the original group
@@ -2850,8 +2886,8 @@ async function initializeAppLogic(initialUser) {
 
             allSharedGroupsFromListener = Array.from(groupsMap.values());
 
-            sharedGroups = allGroupsFromListener.filter(g => g.status === 'active' || g.status === 'completed');
-            const incomingSharedGroups = allGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
+            sharedGroups = allSharedGroupsFromListener.filter(g => g.status === 'active' || g.status === 'completed');
+            const incomingSharedGroups = allSharedGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
             
             // Combine with individual quests for the "Shares" tab
             const incomingSharedQuests = sharedQuests.filter(q => q.status === 'pending' && q.friendUid === user.uid);
