@@ -1788,11 +1788,12 @@ async function initializeAppLogic(initialUser) {
             // Helper to determine if the task is completed by the current user
             const isMyPartCompleted = () => {
                 if (!task) return false;
-            if (taskItem.dataset.sharedGroupId) return false; // Handled separately
+                // This handles standalone shared quests
                 if (type === 'shared') {
                     const isOwner = user && task.ownerUid === user.uid;
                     return isOwner ? task.ownerCompleted : task.friendCompleted;
                 }
+                // This handles daily quests
                 return task.completedToday;
             };
             
@@ -1827,24 +1828,6 @@ async function initializeAppLogic(initialUser) {
             }
             
             // --- Case 2: Task is a normal task (not in a shared group) ---
-            const { task, type } = findTaskAndContext(id);
-
-            // Helper to determine if the task is completed by the current user
-            const isMyPartCompleted = () => {
-                if (!task) return false;
-                if (type === 'shared') {
-                    const isOwner = user && task.ownerUid === user.uid;
-                    return isOwner ? task.ownerCompleted : task.friendCompleted;
-                }
-                return task.completedToday;
-            };
-            
-            // NEW: Handle undo button click
-            if (e.target.closest('.undo-btn')) {
-                undoCompleteMainQuest(id);
-                return;
-            }
-            
             if (e.target.closest('.complete-btn')) {
                 if (type === 'daily' || type === 'shared') {
                     if (isMyPartCompleted()) {
