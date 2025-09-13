@@ -841,6 +841,8 @@ async function initializeAppLogic(initialUser) {
         const isOwner = user.uid === group.ownerUid;
         const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
 
+        const editBtnHTML = isOwner ? `<button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>` : '';
+        const addTaskBtnHTML = `<button class="btn add-task-to-group-btn" aria-label="Add task">+</button>`;
         const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-group-btn" data-shared-group-id="${group.id}" aria-label="Unshare Group" title="Unshare Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
         const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-group-btn" data-shared-group-id="${group.id}" aria-label="Abandon Group" title="Abandon Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
 
@@ -854,8 +856,10 @@ async function initializeAppLogic(initialUser) {
                     </div>
                 </div>
                 <div class="group-actions">
+                    ${editBtnHTML}
                     ${unshareBtnHTML}
                     ${abandonBtnHTML}
+                    ${addTaskBtnHTML}
                 </div>
             </header>
         `;
@@ -875,19 +879,28 @@ async function initializeAppLogic(initialUser) {
         li.dataset.id = task.id;
         li.dataset.sharedGroupId = group.id;
     
-        const isOwner = user.uid === group.ownerUid;
-        const myPartCompleted = isOwner ? task.ownerCompleted : task.friendCompleted;
-    
+        const myPartCompleted = user.uid === group.ownerUid ? task.ownerCompleted : task.friendCompleted;
+
+        const buttonsHTML = `
+            <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+            <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+            <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+        `;
+
         li.innerHTML = `
+            <button class="complete-btn ${myPartCompleted ? 'checked' : ''}"></button>
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
+            <div class="task-buttons-wrapper">${buttonsHTML}</div>
             <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
                 <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
                 <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
             </div>`;
         
-        if (myPartCompleted) li.classList.add('my-part-completed');
+        if (myPartCompleted) {
+            li.classList.add('my-part-completed');
+        }
         return li;
     };
     const createTaskElement = (task, type) => {
@@ -1278,6 +1291,88 @@ async function initializeAppLogic(initialUser) {
             renderAllLists();
         }
     };
+    const openEditSharedTaskModal = (groupId, taskId) => {
+        const group = sharedGroups.find(g => g.id === groupId);
+        if (!group) return;
+        const task = group.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        // Repurpose the existing edit task modal
+        currentEditingTaskId = JSON.stringify({ groupId, taskId }); // Store both IDs
+        editTaskIdInput.value = currentEditingTaskId; // Hidden input
+        editTaskInput.value = task.text;
+        editTaskModal.querySelector('#edit-task-modal-title').textContent = 'Edit Shared Task';
+        editWeeklyGoalContainer.style.display = 'none'; // No weekly goals for shared tasks
+        openModal(editTaskModal);
+        focusOnDesktop(editTaskInput);
+    };
+    const addTaskToSharedGroup = async (groupId, text) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        const newTask = {
+            id: Date.now().toString(),
+            text: text,
+            ownerCompleted: false,
+            friendCompleted: false
+        };
+        try {
+            await updateDoc(groupRef, {
+                tasks: arrayUnion(newTask)
+            });
+            playSound('add');
+        } catch (error) {
+            console.error("Error adding task to shared group:", getCoolErrorMessage(error));
+            showConfirm("Error", "Could not add task to the shared group.", () => {});
+        }
+    };
+    const editSharedGroupName = async (groupId, newName) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        try {
+            await updateDoc(groupRef, { name: newName });
+            playSound('toggle');
+        } catch (error) {
+            console.error("Error editing shared group name:", getCoolErrorMessage(error));
+            showConfirm("Error", "Could not edit group name.", () => {});
+        }
+    };
+    const deleteSharedTask = async (groupId, taskId) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        showConfirm("Delete Task?", "This will delete the task for both you and your friend.", async () => {
+            try {
+                const groupDoc = await getDoc(groupRef);
+                if (groupDoc.exists()) {
+                    const groupData = groupDoc.data();
+                    const taskToRemove = groupData.tasks.find(t => t.id === taskId);
+                    if (taskToRemove) {
+                        await updateDoc(groupRef, {
+                            tasks: arrayRemove(taskToRemove)
+                        });
+                        playSound('delete');
+                    }
+                }
+            } catch (error) {
+                console.error("Error deleting shared task:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not delete task.", () => {});
+            }
+        });
+    };
+    const editSharedTask = async (groupId, taskId, newText) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        try {
+            const groupDoc = await getDoc(groupRef);
+            if (groupDoc.exists()) {
+                const tasks = groupDoc.data().tasks;
+                const taskIndex = tasks.findIndex(t => t.id === taskId);
+                if (taskIndex > -1) {
+                    tasks[taskIndex].text = newText;
+                    await updateDoc(groupRef, { tasks: tasks });
+                    playSound('toggle');
+                }
+            }
+        } catch (error) {
+            console.error("Error editing shared task:", getCoolErrorMessage(error));
+            showConfirm("Error", "Could not edit task.", () => {});
+        }
+    };
     const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
@@ -1579,6 +1674,27 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
+                const isEditClick = e.target.closest('.edit-group-btn');
+                const isAddClick = e.target.closest('.add-task-to-group-btn');
+
+                if (isEditClick) {
+                    currentEditingGroupId = sharedGroupId;
+                    addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
+                    addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
+                    newGroupInput.value = group.name;
+                    openModal(addGroupModal);
+                    focusOnDesktop(newGroupInput);
+                    return;
+                }
+                if (isAddClick) {
+                    currentListToAdd = `shared-group-${sharedGroupId}`;
+                    weeklyGoalContainer.style.display = 'none';
+                    addTaskModalTitle.textContent = `Add to "${group.name}"`;
+                    openModal(addTaskModal);
+                    focusOnDesktop(newTaskInput);
+                    return;
+                }
+
                 const unshareBtn = e.target.closest('.unshare-group-btn');
                 if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
 
@@ -1686,17 +1802,46 @@ async function initializeAppLogic(initialUser) {
                 return;
             }
 
+            // --- Case 1: Task is inside a Shared Group ---
             const sharedGroupId = taskItem.dataset.sharedGroupId;
             if (sharedGroupId) {
-                // The click is on the task item itself (or its children), which toggles completion.
                 const group = sharedGroups.find(g => g.id === sharedGroupId);
                 if (!group) return;
                 const sharedTask = group.tasks.find(t => t.id === id);
                 if (!sharedTask) return;
 
-                const isOwner = user.uid === group.ownerUid;
-                const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
-                completeSharedGroupTask(sharedGroupId, id, uncompleting);
+                if (e.target.closest('.complete-btn')) {
+                    const isOwner = user.uid === group.ownerUid;
+                    const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
+                    completeSharedGroupTask(sharedGroupId, id, uncompleting);
+                } else if (e.target.closest('.delete-btn')) {
+                    deleteSharedTask(sharedGroupId, id);
+                } else if (e.target.closest('.edit-btn')) {
+                    openEditSharedTaskModal(sharedGroupId, id);
+                } else if (e.target.closest('.timer-clock-btn')) {
+                    showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => {});
+                } else if (!e.target.closest('button')) {
+                    toggleTaskActions(taskItem);
+                }
+                return;
+            }
+            
+            // --- Case 2: Task is a normal task (not in a shared group) ---
+            const { task, type } = findTaskAndContext(id);
+
+            // Helper to determine if the task is completed by the current user
+            const isMyPartCompleted = () => {
+                if (!task) return false;
+                if (type === 'shared') {
+                    const isOwner = user && task.ownerUid === user.uid;
+                    return isOwner ? task.ownerCompleted : task.friendCompleted;
+                }
+                return task.completedToday;
+            };
+            
+            // NEW: Handle undo button click
+            if (e.target.closest('.undo-btn')) {
+                undoCompleteMainQuest(id);
                 return;
             }
             
@@ -1716,7 +1861,7 @@ async function initializeAppLogic(initialUser) {
             }
             
             if(e.target.closest('button')) {
-                currentEditingTaskId = id;
+                currentEditingTaskId = id; // For normal tasks
                 if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.view-shared-quest-btn')) {
                     const viewBtn = e.target.closest('.view-shared-quest-btn');
@@ -1836,6 +1981,7 @@ async function initializeAppLogic(initialUser) {
                     }
                 }
             } else {
+                // Click on the body of a normal task
                 // If the click was not on a button, decide whether to toggle completion or show actions.
                 if (type === 'shared') {
                     // For quests in the shared list, a click on the body shows actions.
@@ -1855,8 +2001,30 @@ async function initializeAppLogic(initialUser) {
         } 
     });
 
-    addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
-    editTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const id = editTaskIdInput.value; const newText = editTaskInput.value.trim(); const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0; if(id && newText) { editTask(id, newText, newGoal); closeModal(editTaskModal); } });
+    addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { if (currentListToAdd.startsWith('shared-group-')) { const groupId = currentListToAdd.replace('shared-group-', ''); addTaskToSharedGroup(groupId, t); } else { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); } newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
+    editTaskForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = editTaskIdInput.value;
+        const newText = editTaskInput.value.trim();
+        if (!newText) return;
+
+        try {
+            const sharedId = JSON.parse(id);
+            if (sharedId.groupId && sharedId.taskId) {
+                editSharedTask(sharedId.groupId, sharedId.taskId, newText);
+                closeModal(editTaskModal);
+                return;
+            }
+        } catch (err) {
+            // Not a shared task, proceed as normal
+        }
+
+        const newGoal = parseInt(editWeeklyGoalSlider.value, 10) || 0;
+        if (id) {
+            editTask(id, newText, newGoal);
+            closeModal(editTaskModal);
+        }
+    });
     timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
@@ -1864,15 +2032,7 @@ async function initializeAppLogic(initialUser) {
     addGroupForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const name = newGroupInput.value.trim();
-        if (name) {
-            if (currentEditingGroupId) {
-                editGroup(currentEditingGroupId, name);
-            } else {
-                addGroup(name);
-            }
-            newGroupInput.value = '';
-            closeModal(addGroupModal);
-        }
+        if (name) { if (currentEditingGroupId) { const isShared = sharedGroups.some(g => g.id === currentEditingGroupId); if (isShared) { editSharedGroupName(currentEditingGroupId, name); } else { editGroup(currentEditingGroupId, name); } } else { addGroup(name); } newGroupInput.value = ''; closeModal(addGroupModal); }
     });
     
     addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
