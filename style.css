@@ -1107,6 +1107,43 @@ SHARED QUESTS
     max-height: 120px; /* Allow more height */
 }
 
+/* NEW: Styles for tasks within a shared group */
+.task-item.shared-group-task {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    flex-wrap: nowrap; /* Prevent wrapping */
+    transition: background-color var(--transition-speed) ease;
+    /* Use a simpler border to distinguish from standalone quests */
+    border-style: solid;
+    border-width: var(--border-width);
+}
+
+.task-item.shared-group-task .task-content {
+    margin-right: 1rem;
+    flex-grow: 1;
+}
+
+.task-item.shared-group-task .task-text {
+    font-size: 1rem;
+    font-weight: normal; /* Make it less prominent than main quests */
+    font-style: italic;
+}
+
+/* Override generic 'my-part-completed' styles for a subtler look */
+.task-item.shared-group-task.my-part-completed {
+    opacity: 1; /* Don't fade the whole item */
+    filter: none;
+}
+
+.task-item.shared-group-task.my-part-completed .task-text {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.task-item.shared-group-task:not(.my-part-completed):hover {
+    background-color: rgba(var(--surface-rgb), 0.5);
+}
+
 /* NEW: Style for fully completed shared quests */
 .task-item.shared-quest.all-completed {
     background-color: var(--accent-green-light); /* A light green tint */

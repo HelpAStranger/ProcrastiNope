@@ -848,7 +848,10 @@ async function initializeAppLogic(initialUser) {
             <header class="main-quest-group-header">
                 <div class="group-title-container">
                     <div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div>
-                    <h3>${group.name} (with ${otherPlayerUsername})</h3>
+                    <div class="group-title-and-subtitle">
+                        <h3>${group.name}</h3>
+                        <span class="shared-with-tag">with ${otherPlayerUsername}</span>
+                    </div>
                 </div>
                 <div class="group-actions">
                     ${unshareBtnHTML}
@@ -868,7 +871,7 @@ async function initializeAppLogic(initialUser) {
     };
     const createSharedTaskElement = (task, group) => {
         const li = document.createElement('li');
-        li.className = 'task-item shared-quest';
+        li.className = 'task-item shared-group-task';
         li.dataset.id = task.id;
         li.dataset.sharedGroupId = group.id;
     
@@ -876,13 +879,12 @@ async function initializeAppLogic(initialUser) {
         const myPartCompleted = isOwner ? task.ownerCompleted : task.friendCompleted;
     
         li.innerHTML = `
-            <button class="complete-btn ${myPartCompleted ? 'checked' : ''}"></button>
-            <div class="task-content"><span class="task-text">${task.text}</span></div>
-            <div class="shared-quest-info" style="border: none; padding-top: 0; margin-top: 0.5rem;">
-                 <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
-                    <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
-                    <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
-                </div>
+            <div class="task-content">
+                <span class="task-text">${task.text}</span>
+            </div>
+            <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
+                <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
+                <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
             </div>`;
         
         if (myPartCompleted) li.classList.add('my-part-completed');
@@ -1686,13 +1688,15 @@ async function initializeAppLogic(initialUser) {
 
             const sharedGroupId = taskItem.dataset.sharedGroupId;
             if (sharedGroupId) {
-                if (e.target.closest('.complete-btn')) {
-                    const group = sharedGroups.find(g => g.id === sharedGroupId);
-                    const sharedTask = group.tasks.find(t => t.id === id);
-                    const isOwner = user.uid === group.ownerUid;
-                    const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
-                    completeSharedGroupTask(sharedGroupId, id, uncompleting);
-                }
+                // The click is on the task item itself (or its children), which toggles completion.
+                const group = sharedGroups.find(g => g.id === sharedGroupId);
+                if (!group) return;
+                const sharedTask = group.tasks.find(t => t.id === id);
+                if (!sharedTask) return;
+
+                const isOwner = user.uid === group.ownerUid;
+                const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
+                completeSharedGroupTask(sharedGroupId, id, uncompleting);
                 return;
             }
             
