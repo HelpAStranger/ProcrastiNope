@@ -1581,10 +1581,10 @@ async function initializeAppLogic(initialUser) {
 
                 const unshareBtn = e.target.closest('.unshare-group-btn');
                 if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
-                
+
                 const abandonBtn = e.target.closest('.abandon-group-btn');
                 if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
-
+                
                 if (!e.target.closest('button')) {
                     toggleTaskActions(groupHeader);
                 }
@@ -1655,7 +1655,7 @@ async function initializeAppLogic(initialUser) {
             }
             if (isCancelShareClick) {
                 const sharedGroupId = isCancelShareClick.dataset.sharedGroupId;
-                cancelSharedGroup(sharedGroupId);
+                cancelSharedGroup(sharedGroupId); // This function needs to be created
                 return;
             }
             
@@ -1783,9 +1783,10 @@ async function initializeAppLogic(initialUser) {
                     }
                     return;
                 }
-                else if (e.target.closest('.unshare-btn')) {
-                    const originalTaskId = taskItem.dataset.id;
-                    cancelShare(originalTaskId); // Pass only the original task ID for a more robust lookup.
+                else if (e.target.closest('.unshare-btn')) { // For pending shares
+                    const unshareBtn = e.target.closest('.unshare-btn');
+                    const sharedQuestId = unshareBtn.dataset.sharedQuestId;
+                    cancelShare(sharedQuestId);
                 }
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) {
