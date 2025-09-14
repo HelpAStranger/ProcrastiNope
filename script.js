@@ -1459,8 +1459,9 @@ async function initializeAppLogic(initialUser) {
     };
     const cancelShare = async (originalTaskId) => {
         const sharedQuestId = originalTaskId; // Correcting misleading parameter name
+        // The parameter is the ID of the sharedQuest document itself.
+        const sharedQuestId = originalTaskId;
         if (!sharedQuestId) return;
-
         showConfirm("Cancel Share?", "This will cancel the pending share request.", async () => {
             try {
                 const sharedQuestRef = doc(db, "sharedQuests", sharedQuestId);
@@ -1474,6 +1475,10 @@ async function initializeAppLogic(initialUser) {
                         if (t && t.sharedQuestId === sharedQuestId) originalTask = t;
                     });
                     if (originalTask) revertSharedQuest(originalTask.id);
+                // If the document doesn't exist, or we aren't the owner, we can't do anything.
+                // This can happen if the share was already accepted/rejected. The listener will handle UI cleanup.
+                if (!sharedQuestSnap.exists() || sharedQuestSnap.data().ownerUid !== user.uid) {
+                    console.log("Could not cancel share: not found or not owner.");
                     return;
                 }
 
@@ -1484,12 +1489,15 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
+                // If it's no longer pending, we can't cancel it. The UI will update soon.
                 if (questData.status !== 'pending') {
                     console.log("Attempted to cancel a share that was no longer pending. UI will update shortly.");
                     return;
                 }
 
                 // Instead of deleting directly, update the status. The listener will handle cleanup.
+                // Update the status to 'cancelled'. The owner's listener will see this,
+                // call revertSharedQuest(), and then delete the document.
                 await updateDoc(sharedQuestRef, { status: 'cancelled' });
 
             } catch (error) {
