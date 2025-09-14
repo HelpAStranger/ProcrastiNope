@@ -1531,7 +1531,19 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                await updateDoc(sharedGroupRef, { status: 'cancelled' });
+                // Owner cancels by deleting the pending request.
+                await deleteDoc(sharedGroupRef);
+
+                // Revert the original group in local state for responsiveness.
+                const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
+                if (originalGroup) {
+                    delete originalGroup.isShared;
+                    delete originalGroup.sharedGroupId;
+                }
+                
+                playSound('delete');
+                renderAllLists();
+                saveState(); // Save the reverted state
             } catch (error) {
                 console.error("Error cancelling group share:", getCoolErrorMessage(error));
                 showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
