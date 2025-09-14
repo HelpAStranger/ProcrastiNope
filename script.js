@@ -2986,8 +2986,8 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
-                    // NEW: Handle rejection by owner ('cancelled'), by friend ('rejected'), or abandonment by friend ('abandoned')
-                    if ((newQuest.status === 'rejected' || newQuest.status === 'cancelled' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
+                    // NEW: Handle rejection by friend ('rejected') or abandonment by friend ('abandoned')
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
@@ -3070,8 +3070,8 @@ async function initializeAppLogic(initialUser) {
                         newGroup.isExpanded = true;
                     }
 
-                    if ((newGroup.status === 'rejected' || newGroup.status === 'cancelled' || newGroup.status === 'abandoned') && newGroup.ownerUid === user.uid) {
-                        // Revert the original group
+                    // Handle when a friend rejects or abandons a group share
+                    if ((newGroup.status === 'rejected' || newGroup.status === 'abandoned') && newGroup.ownerUid === user.uid) {
                         const group = generalTaskGroups.find(g => g.id === newGroup.originalGroupId);
                         if (group) {
                             delete group.isShared;
