@@ -1516,6 +1516,13 @@ async function initializeAppLogic(initialUser) {
 
                 if (!sharedGroupSnap.exists()) {
                     console.log("Group share to cancel not found, it was likely already handled.");
+                    const originalGroup = generalTaskGroups.find(g => g.sharedGroupId === sharedGroupId);
+                    if (originalGroup) {
+                        delete originalGroup.isShared;
+                        delete originalGroup.sharedGroupId;
+                        renderAllLists();
+                        saveState();
+                    }
                     return;
                 }
 
