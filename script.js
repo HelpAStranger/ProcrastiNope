@@ -3037,7 +3037,7 @@ async function initializeAppLogic(initialUser) {
         const allSharedQuestsQuery = query(
             collection(db, "sharedQuests"), 
             where("participants", "array-contains", user.uid),
-            where("status", "in", ["pending", "active", "completed", "rejected", "cancelled", "abandoned"])
+            where("status", "in", ["pending", "active", "completed", "rejected", "abandoned"])
         );
         unsubscribers.push(onSnapshot(allSharedQuestsQuery, handleSnapshot, (error) => {
             console.error("Error listening for shared quests:", getCoolErrorMessage(error));
@@ -3054,7 +3054,7 @@ async function initializeAppLogic(initialUser) {
         const q = query(
             collection(db, "sharedGroups"),
             where("participants", "array-contains", user.uid),
-            where("status", "in", ["pending", "active", "completed", "rejected", "cancelled", "abandoned"])
+            where("status", "in", ["pending", "active", "completed", "rejected", "abandoned"])
         );
 
         unsubscribeFromSharedGroups = onSnapshot(q, (snapshot) => {
