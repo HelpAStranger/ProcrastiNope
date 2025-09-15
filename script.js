@@ -2877,75 +2877,80 @@ async function initializeAppLogic(initialUser) {
         if (!button) return;
         const friendUidToRemove = button.dataset.uid;
 
-        showConfirm("Remove Friend?", "Shared quests and groups will be converted back to normal items for both of you. Are you sure?", async () => {
+        showConfirm("Remove Friend?", "Shared quests and groups will be removed for both of you. Are you sure?", async () => {
             const currentUserRef = doc(db, "users", user.uid);
 
-            // 1. Find all shared quests and package their necessary data.
+            // 1. Find all shared items between the two users.
             const q1 = query(collection(db, "sharedQuests"), where("participants", "==", [user.uid, friendUidToRemove]));
             const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
-            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-            const sharedQuestDocs = [...snap1.docs, ...snap2.docs];
-
-            // Create a package of data needed by the other client to avoid a second fetch.
-            const sharedQuestsDataForRemoval = sharedQuestDocs.map(d => {
-                const data = d.data();
-                return {
-                    id: d.id,
-                    ownerUid: data.ownerUid,
-                    originalTaskId: data.originalTaskId
-                };
-            });
-
-            // NEW: Find all shared groups and package their necessary data.
             const qg1 = query(collection(db, "sharedGroups"), where("participants", "==", [user.uid, friendUidToRemove]));
             const qg2 = query(collection(db, "sharedGroups"), where("participants", "==", [friendUidToRemove, user.uid]));
+            
+            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+            const sharedQuestDocs = [...snap1.docs, ...snap2.docs];
             const [snapg1, snapg2] = await Promise.all([getDocs(qg1), getDocs(qg2)]);
             const sharedGroupDocs = [...snapg1.docs, ...snapg2.docs];
-            const sharedGroupsDataForRemoval = sharedGroupDocs.map(d => {
+
+            // 2. Separate items by ownership to respect security rules.
+            const questsIOwn = [];
+            const questsTheyOwnData = [];
+            sharedQuestDocs.forEach(d => {
                 const data = d.data();
-                return {
-                    id: d.id,
-                    ownerUid: data.ownerUid,
-                    originalGroupId: data.originalGroupId
-                };
+                if (data.ownerUid === user.uid) {
+                    questsIOwn.push({ doc: d, data: data });
+                } else {
+                    questsTheyOwnData.push({ id: d.id, ownerUid: data.ownerUid, originalTaskId: data.originalTaskId });
+                }
             });
 
-            // 2. Revert quests that I own in my local state.
+            const groupsIOwn = [];
+            const groupsTheyOwnData = [];
+            sharedGroupDocs.forEach(d => {
+                const data = d.data();
+                if (data.ownerUid === user.uid) {
+                    groupsIOwn.push({ doc: d, data: data });
+                } else {
+                    groupsTheyOwnData.push({ id: d.id, ownerUid: data.ownerUid, originalGroupId: data.originalGroupId });
+                }
+            });
+
+            // 3. Revert local state for items I own.
             let localStateChanged = false;
-            for (const questData of sharedQuestsDataForRemoval) {
-                if (questData.ownerUid === user.uid) {
-                    const { task } = findTaskAndContext(questData.originalTaskId);
-                    if (task) {
-                        task.isShared = false;
-                        delete task.sharedQuestId;
-                        localStateChanged = true;
-                    }
+            questsIOwn.forEach(item => {
+                const { task } = findTaskAndContext(item.data.originalTaskId);
+                if (task) {
+                    task.isShared = false;
+                    delete task.sharedQuestId;
+                    localStateChanged = true;
                 }
-            }
-
-            // NEW: Revert groups that I own in my local state.
-            for (const groupData of sharedGroupsDataForRemoval) {
-                if (groupData.ownerUid === user.uid) {
-                    const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
-                    if (originalGroup) {
-                        delete originalGroup.isShared;
-                        delete originalGroup.sharedGroupId;
-                        localStateChanged = true;
-                    }
+            });
+            groupsIOwn.forEach(item => {
+                const originalGroup = generalTaskGroups.find(g => g.id === item.data.originalGroupId);
+                if (originalGroup) {
+                    delete originalGroup.isShared;
+                    delete originalGroup.sharedGroupId;
+                    localStateChanged = true;
                 }
-            }
+            });
 
-            // 3. Create a batch to update Firestore.
+            // 4. Create a batch to update Firestore.
             const batch = writeBatch(db);
+
+            // 4a. Delete items I own directly.
+            questsIOwn.forEach(item => batch.delete(item.doc.ref));
+            groupsIOwn.forEach(item => batch.delete(item.doc.ref));
+
+            // 4b. Update my own friends list.
             batch.update(currentUserRef, { friends: arrayRemove(friendUidToRemove) });
 
+            // 4c. Create the removal trigger document for items THEY own.
             const removalId = [user.uid, friendUidToRemove].sort().join('_');
             const removalRef = doc(db, "friendRemovals", removalId);
             batch.set(removalRef, {
                 removerUid: user.uid,
                 removeeUid: friendUidToRemove,
-                sharedQuestsData: sharedQuestsDataForRemoval, // Use the new data package
-                sharedGroupsData: sharedGroupsDataForRemoval,
+                sharedQuestsData: questsTheyOwnData, // Only items they own
+                sharedGroupsData: groupsTheyOwnData, // Only items they own
                 createdAt: Date.now()
             });
 
