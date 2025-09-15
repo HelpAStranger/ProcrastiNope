@@ -3054,8 +3054,6 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
-                    // NEW: Handle rejection by friend ('rejected'), abandonment by friend ('abandoned'), or cancellation by owner ('cancelled')
-                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
                     // NEW: Handle rejection by friend ('rejected') or abandonment by friend ('abandoned')
                     if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
