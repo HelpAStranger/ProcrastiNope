@@ -351,7 +351,6 @@ async function initializeAppLogic(initialUser) {
     // audioCtx is now created in initAudioContext on first user gesture.
 
     let lastSection = 'daily';
-    let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let sharedGroups = [];
