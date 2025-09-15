@@ -1468,8 +1468,10 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Unshare Quest?", "This will convert it back to a normal quest for you and remove it for your friend. Are you sure?", async () => {
             try {
-                await deleteDoc(doc(db, "sharedQuests", questId));
-                revertSharedQuest(sharedQuest.originalTaskId);
+                // Instead of deleting directly, update the status.
+                // The owner's own listener will see this change and perform the deletion and local state reversion,
+                // centralizing the cleanup logic into a flow that is known to work.
+                await updateDoc(doc(db, "sharedQuests", questId), { status: 'unshared' });
                 playSound('delete');
             } catch (error) {
                 console.error("Error unsharing quest:", getCoolErrorMessage(error));
@@ -3061,8 +3063,8 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
-                    // NEW: Handle rejection by friend ('rejected') or abandonment by friend ('abandoned')
-                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
+                    // Handle termination events (rejection/abandonment by friend, or unshare by owner)
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'unshared') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
@@ -3112,7 +3114,7 @@ async function initializeAppLogic(initialUser) {
         const allSharedQuestsQuery = query(
             collection(db, "sharedQuests"), 
             where("participants", "array-contains", user.uid),
-            where("status", "in", ["pending", "active", "completed", "rejected", "abandoned"])
+            where("status", "in", ["pending", "active", "completed", "rejected", "abandoned", "unshared"])
         );
         unsubscribers.push(onSnapshot(allSharedQuestsQuery, handleSnapshot, (error) => {
             console.error("Error listening for shared quests:", getCoolErrorMessage(error));
