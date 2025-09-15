@@ -1458,7 +1458,6 @@ async function initializeAppLogic(initialUser) {
         });
     };
     const cancelShare = async (originalTaskId) => {
-        const sharedQuestId = originalTaskId; // Correcting misleading parameter name
         // The parameter is the ID of the sharedQuest document itself.
         const sharedQuestId = originalTaskId;
         if (!sharedQuestId) return;
@@ -1475,12 +1474,11 @@ async function initializeAppLogic(initialUser) {
                         if (t && t.sharedQuestId === sharedQuestId) originalTask = t;
                     });
                     if (originalTask) revertSharedQuest(originalTask.id);
-                // If the document doesn't exist, or we aren't the owner, we can't do anything.
-                // This can happen if the share was already accepted/rejected. The listener will handle UI cleanup.
-                if (!sharedQuestSnap.exists() || sharedQuestSnap.data().ownerUid !== user.uid) {
-                    console.log("Could not cancel share: not found or not owner.");
                     return;
                 }
+
+                // If the document doesn't exist, or we aren't the owner, we can't do anything.
+                // This can happen if the share was already accepted/rejected. The listener will handle UI cleanup.
 
                 const questData = sharedQuestSnap.data();
 
