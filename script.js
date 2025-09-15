@@ -994,7 +994,6 @@ async function initializeAppLogic(initialUser) {
         }
 
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
-        let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
 
         const isCompleted = task.completedToday || task.pendingDeletion;
@@ -1013,7 +1012,7 @@ async function initializeAppLogic(initialUser) {
         }
 
         li.innerHTML = `<button class="complete-btn" aria-label="${completeBtnLabel}"></button>
-            <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
+            <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
             <div class="task-buttons-wrapper">
                 ${buttonsHTML.trim()}
             </div>`;
