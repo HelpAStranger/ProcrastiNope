@@ -2999,6 +2999,12 @@ async function initializeAppLogic(initialUser) {
             // 4. Create a batch to update Firestore.
             const batch = writeBatch(db);
 
+            // Clean up any pending friend requests between the users.
+            // This ensures a clean state and handles edge cases where a request might be stale.
+            const canonicalRequestId = [user.uid, friendUidToRemove].sort().join('_');
+            const requestDocRef = doc(db, "friendRequests", canonicalRequestId);
+            batch.delete(requestDocRef);
+
             // 4a. Delete items I own directly.
             questsIOwn.forEach(item => batch.delete(item.doc.ref));
             groupsIOwn.forEach(item => batch.delete(item.doc.ref));
