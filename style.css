@@ -965,8 +965,7 @@ TASK LIST & ITEMS
 
 /* NEW: Styles for main quests pending deletion (undo state) */
 .task-item.pending-deletion {
-    opacity: 0.7;
-    filter: grayscale(0.5);
+    /* The overlay provides the visual feedback, so no need to fade the whole item */
 }
 
 .task-item.pending-deletion .task-text {
@@ -974,18 +973,7 @@ TASK LIST & ITEMS
 }
 
 .task-item.pending-deletion .task-buttons-wrapper {
-    opacity: 1;
-    pointer-events: auto;
-    position: static;
-    width: auto;
-    height: auto;
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    z-index: auto;
-    margin-left: auto;
-    border-radius: 0;
-    justify-content: flex-end;
+    /* This is now handled by the generic .task-buttons-wrapper rules */
 }
 
 /* Add/Remove Animation */
@@ -1023,8 +1011,12 @@ TASK LIST & ITEMS
 
 .task-item.actions-visible .task-content,
 .task-item.actions-visible .completion-indicator,
-.main-quest-group-header.actions-visible .group-title-container {
-    opacity: 0.3; /* PERF: Use opacity instead of filter:blur for better performance */
+.main-quest-group-header.actions-visible .group-title-container,
+.task-item.pending-deletion .task-content,
+.task-item.pending-deletion .completion-indicator {
+    opacity: 0.3;
+    filter: blur(2px);
+    transition: opacity var(--transition-speed) ease, filter var(--transition-speed) ease;
 }
 
 .task-buttons-wrapper {
@@ -1452,7 +1444,8 @@ TASK INTERACTIONS (REFACTORED)
 
 /* When a task or group has .actions-visible, show the overlay */
 .task-item.actions-visible .task-buttons-wrapper,
-.main-quest-group-header.actions-visible .group-actions {
+.main-quest-group-header.actions-visible .group-actions,
+.task-item.pending-deletion .task-buttons-wrapper {
     opacity: 1;
     pointer-events: auto;
 }

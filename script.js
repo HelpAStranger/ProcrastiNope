@@ -1049,31 +1049,34 @@ async function initializeAppLogic(initialUser) {
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
 
-        const isCompleted = task.completedToday || task.pendingDeletion;
-
-        let buttonsHTML;
         if (task.pendingDeletion) {
-            buttonsHTML = `<button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>`;
+            // For pending deletion, show a full-width overlay with just the Undo button.
+            li.innerHTML = `<div class="completion-indicator"></div>
+                <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
+                <div class="task-buttons-wrapper">
+                    <button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>
+                </div>`;
         } else {
-            buttonsHTML = `
+            // For normal tasks, show the options button and the actions in the overlay.
+            const buttonsHTML = `
                 <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                 <button class="btn icon-btn share-btn" aria-label="Share Quest" aria-haspopup="dialog" aria-controls="share-quest-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
+            li.innerHTML = `<div class="completion-indicator"></div>
+                <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-actions-container">
+                    <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                </div><div class="task-buttons-wrapper">${buttonsHTML.trim()}</div>`;
         }
 
-        li.innerHTML = `<div class="completion-indicator"></div>
-            <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-actions-container">
-                <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
-            </div><div class="task-buttons-wrapper">${buttonsHTML.trim()}</div>`;
         if (task.pendingDeletion) li.classList.add('pending-deletion');
         if (task.completedToday) { li.classList.add('daily-completed'); }
         if (task.timerFinished) li.classList.add('timer-finished');
 
         // REGRESSION TWEAK: A completed task should never display an active timer.
         // This guard prevents the timer UI from showing even if timer properties were not cleared.        
-        if (task.timerStartTime && task.timerDuration && !isCompleted) {
+        if (task.timerStartTime && task.timerDuration && !task.completedToday && !task.pendingDeletion) {
             const elapsed = (Date.now() - task.timerStartTime) / 1000;
             const remaining = Math.max(0, task.timerDuration - elapsed);
             if (remaining > 0) {
