@@ -287,6 +287,37 @@ LOADING ANIMATION
 
 /*
 ==========================================================================
+OFFLINE INDICATOR
+==========================================================================
+*/
+#offline-indicator {
+    position: fixed;
+    top: 20px; /* Space from the top of the viewport */
+    left: 50%;
+    background-color: var(--accent-orange);
+    color: var(--text-on-accent);
+    padding: 0.5rem 1.5rem;
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+    font-weight: 700;
+    z-index: 1001; /* Above sticky header, below modals */
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -150%); /* Start above the screen */
+    transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0.3s;
+    pointer-events: none;
+}
+
+#offline-indicator.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0); /* Slide down to its 'top' position */
+    transition-delay: 0s;
+}
+
+/*
+==========================================================================
 LANDING PAGE
 ==========================================================================
 */

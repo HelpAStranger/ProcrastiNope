@@ -455,6 +455,7 @@ async function initializeAppLogic(initialUser) {
     const noDailyTasksMessage = document.getElementById('no-daily-tasks-message');
     const noGeneralTasksMessage = document.getElementById('no-general-tasks-message');
     const quoteEl = document.getElementById('quote-of-the-day');
+    const offlineIndicator = document.getElementById('offline-indicator');
     let confirmCallback = null;
     
     const friendsBtnDesktop = document.getElementById('friends-btn-desktop');
@@ -3749,6 +3750,16 @@ async function initializeAppLogic(initialUser) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
+
+        // Add online/offline listeners to show the indicator.
+        const updateOnlineStatus = () => {
+            if (offlineIndicator) { // Defensive check
+                offlineIndicator.classList.toggle('visible', !navigator.onLine);
+            }
+        };
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus(); // Check initial status on load
     };
 
     const handleGlobalKeys = (e) => {
