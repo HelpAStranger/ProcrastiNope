@@ -1265,6 +1265,7 @@ TIMER CLOCK BUTTON
     stroke: var(--accent);
     stroke-width: 3;
     fill: transparent;
+    transition: stroke-dashoffset linear;
 }
 
 /*

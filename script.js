@@ -370,9 +370,8 @@ async function initializeAppLogic(initialUser) {
     let confirmedFriendUIDs = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
-    // PERF: Refactored timers to use a single requestAnimationFrame loop.
-    let activeTimers = new Map(); // Map of active timer data for the rAF loop.
-    let timerRafId = null;
+    // PERF: Refactored timers to use CSS transitions instead of a JS loop.
+    let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
     let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
 
@@ -1626,46 +1625,6 @@ async function initializeAppLogic(initialUser) {
         });
     };
 
-    // PERF: A single requestAnimationFrame loop to handle all active timer UI updates.
-    const timerLoop = () => {
-        let hasActiveTimers = false;
-        activeTimers.forEach((timerData, id) => {
-            const { startTime, duration, ringEl } = timerData;
-
-            // If the element is gone from the DOM, stop tracking its timer.
-            if (!document.body.contains(ringEl)) {
-                activeTimers.delete(id);
-                return;
-            }
-
-            const elapsed = (Date.now() - startTime) / 1000;
-            const remaining = duration - elapsed;
-
-            if (remaining > 0) {
-                hasActiveTimers = true;
-                const r = ringEl.r.baseVal.value;
-                if (r > 0) {
-                    const c = r * 2 * Math.PI;
-                ringEl.style.strokeDasharray = c;
-                    const p = remaining / duration;
-                    ringEl.style.strokeDashoffset = c - (p * c);
-                }
-            } else {
-                // Timer finished, remove it from the active map and call finishTimer.
-                activeTimers.delete(id);
-                finishTimer(id);
-            }
-        });
-
-        if (hasActiveTimers) {
-            timerRafId = requestAnimationFrame(timerLoop);
-        } else {
-            // No more active timers, stop the loop.
-            cancelAnimationFrame(timerRafId);
-            timerRafId = null;
-        }
-    };
-
     const finishTimer = (id) => {
         playSound('timerUp');
         activeTimers.delete(id); // Ensure it's removed from the active map.
@@ -1699,12 +1658,27 @@ async function initializeAppLogic(initialUser) {
     };
 
     const stopTimer = (id, shouldRender = true) => {
-        activeTimers.delete(id);
+        if (activeTimers.has(id)) {
+            clearTimeout(activeTimers.get(id));
+            activeTimers.delete(id);
+        }
+
         const { task } = findTaskAndContext(id);
         if (task) {
             delete task.timerStartTime;
             delete task.timerDuration;
             delete task.timerFinished;
+
+            // Also reset the ring's CSS when a timer is stopped.
+            const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+            if (taskEl) {
+                const ringEl = taskEl.querySelector('.progress-ring-circle');
+                if (ringEl) {
+                    ringEl.style.transitionDuration = '0s';
+                    ringEl.style.strokeDashoffset = 0;
+                }
+            }
+
             if (shouldRender) {
                 renderAllLists();
                 saveState();
@@ -1713,12 +1687,9 @@ async function initializeAppLogic(initialUser) {
     };
 
     const resumeTimers = () => {
-        // This function is called after every render to find tasks with timers and start the loop.
+        // Clear any previously running timeouts that haven't been explicitly stopped.
+        activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
         activeTimers.clear();
-        if (timerRafId) {
-            cancelAnimationFrame(timerRafId);
-            timerRafId = null;
-        }
 
         let needsSaveAndRender = false;
         const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
@@ -1733,9 +1704,29 @@ async function initializeAppLogic(initialUser) {
                     const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
                     if (taskEl) {
                         const ringEl = taskEl.querySelector('.progress-ring-circle');
-                        if (ringEl) activeTimers.set(t.id, { startTime: t.timerStartTime, duration: t.timerDuration, ringEl });
+                        if (ringEl) {
+                            const r = 10; // from CSS
+                            const c = r * 2 * Math.PI;
+                            const startOffset = (elapsed / t.timerDuration) * c;
+
+                            // Set initial state without transition
+                            ringEl.style.transitionDuration = '0s';
+                            ringEl.style.strokeDashoffset = startOffset;
+                            
+                            // Force reflow to apply the initial state
+                            ringEl.getBoundingClientRect(); 
+
+                            // Apply transition and set final state
+                            ringEl.style.transitionDuration = `${remaining}s`;
+                            ringEl.style.strokeDashoffset = c;
+
+                            // Set a timeout to call finishTimer when it's done
+                            const timeoutId = setTimeout(() => finishTimer(t.id), remaining * 1000);
+                            activeTimers.set(t.id, timeoutId);
+                        }
                     }
                 } else {
+                    // Timer has finished while the app was closed or tab was inactive
                     if (!t.timerFinished) {
                         t.timerFinished = true;
                         delete t.timerStartTime;
@@ -1749,11 +1740,6 @@ async function initializeAppLogic(initialUser) {
         if (needsSaveAndRender) {
             saveState();
             renderAllLists();
-        }
-
-        // If any timers were found, start the animation loop.
-        if (activeTimers.size > 0 && !timerRafId) {
-            timerRafId = requestAnimationFrame(timerLoop);
         }
     };
 
@@ -3758,7 +3744,7 @@ async function initializeAppLogic(initialUser) {
         isPartial: false,
         shutdown: () => {
              debouncedSaveData.cancel();
-             if (timerRafId) cancelAnimationFrame(timerRafId);
+             activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
              activeTimers.clear();
              if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
