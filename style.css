@@ -1036,7 +1036,6 @@ TASK LIST & ITEMS
 
 .task-actions-container {
     margin-left: auto;
-    position: relative; /* For the overlay */
     display: flex;
     align-items: center;
 }
