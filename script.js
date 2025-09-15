@@ -1234,6 +1234,9 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
+        // This is the key change. When a task is completed, any 'timer finished' state should be cleared.
+        delete task.timerFinished;
+
         addXp(XP_PER_TASK);
         playSound('complete');
         if (type === 'daily') {
