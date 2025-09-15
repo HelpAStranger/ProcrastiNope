@@ -3056,6 +3056,8 @@ async function initializeAppLogic(initialUser) {
 
                     // NEW: Handle rejection by friend ('rejected'), abandonment by friend ('abandoned'), or cancellation by owner ('cancelled')
                     if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
+                    // NEW: Handle rejection by friend ('rejected') or abandonment by friend ('abandoned')
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
