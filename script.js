@@ -366,6 +366,7 @@ async function initializeAppLogic(initialUser) {
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let sharedGroups = [];
     let allSharedGroupsFromListener = [];
+    let questsMap = new Map(); // Make it available in the broader scope
     let confirmedFriendUIDs = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
@@ -1130,14 +1131,23 @@ async function initializeAppLogic(initialUser) {
 
         // Prevent deletion of shared tasks from original lists, with a special case for orphans.
         if (task.isShared && type !== 'shared') {
-            const isOrphan = !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+            const sharedQuestData = questsMap.get(task.sharedQuestId);
+            
+            // An orphan is a quest where the share doc doesn't exist,
+            // OR the share doc exists but the other participant is no longer a friend.
+            const otherParticipant = sharedQuestData ? sharedQuestData.participants.find(p => p !== user.uid) : null;
+            const isOrphan = !sharedQuestData || (otherParticipant && !confirmedFriendUIDs.includes(otherParticipant));
 
             if (isOrphan) {
                 showConfirm(
                     "Clean Up Orphaned Quest?", 
-                    "This shared quest seems to be orphaned (it may have been removed by your friend). Would you like to convert it back to a normal quest?", 
+                    "This shared quest seems to be orphaned (it may have been removed by your friend or the share no longer exists). Would you like to convert it back to a normal quest?", 
                     () => {
                         revertSharedQuest(task.id);
+                        // Also try to delete the Firestore doc if it exists, just in case.
+                        if (sharedQuestData) {
+                            deleteDoc(doc(db, "sharedQuests", sharedQuestData.id)).catch(err => console.warn("Orphaned share doc cleanup failed:", err));
+                        }
                     }
                 );
             } else {
@@ -1543,7 +1553,10 @@ async function initializeAppLogic(initialUser) {
                 // Instead of deleting directly, update the status to 'rejected'.
                 // The owner's own listener will see this change and perform the deletion and local state reversion,
                 // centralizing the cleanup logic.
-                await updateDoc(sharedQuestRef, { status: 'rejected' });
+                // Owner cancels by deleting the pending request directly. This mirrors the working `cancelSharedGroup` logic.
+                await deleteDoc(sharedQuestRef);
+                // Revert the original task in local state for responsiveness.
+                revertSharedQuest(questData.originalTaskId);
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
@@ -3063,9 +3076,9 @@ async function initializeAppLogic(initialUser) {
     function listenForSharedQuests() {
         if (!user) return;
         if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
-        
-        // This map will hold all quests from all listeners to avoid race conditions.
-        let questsMap = new Map();
+
+        // Use the map from the parent scope to make it accessible elsewhere (e.g., for orphan checks)
+        questsMap.clear(); // Clear it on re-listen
         let unsubscribers = [];
 
         const handleSnapshot = (querySnapshot) => { // PERF: Combined multiple listeners into one.
