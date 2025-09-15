@@ -926,9 +926,6 @@ TASK LIST & ITEMS
 .task-item.my-part-completed .task-text {
     text-decoration: line-through;
 }
-.task-item.my-part-completed .task-buttons-wrapper {
-    display: none; /* Hide action buttons */
-}
 
 /* NEW: Styles for main quests pending deletion (undo state) */
 .task-item.pending-deletion {
