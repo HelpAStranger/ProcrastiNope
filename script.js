@@ -1502,9 +1502,6 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // If the document doesn't exist, or we aren't the owner, we can't do anything.
-                // This can happen if the share was already accepted/rejected. The listener will handle UI cleanup.
-
                 const questData = sharedQuestSnap.data();
 
                 if (questData.ownerUid !== user.uid) {
@@ -1512,16 +1509,15 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // If it's no longer pending, we can't cancel it. The UI will update soon.
                 if (questData.status !== 'pending') {
                     console.log("Attempted to cancel a share that was no longer pending. UI will update shortly.");
                     return;
                 }
 
-                // Instead of deleting directly, update the status. The listener will handle cleanup.
-                // Update the status to 'cancelled'. The owner's listener will see this,
-                // call revertSharedQuest(), and then delete the document.
-                await updateDoc(sharedQuestRef, { status: 'cancelled' });
+                // Owner is cancelling a pending request. Delete the doc and revert the local task.
+                const originalTaskToRevertId = questData.originalTaskId;
+                await deleteDoc(sharedQuestRef);
+                revertSharedQuest(originalTaskToRevertId);
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
