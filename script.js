@@ -30,7 +30,8 @@ import {
     arrayRemove,
     deleteDoc,
     documentId,
-    addDoc
+    addDoc,
+    enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
@@ -165,6 +166,7 @@ let unsubscribeFromSharedQuests = null;
 let unsubscribeFromSharedGroups = null;
 let appController = null;
 let lastFocusedElement = null;
+let localDataTimestamp = 0; // To track the timestamp of the currently loaded data.
 
 let activeMobileActionsItem = null; 
 
@@ -236,6 +238,19 @@ try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+
+    // Enable offline persistence. This must be done before any other Firestore operations.
+    // It allows the app to work offline and syncs changes when the connection is restored.
+    enableIndexedDbPersistence(db)
+        .catch((err) => {
+            if (err.code === 'failed-precondition') {
+                // This happens if multiple tabs are open. Persistence can only be active in one.
+                console.warn("Firestore persistence failed: Multiple tabs open. App will work online only.");
+            } else if (err.code === 'unimplemented') {
+                // The browser is likely too old or doesn't support the required features.
+                console.warn("Firestore persistence is not supported in this browser. App will work online only.");
+            }
+        });
     
     onAuthStateChanged(auth, async (user) => {
         // Cleanup previous user's data listeners to prevent memory leaks.
@@ -541,6 +556,24 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
+    function updateMainNotificationBadges() {
+        const requestCount = incomingFriendRequests.length;
+        const sharesCount = incomingSharedItems.length;
+        const totalCount = requestCount + sharesCount;
+
+        const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile];
+        badges.forEach(badge => {
+            if (badge) { // Defensive check
+                if (totalCount > 0) {
+                    badge.textContent = totalCount;
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        });
+    }
+
     function debounce(func, delay) { // MODIFIED: Added a cancel method
         let timeout;
         const debounced = function(...args) {
@@ -559,14 +592,22 @@ async function initializeAppLogic(initialUser) {
             localStorage.setItem('userTheme', data.settings.theme);
         }
 
+        // Add a timestamp to the data payload to resolve multi-device conflicts.
+        const dataWithTimestamp = {
+            ...data,
+            lastModified: Date.now()
+        };
+
         if (!user) {
-            localStorage.setItem('anonymousUserData', JSON.stringify(data));
+            localStorage.setItem('anonymousUserData', JSON.stringify(dataWithTimestamp));
             return;
         }
         
         try {
             const userDocRef = doc(db, "users", user.uid);
-            await setDoc(userDocRef, { appData: data }, { merge: true });
+            // By including the timestamp, we can check on the client-side if the data
+            // we receive from a snapshot is newer than what we currently have.
+            await setDoc(userDocRef, { appData: dataWithTimestamp }, { merge: true });
         } catch (error) { 
             console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); 
         }
@@ -609,6 +650,8 @@ async function initializeAppLogic(initialUser) {
         generalTaskGroups = data.generalTaskGroups || [];
         playerData = data.playerData || { level: 1, xp: 0 };
         settings = { ...settings, ...(data.settings || {}) }; 
+        // Store the timestamp of the data we're loading.
+        localDataTimestamp = data.lastModified || 0;
         
         // Re-apply the transient state to the newly loaded data
         generalTaskGroups.forEach(group => {
@@ -643,9 +686,22 @@ async function initializeAppLogic(initialUser) {
             const userDocRef = doc(db, "users", user.uid);
             let isFirstLoad = true;
             unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
+                // This block handles real-time updates from Firestore.
                 if (docSnap.exists() && docSnap.data().appData) {
-                    loadAndDisplayData(docSnap.data().appData);
+                    const incomingData = docSnap.data().appData;
+                    const incomingTimestamp = incomingData.lastModified || 0;
+
+                    // CONFLICT RESOLUTION: Only update the local state if the incoming data is newer.
+                    // This prevents overwriting local changes that are in the process of being saved,
+                    // especially important with offline persistence and multi-device use.
+                    // On first load, we always load the data.
+                    if (isFirstLoad || incomingTimestamp > localDataTimestamp) {
+                        loadAndDisplayData(incomingData);
+                    } else if (incomingTimestamp < localDataTimestamp) {
+                        console.warn("Stale data from Firestore snapshot ignored.");
+                    }
                 } else {
+                    // This case handles a new user or a user with no data.
                     loadAndDisplayData({});
                 }
                 if (isFirstLoad) {
@@ -2569,15 +2625,16 @@ async function initializeAppLogic(initialUser) {
 
             // Update notification badges for incoming requests
             const requestCount = incomingFriendRequests.length;
-            const badges = [friendRequestCountBadge, friendRequestCountBadgeMobile, friendRequestCountBadgeModal];
-            badges.forEach(badge => {
+            const modalBadge = friendRequestCountBadgeModal;
+            if (modalBadge) {
                 if (requestCount > 0) {
-                    badge.textContent = requestCount;
-                    badge.style.display = 'flex';
+                    modalBadge.textContent = requestCount;
+                    modalBadge.style.display = 'flex';
                 } else {
-                    badge.style.display = 'none';
+                    modalBadge.style.display = 'none';
                 }
-            });
+            }
+            updateMainNotificationBadges();
 
             // Trigger a debounced render to update the list with new pending requests
             debouncedRenderFriends();
@@ -3183,6 +3240,7 @@ async function initializeAppLogic(initialUser) {
             const incomingGroups = allSharedGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
             incomingSharedItems = [...incomingQuests, ...incomingGroups];
 
+            updateMainNotificationBadges();
             renderAllLists();
         };
 
@@ -3265,6 +3323,7 @@ async function initializeAppLogic(initialUser) {
             const incomingSharedQuests = sharedQuests.filter(q => q.status === 'pending' && q.friendUid === user.uid);
             incomingSharedItems = [...incomingSharedQuests, ...incomingSharedGroups];
 
+            updateMainNotificationBadges();
             renderAllLists();
         }, (error) => console.error("Error listening for shared groups:", getCoolErrorMessage(error)));
     }
