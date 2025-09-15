@@ -153,6 +153,7 @@ let unsubscribeFromFriendsAndShares = null; // Renamed from unsubscribeFromFrien
 let unsubscribeFromSharedQuests = null;
 let unsubscribeFromSharedGroups = null;
 let appController = null;
+let lastFocusedElement = null;
 
 let activeMobileActionsItem = null; 
 
@@ -164,7 +165,6 @@ const landingChoices = document.getElementById('landing-choices');
 const landingAuthContainer = document.getElementById('landing-auth-container');
 
 // --- GLOBAL HELPER FUNCTIONS & STATE ---
-let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
 let audioCtx = null; // Will be initialized by the app logic
 
 function playSound(type) {
@@ -192,6 +192,7 @@ function playSound(type) {
 
 const openModal = (modal) => {
     if(modal) {
+        lastFocusedElement = document.activeElement;
         if (activeMobileActionsItem) {
             activeMobileActionsItem.classList.remove('actions-visible');
             activeMobileActionsItem = null;
@@ -199,6 +200,12 @@ const openModal = (modal) => {
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
         playSound('open');
+        // Focus the first focusable element inside the modal
+        const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        const firstFocusable = Array.from(focusableElements).find(el => el.offsetParent !== null);
+        if (firstFocusable) {
+            setTimeout(() => firstFocusable.focus(), 100);
+        }
     }
 };
 const closeModal = (modal) => {
@@ -206,6 +213,9 @@ const closeModal = (modal) => {
         appWrapper.classList.remove('blur-background');
         modal.classList.remove('visible');
         playSound('close');
+        if (lastFocusedElement) {
+            lastFocusedElement.focus();
+        }
     }
 };
 
@@ -340,6 +350,7 @@ async function initializeAppLogic(initialUser) {
     // audioCtx is now created in initAudioContext on first user gesture.
 
     let lastSection = 'daily';
+    let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let sharedGroups = [];
@@ -819,7 +830,7 @@ async function initializeAppLogic(initialUser) {
             return el;
         }
 
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
@@ -880,17 +891,18 @@ async function initializeAppLogic(initialUser) {
         li.className = 'task-item shared-group-task';
         li.dataset.id = task.id;
         li.dataset.sharedGroupId = group.id;
-    
+
         const myPartCompleted = user.uid === group.ownerUid ? task.ownerCompleted : task.friendCompleted;
+        const completeBtnLabel = myPartCompleted ? `Undo completion of shared task: ${task.text}` : `Complete shared task: ${task.text}`;
 
         const buttonsHTML = `
-            <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
-            <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+            <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+            <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
             <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
         `;
 
         li.innerHTML = `
-            <button class="complete-btn ${myPartCompleted ? 'checked' : ''}"></button>
+            <button class="complete-btn ${myPartCompleted ? 'checked' : ''}" aria-label="${completeBtnLabel}"></button>
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
@@ -916,28 +928,31 @@ async function initializeAppLogic(initialUser) {
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
             const allCompleted = ownerCompleted && friendCompleted;
 
+            const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
+            const completeBtnLabel = myPartCompleted ? `Undo completion of shared quest: ${task.text}` : `Complete shared quest: ${task.text}`;
+
             li.classList.add('shared-quest');
             if (allCompleted) {
                 li.classList.add('all-completed');
             }
             li.dataset.id = task.questId; // Use questId for shared quests
-            
+
             const selfIdentifier = isOwner ? 'You' : otherPlayerUsername;
             const otherIdentifier = isOwner ? otherPlayerUsername : task.ownerUsername; // Corrected: should be owner's username if current user is friend
-            
+
             const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-active-btn" aria-label="Unshare Quest" title="Unshare Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
             const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-quest-btn" aria-label="Abandon Quest" title="Abandon Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
 
             const buttonsHTML = `
-                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
                 ${unshareBtnHTML}
                 ${abandonBtnHTML}
-                <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
 
             li.innerHTML = `
-                <button class="complete-btn"></button>
+                <button class="complete-btn" aria-label="${completeBtnLabel}"></button>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
                 <div class="task-buttons-wrapper">${buttonsHTML}</div>
                 <div class="shared-quest-info">
@@ -948,8 +963,7 @@ async function initializeAppLogic(initialUser) {
                     </div>
                 </div>`;
 
-            const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
-            if(myPartCompleted) {
+            if (myPartCompleted) {
                  const completeBtn = li.querySelector('.complete-btn');
                  completeBtn.classList.add('checked');
                  completeBtn.disabled = false; // Allow uncompletion
@@ -961,20 +975,23 @@ async function initializeAppLogic(initialUser) {
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
         let streakHTML = ''; if (type === 'daily' && task.streak > 0) streakHTML = `<div class="streak-counter" title="Streak: ${task.streak}"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.653 9.473c.071.321.11.65.11.986 0 2.21-1.791 4-4 4s-4-1.79-4-4c0-.336.039-.665.11-.986C7.333 11.23 6 14.331 6 18h12c0-3.669-1.333-6.77-3.347-8.527zM12 2C9.239 2 7 4.239 7 7c0 .961.261 1.861.713 2.638C9.223 8.36 10.55 7.5 12 7.5s2.777.86 4.287 2.138C17 8.861 17 7.961 17 7c0-2.761-2.239-5-5-5z"/></svg><span>${task.streak}</span></div>`;
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
-        
+
+        const isCompleted = task.completedToday || task.pendingDeletion;
+        const completeBtnLabel = isCompleted ? `Undo completion of quest: ${task.text}` : `Complete quest: ${task.text}`;
+
         let buttonsHTML;
         if (task.pendingDeletion) {
             buttonsHTML = `<button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>`;
         } else {
             buttonsHTML = `
-                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
-                <button class="btn icon-btn share-btn" aria-label="Share Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
-                <button class="btn icon-btn edit-btn" aria-label="Edit Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                <button class="btn icon-btn share-btn" aria-label="Share Quest" aria-haspopup="dialog" aria-controls="share-quest-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
         }
 
-        li.innerHTML = `<button class="complete-btn"></button>
+        li.innerHTML = `<button class="complete-btn" aria-label="${completeBtnLabel}"></button>
             <div class="task-content">${streakHTML}<span class="task-text">${task.text}</span>${goalHTML}</div>
             <div class="task-buttons-wrapper">
                 ${buttonsHTML.trim()}
@@ -984,8 +1001,7 @@ async function initializeAppLogic(initialUser) {
         if (task.timerFinished) li.classList.add('timer-finished');
 
         // REGRESSION TWEAK: A completed task should never display an active timer.
-        // This guard prevents the timer UI from showing even if timer properties were not cleared.
-        const isCompleted = task.completedToday || task.pendingDeletion;
+        // This guard prevents the timer UI from showing even if timer properties were not cleared.        
         if (task.timerStartTime && task.timerDuration && !isCompleted) {
             const elapsed = (Date.now() - task.timerStartTime) / 1000;
             const remaining = Math.max(0, task.timerDuration - elapsed);
@@ -3582,6 +3598,42 @@ async function initializeAppLogic(initialUser) {
     const initOnce = () => {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
         showRandomQuote();
+        document.addEventListener('keydown', handleGlobalKeys);
+    };
+
+    const handleGlobalKeys = (e) => {
+        const activeModal = document.querySelector('.modal-overlay.visible');
+
+        // Escape key to close modals
+        if (e.key === 'Escape' && activeModal) {
+            if (activeModal.getAttribute('data-persistent') !== 'true') {
+                closeModal(activeModal);
+            }
+        }
+
+        // Tab trapping inside modals
+        if (e.key === 'Tab' && activeModal) {
+            const focusableElements = Array.from(activeModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+                                           .filter(el => el.offsetParent !== null); // Only visible, focusable elements
+            if (focusableElements.length === 0) {
+                e.preventDefault();
+                return;
+            }
+            const firstFocusable = focusableElements[0];
+            const lastFocusable = focusableElements[focusableElements.length - 1];
+
+            if (e.shiftKey) { // Shift + Tab
+                if (document.activeElement === firstFocusable) {
+                    lastFocusable.focus();
+                    e.preventDefault();
+                }
+            } else { // Tab
+                if (document.activeElement === lastFocusable) {
+                    firstFocusable.focus();
+                    e.preventDefault();
+                }
+            }
+        }
     };
 
     const initAudioContext = () => {

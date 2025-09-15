@@ -72,12 +72,12 @@
                 <p class="quote" id="quote-of-the-day">Loading a dose of motivation...</p>
             </div>
             <div class="header-controls">
-                <button id="friends-btn-desktop" class="btn" aria-label="Open Friends Menu">
+                <button id="friends-btn-desktop" class="btn" aria-label="Open Friends Menu" aria-haspopup="dialog" aria-controls="friends-modal">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     <span>Friends</span>
                     <span id="friend-request-count" class="notification-badge"></span>
                 </button>
-                <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings">
+                <button id="settings-btn" class="btn icon-btn" aria-label="Open Settings" aria-haspopup="dialog" aria-controls="settings-modal">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
             </div>
@@ -96,7 +96,7 @@
                 <section class="task-group mobile-visible" data-section="daily">
                     <header class="task-group-header">
                         <h2>Daily Quests</h2>
-                        <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest">+</button>
+                        <button class="btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest" aria-haspopup="dialog" aria-controls="add-task-modal">+</button>
                     </header>
                     <div id="shared-quests-container" class="shared-quests-container">
                         <!-- Shared quests will be dynamically inserted here -->
@@ -110,8 +110,8 @@
                     <header class="task-group-header">
                         <h2>Main Quests</h2>
                         <div class="header-actions">
-                            <button id="add-standalone-task-btn" class="btn" aria-label="Add Quest">Add Quest</button>
-                            <button id="add-group-btn" class="btn" aria-label="Add Group">Add Group</button>
+                            <button id="add-standalone-task-btn" class="btn" aria-label="Add Quest" aria-haspopup="dialog" aria-controls="add-task-modal">Add Quest</button>
+                            <button id="add-group-btn" class="btn" aria-label="Add Group" aria-haspopup="dialog" aria-controls="add-group-modal">Add Group</button>
                         </div>
                     </header>
                     <ul id="standalone-task-list"></ul>
@@ -135,7 +135,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
                 <span>Main</span>
             </button>
-            <button class="mobile-nav-btn" data-section="friends" aria-label="Friends">
+            <button class="mobile-nav-btn" data-section="friends" aria-label="Friends" aria-haspopup="dialog" aria-controls="friends-modal">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                 <span>Friends</span>
                  <span id="friend-request-count-mobile" class="notification-badge"></span>
@@ -145,7 +145,7 @@
 
     <!-- Modals -->
     <div id="add-task-modal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="add-task-modal-title">
             <h2 id="add-task-modal-title">Add New Quest</h2>
             <form id="add-task-form">
                 <input type="text" id="new-task-input" placeholder="e.g., Conquer the world..." required maxlength="30">
@@ -164,7 +164,7 @@
     </div>
 
     <div id="edit-task-modal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="edit-task-modal-title">
             <h2 id="edit-task-modal-title">Edit Quest</h2>
             <form id="edit-task-form">
                 <input type="hidden" id="edit-task-id">
@@ -184,8 +184,8 @@
     </div>
     
     <div id="add-group-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Create New Group</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="add-group-modal-title">
+            <h2 id="add-group-modal-title">Create New Group</h2>
             <form id="add-group-form">
                 <input type="text" id="new-group-input" placeholder="e.g., Project Overlord" required maxlength="30">
                 <div class="modal-actions">
@@ -197,8 +197,8 @@
     </div>
 
     <div id="timer-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Set Task Timer</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="timer-modal-title">
+            <h2 id="timer-modal-title">Set Task Timer</h2>
             <form id="timer-form">
                 <div class="timer-slider-container">
                     <label for="timer-duration-slider">Duration: <span id="timer-duration-display">25</span></label>
@@ -221,7 +221,7 @@
     </div>
     
     <div id="friends-modal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-label="Friends and Shares">
             <div id="friends-modal-bg">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><defs><filter id="f" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="40"></feGaussianBlur></filter></defs><g filter="url(#f)"><circle cx="400" cy="400" r="150" fill="var(--accent-blue)"></circle><circle cx="100" cy="200" r="100" fill="var(--accent-green)"></circle><circle cx="600" cy="150" r="120" fill="var(--accent-red)"></circle><circle cx="700" cy="650" r="180" fill="var(--accent-yellow)"></circle><circle cx="200" cy="700" r="90" fill="var(--accent-purple)"></circle></g></svg>
             </div>
@@ -263,8 +263,8 @@
     </div>
     
     <div id="share-quest-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Share Quest With...</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="share-quest-modal-title">
+            <h2 id="share-quest-modal-title">Share Quest With...</h2>
             <input type="hidden" id="share-quest-id-input">
             <div id="share-quest-friend-list" class="share-quest-friend-list">
                 <!-- Friend list will be populated here -->
@@ -277,8 +277,8 @@
 
     <!-- NEW: Share Group Modal -->
     <div id="share-group-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Share Group "<span id="share-group-name-display"></span>" With...</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="share-group-modal-title">
+            <h2 id="share-group-modal-title">Share Group "<span id="share-group-name-display"></span>" With...</h2>
             <input type="hidden" id="share-group-id-input">
             <div id="share-group-friend-list" class="share-quest-friend-list">
                 <!-- Friend list will be populated here -->
@@ -290,14 +290,14 @@
     </div>
 
     <div id="settings-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Settings</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+            <h2 id="settings-modal-title">Settings</h2>
             <div class="settings-group">
                 <h3>Account</h3>
                 <div class="account-actions">
                     <span id="user-display" style="display: none; align-items:center;"></span>
-                    <button id="settings-login-btn" class="btn">Login / Sign Up</button>
-                    <button id="manage-account-btn" class="btn" style="display: none;">Manage Account</button>
+                    <button id="settings-login-btn" class="btn" aria-haspopup="dialog" aria-controls="account-modal">Login / Sign Up</button>
+                    <button id="manage-account-btn" class="btn" style="display: none;" aria-haspopup="dialog" aria-controls="manage-account-modal">Manage Account</button>
                     <button id="logout-btn" class="btn" style="display: none;">Logout</button>
                 </div>
             </div>
@@ -333,11 +333,11 @@
     </div>
     
     <div id="account-modal" class="modal-overlay">
-        <div class="modal-content"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-label="Account Creation and Login"></div>
     </div>
     
     <div id="manage-account-modal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-label="Manage Account">
             <div id="reauth-container">
                 <h2>Confirm Password</h2>
                 <p style="margin-bottom: 1.5rem;">For your security, please enter your password to continue.</p>
@@ -418,16 +418,16 @@
     </div>
     
     <div id="google-signin-loader-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 300px; text-align: center;">
-            <h2 style="font-size: 1.5rem;">Connecting...</h2>
+        <div class="modal-content" style="max-width: 300px; text-align: center;" role="alertdialog" aria-modal="true" aria-labelledby="google-loader-title">
+            <h2 id="google-loader-title" style="font-size: 1.5rem;">Connecting...</h2>
             <div class="loader-box" style="margin: 2rem auto;"></div>
             <p>Please complete the sign-in in the popup window.</p>
         </div>
     </div>
 
     <div id="username-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2>Choose your Username</h2>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="username-modal-title">
+            <h2 id="username-modal-title">Choose your Username</h2>
             <p style="margin-bottom: 1.5rem;">This will be your unique public name for login and adding friends.</p>
             <form id="username-form">
                 <input type="text" id="new-username-input" placeholder="e.g., QuestMaster" required minlength="3" maxlength="15">
@@ -440,8 +440,8 @@
     </div>
     
     <div id="timer-menu-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 350px;">
-            <h2>Active Timer</h2><p style="margin-bottom: 1.5rem;">This quest has a timer running.</p>
+        <div class="modal-content" style="max-width: 350px;" role="dialog" aria-modal="true" aria-labelledby="timer-menu-title">
+            <h2 id="timer-menu-title">Active Timer</h2><p style="margin-bottom: 1.5rem;">This quest has a timer running.</p>
             <div class="modal-actions" style="justify-content: space-around;">
                 <button type="button" id="timer-menu-cancel-btn" class="btn">Cancel Timer</button>
                 <button type="button" class="btn" data-close-modal="timer-menu-modal">Leave</button>
@@ -450,7 +450,7 @@
     </div>
 
     <div id="confirm-modal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text">
             <h2 id="confirm-title">Are you sure?</h2>
             <p id="confirm-text" style="margin-bottom: 1.5rem;">This action cannot be undone.</p>
             <div class="modal-actions">
