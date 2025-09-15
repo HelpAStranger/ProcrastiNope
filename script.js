@@ -1128,9 +1128,21 @@ async function initializeAppLogic(initialUser) {
         const {task, list, type} = findTaskAndContext(id); 
         if (!task || !list) return;
 
-        // NEW: Prevent deletion of shared tasks from original lists
+        // Prevent deletion of shared tasks from original lists, with a special case for orphans.
         if (task.isShared && type !== 'shared') {
-            showConfirm("Shared Quest", "This quest has been shared. It cannot be deleted from here. You can only delete it from the Shared Quests section once it's completed by both participants.", () => {});
+            const isOrphan = !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+
+            if (isOrphan) {
+                showConfirm(
+                    "Clean Up Orphaned Quest?", 
+                    "This shared quest seems to be orphaned (it may have been removed by your friend). Would you like to convert it back to a normal quest?", 
+                    () => {
+                        revertSharedQuest(task.id);
+                    }
+                );
+            } else {
+                showConfirm("Shared Quest", "This quest has been shared. It cannot be deleted from here. You can only delete it from the Shared Quests section once it's completed by both participants.", () => {});
+            }
             return;
         }
 
