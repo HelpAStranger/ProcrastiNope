@@ -165,6 +165,7 @@ const landingChoices = document.getElementById('landing-choices');
 const landingAuthContainer = document.getElementById('landing-auth-container');
 
 // --- GLOBAL HELPER FUNCTIONS & STATE ---
+let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
 let audioCtx = null; // Will be initialized by the app logic
 
 function playSound(type) {
