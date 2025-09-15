@@ -105,9 +105,14 @@ service cloud.firestore {
       allow read: if request.auth != null &&
                    request.auth.uid in resource.data.participants;
 
-      // Rule for single-doc updates and deletes. This explicit check is more robust.
-      allow update, delete: if request.auth != null &&
+      // Rule for single-doc updates. Both participants can update their completion status or overall status.
+      allow update: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
+      
+      // Only the owner can delete a shared quest (e.g., to cancel a pending share or unshare an active one).
+      // The friend must 'abandon' or 'reject' it (an update), which triggers the owner's client to delete.
+      allow delete: if request.auth != null &&
+                      request.auth.uid == resource.data.ownerUid;
 
       // Only the owner can create a shared quest
       allow create: if request.auth != null &&
@@ -120,9 +125,15 @@ service cloud.firestore {
       allow read: if request.auth != null &&
                    request.auth.uid in resource.data.participants;
 
-      // Rule for single-doc updates and deletes. Both participants can update their task status.
-      allow update, delete: if request.auth != null &&
+      // Rule for single-doc updates. Both participants can update, but with restrictions.
+      // Owner can update anything. Friend can only update status or their task completions.
+      allow update: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
+
+      // Only the owner can delete a shared group (e.g., to cancel a pending share or unshare an active one).
+      // The friend must 'abandon' or 'reject' it (an update), which triggers the owner's client to delete.
+      allow delete: if request.auth != null &&
+                      request.auth.uid == resource.data.ownerUid;
 
       // Only the owner can create a shared group
       allow create: if request.auth != null &&
@@ -1514,11 +1525,10 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // Owner is cancelling a pending request.
-                // Instead of deleting directly, update the status to 'rejected'.
-                // The owner's own listener will see this change and perform the deletion and local state reversion,
-                // centralizing the cleanup logic.
-                await updateDoc(sharedQuestRef, { status: 'rejected' });
+                // Owner cancels by deleting the pending request directly. This mirrors the working `cancelSharedGroup` logic.
+                await deleteDoc(sharedQuestRef);
+                // Revert the original task in local state for responsiveness.
+                revertSharedQuest(questData.originalTaskId);
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
