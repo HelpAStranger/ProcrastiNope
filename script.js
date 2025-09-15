@@ -908,7 +908,7 @@ async function initializeAppLogic(initialUser) {
             return el;
         }
 
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div><h3>${group.name}</h3></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal">+</button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal">+</button></div></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
@@ -940,17 +940,20 @@ async function initializeAppLogic(initialUser) {
         const headerHTML = `
             <header class="main-quest-group-header">
                 <div class="group-title-container">
-                    <div class="expand-icon-wrapper"><svg class="expand-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg></div>
+                    <svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
                     <div class="group-title-and-subtitle">
                         <h3>${group.name}</h3>
                         <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     </div>
                 </div>
-                <div class="group-actions">
+                <div class="task-actions-container">
+                    <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                    <div class="group-actions">
                     ${editBtnHTML}
                     ${unshareBtnHTML}
                     ${abandonBtnHTML}
                     ${addTaskBtnHTML}
+                    </div>
                 </div>
             </header>
         `;
@@ -971,7 +974,6 @@ async function initializeAppLogic(initialUser) {
         li.dataset.sharedGroupId = group.id;
 
         const myPartCompleted = user.uid === group.ownerUid ? task.ownerCompleted : task.friendCompleted;
-        const completeBtnLabel = myPartCompleted ? `Undo completion of shared task: ${task.text}` : `Complete shared task: ${task.text}`;
 
         const buttonsHTML = `
             <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
@@ -980,11 +982,14 @@ async function initializeAppLogic(initialUser) {
         `;
 
         li.innerHTML = `
-            <button class="complete-btn ${myPartCompleted ? 'checked' : ''}" aria-label="${completeBtnLabel}"></button>
+            <div class="completion-indicator"></div>
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
-            <div class="task-buttons-wrapper">${buttonsHTML}</div>
+            <div class="task-actions-container">
+                <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                <div class="task-buttons-wrapper">${buttonsHTML}</div>
+            </div>
             <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
                 <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
                 <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
@@ -1007,7 +1012,6 @@ async function initializeAppLogic(initialUser) {
             const allCompleted = ownerCompleted && friendCompleted;
 
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
-            const completeBtnLabel = myPartCompleted ? `Undo completion of shared quest: ${task.text}` : `Complete shared quest: ${task.text}`;
 
             li.classList.add('shared-quest');
             if (allCompleted) {
@@ -1030,9 +1034,12 @@ async function initializeAppLogic(initialUser) {
             `;
 
             li.innerHTML = `
-                <button class="complete-btn" aria-label="${completeBtnLabel}"></button>
+                <div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
-                <div class="task-buttons-wrapper">${buttonsHTML}</div>
+                <div class="task-actions-container">
+                    <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                    <div class="task-buttons-wrapper">${buttonsHTML}</div>
+                </div>
                 <div class="shared-quest-info">
                     <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
@@ -1042,9 +1049,6 @@ async function initializeAppLogic(initialUser) {
                 </div>`;
 
             if (myPartCompleted) {
-                 const completeBtn = li.querySelector('.complete-btn');
-                 completeBtn.classList.add('checked');
-                 completeBtn.disabled = false; // Allow uncompletion
                  li.classList.add('my-part-completed'); // New class for my part completion
             }
             return li;
@@ -1054,7 +1058,6 @@ async function initializeAppLogic(initialUser) {
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
 
         const isCompleted = task.completedToday || task.pendingDeletion;
-        const completeBtnLabel = isCompleted ? `Undo completion of quest: ${task.text}` : `Complete quest: ${task.text}`;
 
         let buttonsHTML;
         if (task.pendingDeletion) {
@@ -1068,13 +1071,16 @@ async function initializeAppLogic(initialUser) {
             `;
         }
 
-        li.innerHTML = `<button class="complete-btn" aria-label="${completeBtnLabel}"></button>
+        li.innerHTML = `<div class="completion-indicator"></div>
             <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
-            <div class="task-buttons-wrapper">
-                ${buttonsHTML.trim()}
+            <div class="task-actions-container">
+                <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                <div class="task-buttons-wrapper">
+                    ${buttonsHTML.trim()}
+                </div>
             </div>`;
         if (task.pendingDeletion) li.classList.add('pending-deletion');
-        if (task.completedToday) { li.classList.add('daily-completed'); li.querySelector('.complete-btn').classList.add('checked'); }
+        if (task.completedToday) { li.classList.add('daily-completed'); }
         if (task.timerFinished) li.classList.add('timer-finished');
 
         // REGRESSION TWEAK: A completed task should never display an active timer.
@@ -1110,11 +1116,6 @@ async function initializeAppLogic(initialUser) {
                     `;
                 }
             } else { // Active or completed shared task
-                const completeBtn = li.querySelector('.complete-btn');
-                if (completeBtn) {
-                    completeBtn.disabled = true;
-                    completeBtn.title = 'This is a shared quest, manage its completion in the Shared Quests section.';
-                }
                 const buttonWrapper = li.querySelector('.task-buttons-wrapper');
                 if (buttonWrapper) {
                     buttonWrapper.innerHTML = `<button class="btn view-shared-quest-btn" data-shared-quest-id="${task.sharedQuestId}">View Share</button>`;
@@ -1841,54 +1842,43 @@ async function initializeAppLogic(initialUser) {
                 const sharedGroupId = parentEl.dataset.sharedGroupId;
                 const group = sharedGroups.find(g => g.id === sharedGroupId);
 
-                const isExpandClick = e.target.closest('.expand-icon-wrapper');
-                if (isExpandClick) {
-                    if (group) {
-                        group.isExpanded = !group.isExpanded;
-                        parentEl.classList.toggle('expanded', group.isExpanded);
-                    }
-                    // If actions are visible, keep the timeout running
-                    if (groupHeader.classList.contains('actions-visible')) {
-                        clearTimeout(actionsTimeoutId);
-                        actionsTimeoutId = setTimeout(() => {
-                            if(groupHeader.classList.contains('actions-visible')) {
-                                groupHeader.classList.remove('actions-visible');
-                                activeMobileActionsItem = null;
-                            }
-                        }, 3000);
-                    }
-                    return;
-                }
-
-                const isEditClick = e.target.closest('.edit-group-btn');
-                const isAddClick = e.target.closest('.add-task-to-group-btn');
-
-                if (isEditClick) {
-                    currentEditingGroupId = sharedGroupId;
-                    addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
-                    addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
-                    newGroupInput.value = group.name;
-                    openModal(addGroupModal);
-                    focusOnDesktop(newGroupInput);
-                    return;
-                }
-                if (isAddClick) {
-                    currentListToAdd = `shared-group-${sharedGroupId}`;
-                    weeklyGoalContainer.style.display = 'none';
-                    addTaskModalTitle.textContent = `Add to "${group.name}"`;
-                    openModal(addTaskModal);
-                    focusOnDesktop(newTaskInput);
-                    return;
-                }
-
-                const unshareBtn = e.target.closest('.unshare-group-btn');
-                if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
-
-                const abandonBtn = e.target.closest('.abandon-group-btn'); // eslint-disable-line
-                if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
-                
-                if (!e.target.closest('button')) {
+                if (e.target.closest('.options-btn')) {
                     toggleTaskActions(groupHeader);
+                    return;
+                }
+
+                if (e.target.closest('.group-actions')) {
+                    const isEditClick = e.target.closest('.edit-group-btn');
+                    const isAddClick = e.target.closest('.add-task-to-group-btn');
+                    const unshareBtn = e.target.closest('.unshare-group-btn');
+                    const abandonBtn = e.target.closest('.abandon-group-btn');
+
+                    if (isEditClick) {
+                        currentEditingGroupId = sharedGroupId;
+                        addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
+                        addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
+                        newGroupInput.value = group.name;
+                        openModal(addGroupModal);
+                        focusOnDesktop(newGroupInput);
+                        return;
+                    }
+                    if (isAddClick) {
+                        currentListToAdd = `shared-group-${sharedGroupId}`;
+                        weeklyGoalContainer.style.display = 'none';
+                        addTaskModalTitle.textContent = `Add to "${group.name}"`;
+                        openModal(addTaskModal);
+                        focusOnDesktop(newTaskInput);
+                        return;
+                    }
+                    if (unshareBtn) { unshareSharedGroup(sharedGroupId); return; }
+                    if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
+                    return; // Click was inside the actions overlay
+                }
+                
+                // Click on header body to expand/collapse
+                if (group) {
+                    group.isExpanded = !group.isExpanded;
+                    parentEl.classList.toggle('expanded', group.isExpanded);
                 }
                 return;
             }
@@ -1897,96 +1887,88 @@ async function initializeAppLogic(initialUser) {
             const groupId = parentEl.dataset.groupId;
             const g = generalTaskGroups.find(g => g.id === groupId);
 
-            const isExpandClick = e.target.closest('.expand-icon-wrapper');
-            const isAddClick = e.target.closest('.add-task-to-group-btn');
-            const isDeleteClick = e.target.closest('.delete-group-btn');
-            const isEditClick = e.target.closest('.edit-group-btn');
-            const isShareClick = e.target.closest('.share-group-btn');
-            const isCancelShareClick = e.target.closest('.cancel-share-group-btn');
-            const isCleanupClick = e.target.closest('.cleanup-orphan-group-btn');
-
-            if (isExpandClick) {
-                if (g) {
-                    g.isExpanded = !g.isExpanded; 
-                    groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
-                }
-                if (groupHeader.classList.contains('actions-visible')) {
-                    clearTimeout(actionsTimeoutId);
-                    actionsTimeoutId = setTimeout(() => {
-                        if(groupHeader.classList.contains('actions-visible')) {
-                            groupHeader.classList.remove('actions-visible');
-                            activeMobileActionsItem = null;
-                        }
-                    }, 3000);
-                }
+            if (e.target.closest('.options-btn')) {
+                toggleTaskActions(groupHeader);
                 return;
             }
 
-            if (isAddClick) {
-                currentListToAdd = groupId; 
-                weeklyGoalContainer.style.display = 'none'; 
-                addTaskModalTitle.textContent = `Add to "${g.name}"`; 
-                openModal(addTaskModal); 
-                focusOnDesktop(newTaskInput);
-                return;
-            } 
-            if (isDeleteClick) {
-                deleteGroup(groupId);
-                return;
-            }
-            if (isEditClick) {
-                if (g) {
-                    currentEditingGroupId = groupId;
-                    addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
-                    addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
-                    newGroupInput.value = g.name;
-                    openModal(addGroupModal);
-                    focusOnDesktop(newGroupInput);
-                }
-                return;
-            }
-            if (isShareClick) {
-                if (!user) {
-                    showConfirm("Login Required", "You must be logged in to share groups.", () => {
-                        closeModal(shareGroupModal);
-                        openModal(accountModal);
-                    });
+            if (e.target.closest('.group-actions') || e.target.closest('.cancel-share-group-btn') || e.target.closest('.cleanup-orphan-group-btn')) {
+                const isAddClick = e.target.closest('.add-task-to-group-btn');
+                const isDeleteClick = e.target.closest('.delete-group-btn');
+                const isEditClick = e.target.closest('.edit-group-btn');
+                const isShareClick = e.target.closest('.share-group-btn');
+                const isCancelShareClick = e.target.closest('.cancel-share-group-btn');
+                const isCleanupClick = e.target.closest('.cleanup-orphan-group-btn');
+
+                if (isAddClick) {
+                    currentListToAdd = groupId; 
+                    weeklyGoalContainer.style.display = 'none'; 
+                    addTaskModalTitle.textContent = `Add to "${g.name}"`; 
+                    openModal(addTaskModal); 
+                    focusOnDesktop(newTaskInput);
+                    return;
+                } 
+                if (isDeleteClick) {
+                    deleteGroup(groupId);
                     return;
                 }
-                openShareGroupModal(groupId);
-                return;
-            }
-            if (isCancelShareClick) {
-                const sharedGroupId = isCancelShareClick.dataset.sharedGroupId;
-                cancelSharedGroup(sharedGroupId);
-                return;
-            }
-            if (isCleanupClick) {
-                const groupId = isCleanupClick.dataset.groupId;
-                const sharedGroupId = isCleanupClick.dataset.sharedGroupId;
-                showConfirm(
-                    "Clean Up Orphaned Group?",
-                    "This will convert the group back to a normal, editable group in your list.",
-                    () => {
-                        // Revert local state
-                        const localGroup = generalTaskGroups.find(g => g.id === groupId);
-                        if (localGroup) {
-                            delete localGroup.isShared;
-                            delete localGroup.sharedGroupId;
-                            saveState();
-                            renderAllLists();
-                        }
-                        // Attempt to delete the remote doc just in case
-                        if (sharedGroupId) {
-                            deleteDoc(doc(db, "sharedGroups", sharedGroupId)).catch(err => console.warn("Orphaned group doc cleanup failed:", err));
-                        }
+                if (isEditClick) {
+                    if (g) {
+                        currentEditingGroupId = groupId;
+                        addGroupModal.querySelector('h2').textContent = 'Edit Group Name';
+                        addGroupModal.querySelector('.modal-submit-btn').textContent = 'Save';
+                        newGroupInput.value = g.name;
+                        openModal(addGroupModal);
+                        focusOnDesktop(newGroupInput);
                     }
-                );
+                    return;
+                }
+                if (isShareClick) {
+                    if (!user) {
+                        showConfirm("Login Required", "You must be logged in to share groups.", () => {
+                            closeModal(shareGroupModal);
+                            openModal(accountModal);
+                        });
+                        return;
+                    }
+                    openShareGroupModal(groupId);
+                    return;
+                }
+                if (isCancelShareClick) {
+                    const sharedGroupId = isCancelShareClick.dataset.sharedGroupId;
+                    cancelSharedGroup(sharedGroupId);
+                    return;
+                }
+                if (isCleanupClick) {
+                    const groupId = isCleanupClick.dataset.groupId;
+                    const sharedGroupId = isCleanupClick.dataset.sharedGroupId;
+                    showConfirm(
+                        "Clean Up Orphaned Group?",
+                        "This will convert the group back to a normal, editable group in your list.",
+                        () => {
+                            // Revert local state
+                            const localGroup = generalTaskGroups.find(g => g.id === groupId);
+                            if (localGroup) {
+                                delete localGroup.isShared;
+                                delete localGroup.sharedGroupId;
+                                saveState();
+                                renderAllLists();
+                            }
+                            // Attempt to delete the remote doc just in case
+                            if (sharedGroupId) {
+                                deleteDoc(doc(db, "sharedGroups", sharedGroupId)).catch(err => console.warn("Orphaned group doc cleanup failed:", err));
+                            }
+                        }
+                    );
+                    return;
+                }
                 return;
             }
             
-            if (!e.target.closest('button')) {
-                toggleTaskActions(groupHeader);
+            // Click on header body to expand/collapse
+            if (g) {
+                g.isExpanded = !g.isExpanded; 
+                groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
             }
             return; 
         }
@@ -2020,11 +2002,11 @@ async function initializeAppLogic(initialUser) {
                 if (!group) return;
                 const sharedTask = group.tasks.find(t => t.id === id);
                 if (!sharedTask) return;
-
-                if (e.target.closest('.complete-btn')) {
-                    const isOwner = user.uid === group.ownerUid;
-                    const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
-                    completeSharedGroupTask(sharedGroupId, id, uncompleting);
+                
+                if (e.target.closest('.options-btn')) {
+                    toggleTaskActions(taskItem);
+                } else if (e.target.closest('.task-buttons-wrapper')) {
+                    // Clicks inside the actions menu
                 } else if (e.target.closest('.delete-btn')) {
                     deleteSharedTask(sharedGroupId, id);
                 } else if (e.target.closest('.edit-btn')) {
@@ -2032,28 +2014,22 @@ async function initializeAppLogic(initialUser) {
                 } else if (e.target.closest('.timer-clock-btn')) {
                     showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => {});
                 } else if (!e.target.closest('button')) {
-                    toggleTaskActions(taskItem);
+                    // Click on body to complete
+                    const isOwner = user.uid === group.ownerUid;
+                    const uncompleting = isOwner ? sharedTask.ownerCompleted : sharedTask.friendCompleted;
+                    completeSharedGroupTask(sharedGroupId, id, uncompleting);
                 }
                 return;
             }
             
             // --- Case 2: Task is a normal task (not in a shared group) ---
-            if (e.target.closest('.complete-btn')) {
-                if (type === 'daily' || type === 'shared') {
-                    if (isMyPartCompleted()) {
-                        uncompleteDailyTask(id); // This function will handle both daily and shared uncompletion
-                    } else {
-                        completeTask(id); // This function will handle both daily and shared completion
-                    }
-                } else {
-                    // For standalone and grouped main quests, completion means deletion.
-                    // There's no "uncomplete" for these, as they are removed upon completion.
-                    completeTask(id);
-                }
+            if (e.target.closest('.options-btn')) {
+                toggleTaskActions(taskItem);
                 return;
             }
-            
-            if(e.target.closest('button')) {
+
+            // Check for clicks inside the actions overlay
+            if (e.target.closest('.task-buttons-wrapper')) {
                 currentEditingTaskId = id; // For normal tasks
                 if (e.target.closest('.delete-btn')) deleteTask(id);
                 else if (e.target.closest('.view-shared-quest-btn')) {
@@ -2173,23 +2149,18 @@ async function initializeAppLogic(initialUser) {
                         focusOnDesktop(editTaskInput);
                     }
                 }
-            } else {
-                // Click on the body of a normal task
-                // If the click was not on a button, decide whether to toggle completion or show actions.
-                if (type === 'shared') {
-                    // For quests in the shared list, a click on the body shows actions.
-                    // The complete button handles completion toggling.
-                    toggleTaskActions(taskItem);
-                } else if (type === 'daily' && task.completedToday) {
-                    // For a COMPLETED daily quest, a click on the body un-completes it.
-                    uncompleteDailyTask(id);
+                return; // Click was inside the actions menu
+            }
+
+            // If we reach here, it was a click on the task body.
+            if (type === 'daily' || type === 'shared') {
+                if (isMyPartCompleted()) {
+                    uncompleteDailyTask(id); // This function handles both daily and shared uncompletion
                 } else {
-                    // For all other quests (uncompleted daily, main quests), a click on the body shows the actions.
-                    // Do not show actions if the task is already pending deletion (undo state).
-                    if (task && !task.pendingDeletion) {
-                        toggleTaskActions(taskItem);
-                    }
+                    completeTask(id); // This function handles both daily and shared completion
                 }
+            } else {
+                completeTask(id); // Main quests are completed (and then deleted)
             }
         } 
     });

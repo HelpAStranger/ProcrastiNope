@@ -817,35 +817,19 @@ TASK LIST & ITEMS
     align-items: center;
     gap: 0.75rem;
     flex-grow: 1;
+    min-width: 0; /* Prevent flex item from overflowing */
 }
 
-.expand-icon {
+.expand-indicator {
     transition: transform 0.2s ease;
     flex-shrink: 0;
     width: 28px;
     height: 28px;
+    color: var(--text);
+    opacity: 0.7;
 }
 
-.expand-icon-wrapper {
-    padding: 8px;
-    margin: -8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    transition: background-color 0.2s ease;
-}
-
-@media (min-width: 1024px) {
-    .expand-icon-wrapper:hover {
-        background-color: rgba(0,0,0,0.05);
-    }
-    .dark-mode .expand-icon-wrapper:hover {
-        background-color: rgba(255,255,255,0.05);
-    }
-}
-
-.main-quest-group.expanded .expand-icon {
+.main-quest-group.expanded .expand-indicator {
     transform: rotate(90deg);
 }
 
@@ -902,6 +886,10 @@ TASK LIST & ITEMS
     padding-bottom: 0.5rem;
 }
 
+/* Make non-shared tasks clickable for completion */
+.task-item:not(.is-shared-task) {
+    cursor: pointer;
+}
 
 .task-item {
     display: flex;
@@ -915,6 +903,7 @@ TASK LIST & ITEMS
     margin-bottom: 1.5rem;
     transition: all var(--transition-speed) ease;
     position: relative;
+    cursor: grab; /* For sorting */
 }
 
 /* Standalone quests look like group headers */
@@ -984,10 +973,6 @@ TASK LIST & ITEMS
     text-decoration: line-through;
 }
 
-.task-item.pending-deletion .complete-btn {
-    display: none;
-}
-
 .task-item.pending-deletion .task-buttons-wrapper {
     opacity: 1;
     pointer-events: auto;
@@ -1037,7 +1022,7 @@ TASK LIST & ITEMS
 }
 
 .task-item.actions-visible .task-content,
-.task-item.actions-visible .complete-btn,
+.task-item.actions-visible .completion-indicator,
 .main-quest-group-header.actions-visible .group-title-container {
     opacity: 0.3; /* PERF: Use opacity instead of filter:blur for better performance */
 }
@@ -1046,6 +1031,13 @@ TASK LIST & ITEMS
     display: flex;
     gap: 0.5rem;
     margin-left: auto;
+    align-items: center;
+}
+
+.task-actions-container {
+    margin-left: auto;
+    position: relative; /* For the overlay */
+    display: flex;
     align-items: center;
 }
 
@@ -1281,6 +1273,11 @@ TIMER CLOCK BUTTON
     position: relative;
 }
 
+.options-btn {
+    --shadow-color: var(--shadow);
+    z-index: 6; /* Sit above the faded content */
+}
+
 .timer-clock-btn .progress-ring {
     position: absolute;
     top: 50%;
@@ -1382,12 +1379,11 @@ BUTTONS & CONTROLS
     transform: scale(1.1) rotate(5deg);
 }
 
-.complete-btn {
+.completion-indicator {
     width: 28px;
     height: 28px;
     border-radius: 50%;
     border: var(--border-width) solid var(--border);
-    cursor: pointer;
     flex-shrink: 0;
     margin-right: 1rem;
     transition: all var(--transition-speed) ease;
@@ -1395,16 +1391,14 @@ BUTTONS & CONTROLS
     background-color: var(--surface);
 }
 
-.complete-btn:hover {
-    transform: scale(1.1);
-}
-
-.complete-btn.checked {
+.task-item.daily-completed .completion-indicator,
+.task-item.my-part-completed .completion-indicator {
     background-color: var(--accent);
     border-color: var(--accent);
 }
 
-.complete-btn.checked::after {
+.task-item.daily-completed .completion-indicator::after,
+.task-item.my-part-completed .completion-indicator::after {
     content: '✔';
     color: var(--text-on-accent);
     font-weight: 900;
@@ -1414,17 +1408,13 @@ BUTTONS & CONTROLS
     transform: translate(-50%, -50%);
 }
 
-.task-item.daily-completed .complete-btn {
-    pointer-events: none;
-}
-
 /*
 ==========================================================================
 TASK INTERACTIONS (REFACTORED)
 ==========================================================================
 */
 
-/* Base style for action button wrappers: a hidden overlay */
+/* Base style for action button wrappers: a hidden overlay. Triggered by .actions-visible on parent. */
 .task-buttons-wrapper,
 .main-quest-group-header .group-actions {
     opacity: 0;
@@ -1437,8 +1427,8 @@ TASK INTERACTIONS (REFACTORED)
     display: flex;
     justify-content: center;
     align-items: center;
-    /* PERF: Replaced expensive backdrop-filter with a simpler, more performant overlay */
-    background-color: rgba(var(--surface-rgb), 0.85);    z-index: 5;
+    background-color: rgba(var(--surface-rgb), 0.85);
+    z-index: 5;
     transition: opacity var(--transition-speed) ease;
     border-radius: calc(var(--radius) - var(--border-width));
 }
@@ -1461,22 +1451,11 @@ TASK INTERACTIONS (REFACTORED)
     display: none;
 }
 
-/* --- Click-based Interactions (All screens) --- */
-
 /* When a task or group has .actions-visible, show the overlay */
 .task-item.actions-visible .task-buttons-wrapper,
 .main-quest-group-header.actions-visible .group-actions {
     opacity: 1;
     pointer-events: auto;
-}
-
-
-/* --- Desktop-Only Layout Adjustments --- */
-@media (min-width: 1024px) {
-    /* REMOVED: Hover-based visibility for task items on desktop.
-       Now relies on the .actions-visible class triggered by click. */
-    /* REMOVED: Override for group actions to be always visible and static.
-       Now relies on the .actions-visible class triggered by click. */
 }
 
 
