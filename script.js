@@ -1646,6 +1646,7 @@ async function initializeAppLogic(initialUser) {
                 const r = ringEl.r.baseVal.value;
                 if (r > 0) {
                     const c = r * 2 * Math.PI;
+                ringEl.style.strokeDasharray = c;
                     const p = remaining / duration;
                     ringEl.style.strokeDashoffset = c - (p * c);
                 }
@@ -2878,6 +2879,7 @@ async function initializeAppLogic(initialUser) {
         const friendUidToRemove = button.dataset.uid;
 
         showConfirm("Remove Friend?", "Shared quests and groups will be removed for both of you. Are you sure?", async () => {
+            // This function is now optimistic. It updates the UI instantly and then syncs with the server.
             const currentUserRef = doc(db, "users", user.uid);
 
             // 1. Find all shared items between the two users.
@@ -2886,9 +2888,18 @@ async function initializeAppLogic(initialUser) {
             const qg1 = query(collection(db, "sharedGroups"), where("participants", "==", [user.uid, friendUidToRemove]));
             const qg2 = query(collection(db, "sharedGroups"), where("participants", "==", [friendUidToRemove, user.uid]));
             
-            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+            let snap1, snap2, snapg1, snapg2;
+            try {
+                [snap1, snap2, snapg1, snapg2] = await Promise.all([
+                    getDocs(q1), getDocs(q2), getDocs(qg1), getDocs(qg2)
+                ]);
+            } catch (error) {
+                console.error("Error fetching shared items for removal:", getCoolErrorMessage(error));
+                showConfirm("Error", "Could not fetch shared items to remove. Please check your connection and try again.", () => {});
+                return; // Stop if fetching failed
+            }
+
             const sharedQuestDocs = [...snap1.docs, ...snap2.docs];
-            const [snapg1, snapg2] = await Promise.all([getDocs(qg1), getDocs(qg2)]);
             const sharedGroupDocs = [...snapg1.docs, ...snapg2.docs];
 
             // 2. Separate items by ownership to respect security rules.
@@ -2933,6 +2944,13 @@ async function initializeAppLogic(initialUser) {
                 }
             });
 
+            // --- OPTIMISTIC UI UPDATE ---
+            // Apply local changes and re-render the UI immediately.
+            if (localStateChanged) {
+                saveState();
+                renderAllLists();
+            }
+
             // 4. Create a batch to update Firestore.
             const batch = writeBatch(db);
 
@@ -2954,11 +2972,16 @@ async function initializeAppLogic(initialUser) {
                 createdAt: Date.now()
             });
 
-            await batch.commit();
-
-            if (localStateChanged) {
-                saveState();
-                renderAllLists();
+            // 5. Commit the changes to the server.
+            try {
+                await batch.commit();
+                // On success, the UI is already correct. The snapshot listeners will just confirm the state.
+            } catch (error) {
+                // On failure, the UI is now out of sync. We must inform the user and reload to get the correct state.
+                console.error("Failed to remove friend and shares:", getCoolErrorMessage(error));
+                showConfirm("Update Failed", "Could not remove friend from the server. Reloading to sync your data.", () => {
+                    window.location.reload();
+                });
             }
         });
     }

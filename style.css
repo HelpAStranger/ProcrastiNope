@@ -956,11 +956,6 @@ TASK LIST & ITEMS
     justify-content: flex-end;
 }
 
-/* Hide edit/delete when timer is active on any screen size */
-.task-item.timer-active .task-actions {
-    display: none;
-}
-
 /* Add/Remove Animation */
 .task-item.adding {
     animation: slideIn 0.4s ease forwards;
@@ -1263,7 +1258,8 @@ TIMER CLOCK BUTTON
 }
 
 .timer-clock-btn .progress-ring-circle {
-    transition: stroke-dashoffset 0.5s linear;
+    stroke-dasharray: 62.83; /* 2 * PI * 10 */
+    stroke-dashoffset: 0; /* Start full, JS will animate this */
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
     stroke: var(--accent);
@@ -1424,6 +1420,11 @@ TASK INTERACTIONS (REFACTORED)
     z-index: auto;
     margin-left: auto;
     border-radius: 0;
+}
+
+/* When timer is active, only show the timer button */
+.task-item.timer-active .task-buttons-wrapper .btn:not(.timer-clock-btn) {
+    display: none;
 }
 
 /* --- Click-based Interactions (All screens) --- */
