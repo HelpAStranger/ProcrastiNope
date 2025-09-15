@@ -344,10 +344,12 @@ async function initializeAppLogic(initialUser) {
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let sharedGroups = [];
     let allSharedGroupsFromListener = [];
-    let confirmedFriendUIDs = []; // NEW: Centralized state for friend UIDs
+    let confirmedFriendUIDs = [];
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
-    const activeTimers = {};
+    // PERF: Refactored timers to use a single requestAnimationFrame loop.
+    let activeTimers = new Map(); // Map of active timer data for the rAF loop.
+    let timerRafId = null;
     let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
 
@@ -1134,11 +1136,18 @@ async function initializeAppLogic(initialUser) {
             });
         } else {
              const i = list.findIndex(t => t.id === id); 
-             if(i > -1) {
-                list.splice(i, 1);
-                renderAllLists(); 
-                saveState(); 
-                playSound('delete');
+             if (i > -1) {
+                 list.splice(i, 1);
+                 // PERF: Instead of re-rendering, find and remove the specific element.
+                 const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+                 if (taskEl) {
+                     taskEl.classList.add('removing');
+                     taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
+                 } else {
+                     renderAllLists(); // Fallback if element not found
+                 }
+                 saveState();
+                 playSound('delete');
              }
         }
     };
@@ -1555,29 +1564,65 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
-    function finishTimer(id) {
-        playSound('timerUp');
-        
-        if (activeTimers[id]) {
-            clearInterval(activeTimers[id]);
-            delete activeTimers[id];
+
+    // PERF: A single requestAnimationFrame loop to handle all active timer UI updates.
+    const timerLoop = () => {
+        let hasActiveTimers = false;
+        activeTimers.forEach((timerData, id) => {
+            const { startTime, duration, ringEl } = timerData;
+
+            // If the element is gone from the DOM, stop tracking its timer.
+            if (!document.body.contains(ringEl)) {
+                activeTimers.delete(id);
+                return;
+            }
+
+            const elapsed = (Date.now() - startTime) / 1000;
+            const remaining = duration - elapsed;
+
+            if (remaining > 0) {
+                hasActiveTimers = true;
+                const r = ringEl.r.baseVal.value;
+                if (r > 0) {
+                    const c = r * 2 * Math.PI;
+                    const p = remaining / duration;
+                    ringEl.style.strokeDashoffset = c - (p * c);
+                }
+            } else {
+                // Timer finished, remove it from the active map and call finishTimer.
+                activeTimers.delete(id);
+                finishTimer(id);
+            }
+        });
+
+        if (hasActiveTimers) {
+            timerRafId = requestAnimationFrame(timerLoop);
+        } else {
+            // No more active timers, stop the loop.
+            cancelAnimationFrame(timerRafId);
+            timerRafId = null;
         }
+    };
+
+    const finishTimer = (id) => {
+        playSound('timerUp');
+        activeTimers.delete(id); // Ensure it's removed from the active map.
 
         const { task } = findTaskAndContext(id);
         if (task) {
             task.timerFinished = true;
             delete task.timerStartTime;
             delete task.timerDuration;
+            renderAllLists(); // Re-render to show the 'finished' state.
             saveState();
-            renderAllLists();
         }
-    }
-    function startTimer(id, mins) {
+    };
+
+    const startTimer = (id, mins) => {
         stopTimer(id, false);
         const { task, type } = findTaskAndContext(id);
         if (!task) return;
 
-        // Allow timers on shared quests, but they will be local and not persisted.
         if (type !== 'shared' && task.isShared) {
             showConfirm("Cannot Set Timer", "This quest is pending a share and cannot have a timer.", () => {});
             return;
@@ -1586,64 +1631,48 @@ async function initializeAppLogic(initialUser) {
         task.timerStartTime = Date.now();
         task.timerDuration = mins * 60;
         delete task.timerFinished;
-
         if (type !== 'shared') saveState();
-        renderAllLists(); // This will re-render and start the timer UI update via resumeTimers
-    }
-    function stopTimer(id, shouldRender = true) {
-        if (activeTimers[id]) {
-            clearInterval(activeTimers[id]);
-            delete activeTimers[id];
-        }
+
+        renderAllLists(); // Re-render to apply 'timer-active' class and allow resumeTimers to pick it up.
+    };
+
+    const stopTimer = (id, shouldRender = true) => {
+        activeTimers.delete(id);
         const { task } = findTaskAndContext(id);
         if (task) {
             delete task.timerStartTime;
             delete task.timerDuration;
-            delete task.timerFinished; // Also remove the finished flag
+            delete task.timerFinished;
             if (shouldRender) {
-                saveState();
                 renderAllLists();
+                saveState();
             }
         }
-    }
-    function resumeTimers() {
-        Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
+    };
+
+    const resumeTimers = () => {
+        // This function is called after every render to find tasks with timers and start the loop.
+        activeTimers.clear();
+        if (timerRafId) {
+            cancelAnimationFrame(timerRafId);
+            timerRafId = null;
+        }
+
         let needsSaveAndRender = false;
-        [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
-            // Only resume timers for non-shared tasks
-            // REGRESSION TWEAK: A completed task should never have its timer resumed.
-            // This guard prevents a timer from restarting on a completed task after a page reload.
+        const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
+        
+        allTasks.forEach(t => {
             const isCompleted = t.completedToday || t.pendingDeletion;
             if (t && t.timerStartTime && t.timerDuration && !t.isShared && !isCompleted) {
                 const elapsed = (Date.now() - t.timerStartTime) / 1000;
                 const remaining = Math.max(0, t.timerDuration - elapsed);
-                
-                if (remaining > 0) {
-                     activeTimers[t.id] = setInterval(() => {
-                        const currentElapsed = (Date.now() - (t.timerStartTime || 0)) / 1000;
-                        const currentRemaining = (t.timerDuration || 0) - currentElapsed;
-                        
-                        const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
-                        if (!taskEl || !activeTimers[t.id]) {
-                            clearInterval(activeTimers[t.id]);
-                            delete activeTimers[t.id];
-                            return;
-                        }
 
-                        if (currentRemaining > 0) {
-                            const ring = taskEl.querySelector('.progress-ring-circle');
-                            if (ring) {
-                                const r = ring.r.baseVal.value;
-                                if (r > 0) {
-                                    const c = r * 2 * Math.PI;
-                                    const p = currentRemaining / t.timerDuration;
-                                    ring.style.strokeDashoffset = c - (p * c);
-                                }
-                            }
-                        } else {
-                            finishTimer(t.id);
-                        }
-                    }, 1000);
+                if (remaining > 0) {
+                    const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
+                    if (taskEl) {
+                        const ringEl = taskEl.querySelector('.progress-ring-circle');
+                        if (ringEl) activeTimers.set(t.id, { startTime: t.timerStartTime, duration: t.timerDuration, ringEl });
+                    }
                 } else {
                     if (!t.timerFinished) {
                         t.timerFinished = true;
@@ -1654,12 +1683,18 @@ async function initializeAppLogic(initialUser) {
                 }
             }
         });
+
         if (needsSaveAndRender) {
             saveState();
             renderAllLists();
         }
-    }
-    
+
+        // If any timers were found, start the animation loop.
+        if (activeTimers.size > 0 && !timerRafId) {
+            timerRafId = requestAnimationFrame(timerLoop);
+        }
+    };
+
     function toggleTaskActions(element) {
         if (element.classList.contains('timer-active')) {
             return;
@@ -3003,8 +3038,8 @@ async function initializeAppLogic(initialUser) {
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
-                    // NEW: Handle rejection by friend ('rejected') or abandonment by friend ('abandoned')
-                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned') && newQuest.ownerUid === user.uid) {
+                    // NEW: Handle rejection by friend ('rejected'), abandonment by friend ('abandoned'), or cancellation by owner ('cancelled')
+                    if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'cancelled') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
@@ -3574,8 +3609,9 @@ async function initializeAppLogic(initialUser) {
         isPartial: false,
         shutdown: () => {
              debouncedSaveData.cancel();
-             Object.keys(activeTimers).forEach(id => clearInterval(activeTimers[id]));
-             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares(); // Changed
+             if (timerRafId) cancelAnimationFrame(timerRafId);
+             activeTimers.clear();
+             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
              if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
              if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
         },
