@@ -820,9 +820,19 @@ async function initializeAppLogic(initialUser) {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         
         if (group.isShared) {
-            const sharedGroup = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
+            const sharedGroupData = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
+            const otherParticipant = sharedGroupData ? sharedGroupData.participants.find(p => p !== user.uid) : null;
+            const isOrphan = !sharedGroupData || (otherParticipant && !confirmedFriendUIDs.includes(otherParticipant));
 
-            if (sharedGroup && sharedGroup.status === 'pending') {
+            if (isOrphan) {
+                el.classList.add('is-shared-task'); // for styling
+                el.innerHTML = `<header class="main-quest-group-header" style="cursor: default;">
+                                    <div class="group-title-container">
+                                        <h3 style="font-style: italic;">${group.name} (Orphaned)</h3>
+                                    </div>
+                                    <button class="btn cleanup-orphan-group-btn" data-group-id="${group.id}" data-shared-group-id="${group.sharedGroupId || ''}">Clean Up</button>
+                                </header>`;
+            } else if (sharedGroupData && sharedGroupData.status === 'pending') {
                 el.classList.add('is-shared-task', 'pending-share');
                 el.innerHTML = `<header class="main-quest-group-header" style="cursor: default;">
                                     <div class="group-title-container">
@@ -836,7 +846,7 @@ async function initializeAppLogic(initialUser) {
                                     <div class="group-title-container">
                                         <h3 style="font-style: italic;">${group.name}</h3>
                                     </div>
-                                    <button class="btn view-shared-group-btn" data-shared-group-id="${group.sharedGroupId}">View Share</button>
+                                    <button class="btn view-shared-group-btn" data-shared-group-id="${group.sharedGroupId || ''}">View Share</button>
                                 </header>`;
             }
             return el;
@@ -1847,6 +1857,7 @@ async function initializeAppLogic(initialUser) {
             const isEditClick = e.target.closest('.edit-group-btn');
             const isShareClick = e.target.closest('.share-group-btn');
             const isCancelShareClick = e.target.closest('.cancel-share-group-btn');
+            const isCleanupClick = e.target.closest('.cleanup-orphan-group-btn');
 
             if (isExpandClick) {
                 if (g) {
@@ -1902,6 +1913,29 @@ async function initializeAppLogic(initialUser) {
             if (isCancelShareClick) {
                 const sharedGroupId = isCancelShareClick.dataset.sharedGroupId;
                 cancelSharedGroup(sharedGroupId);
+                return;
+            }
+            if (isCleanupClick) {
+                const groupId = isCleanupClick.dataset.groupId;
+                const sharedGroupId = isCleanupClick.dataset.sharedGroupId;
+                showConfirm(
+                    "Clean Up Orphaned Group?",
+                    "This will convert the group back to a normal, editable group in your list.",
+                    () => {
+                        // Revert local state
+                        const localGroup = generalTaskGroups.find(g => g.id === groupId);
+                        if (localGroup) {
+                            delete localGroup.isShared;
+                            delete localGroup.sharedGroupId;
+                            saveState();
+                            renderAllLists();
+                        }
+                        // Attempt to delete the remote doc just in case
+                        if (sharedGroupId) {
+                            deleteDoc(doc(db, "sharedGroups", sharedGroupId)).catch(err => console.warn("Orphaned group doc cleanup failed:", err));
+                        }
+                    }
+                );
                 return;
             }
             
