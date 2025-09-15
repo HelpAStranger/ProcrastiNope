@@ -1514,10 +1514,11 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // Owner is cancelling a pending request. Delete the doc and revert the local task.
-                const originalTaskToRevertId = questData.originalTaskId;
-                await deleteDoc(sharedQuestRef);
-                revertSharedQuest(originalTaskToRevertId);
+                // Owner is cancelling a pending request.
+                // Instead of deleting directly, update the status to 'rejected'.
+                // The owner's own listener will see this change and perform the deletion and local state reversion,
+                // centralizing the cleanup logic.
+                await updateDoc(sharedQuestRef, { status: 'rejected' });
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
