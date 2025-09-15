@@ -1527,10 +1527,11 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // Owner cancels by deleting the pending request directly. This mirrors the working `cancelSharedGroup` logic.
-                await deleteDoc(sharedQuestRef);
-                // Revert the original task in local state for responsiveness.
-                revertSharedQuest(questData.originalTaskId);
+                // Owner is cancelling a pending request.
+                // Instead of deleting directly, update the status to 'rejected'.
+                // The owner's own listener will see this change and perform the deletion and local state reversion,
+                // centralizing the cleanup logic.
+                await updateDoc(sharedQuestRef, { status: 'rejected' });
 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
