@@ -292,28 +292,44 @@ OFFLINE INDICATOR
 */
 #offline-indicator {
     position: fixed;
-    top: 20px; /* Space from the top of the viewport */
-    left: 50%;
-    background-color: var(--accent-orange);
-    color: var(--text-on-accent);
-    padding: 0.5rem 1.5rem;
-    border-radius: var(--radius);
-    border: var(--border-width) solid var(--border);
-    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
-    font-weight: 700;
+    bottom: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background-color: rgba(var(--surface-rgb), 0.8);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     z-index: 1001; /* Above sticky header, below modals */
+    
+    /* Animation states */
     opacity: 0;
-    visibility: hidden;
-    transform: translate(-50%, -150%); /* Start above the screen */
-    transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0.3s;
+    transform: scale(0.5);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
     pointer-events: none;
 }
 
 #offline-indicator.visible {
     opacity: 1;
-    visibility: visible;
-    transform: translate(-50%, 0); /* Slide down to its 'top' position */
-    transition-delay: 0s;
+    transform: scale(1);
+    pointer-events: auto; /* Allow hover for title attribute */
+}
+
+#offline-indicator svg {
+    width: 22px;
+    height: 22px;
+    stroke: var(--accent-red);
+    stroke-width: 2.5px;
+}
+
+/* On mobile, position it above the nav bar */
+@media (max-width: 1023px) {
+    #offline-indicator {
+        bottom: 100px; /* 85px nav height + 15px spacing */
+    }
 }
 
 /*
