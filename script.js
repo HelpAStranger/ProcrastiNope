@@ -1213,16 +1213,54 @@ async function initializeAppLogic(initialUser) {
     
     const addTask = (text, list, goal) => {
         const common = { id: Date.now().toString(), text, createdAt: Date.now() };
-        if (list === 'daily') dailyTasks.push({ ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false });
-        else if (list === 'standalone') standaloneMainQuests.push({ ...common, isShared: false });
-        else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common, isShared: false }); } }
-        renderAllLists();
+        let newTask, taskType, container;
+
+        if (list === 'daily') {
+            newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
+            dailyTasks.push(newTask);
+            taskType = 'daily';
+            container = dailyTaskListContainer;
+        } else if (list === 'standalone') {
+            newTask = { ...common, isShared: false };
+            standaloneMainQuests.push(newTask);
+            taskType = 'standalone';
+            container = standaloneTaskListContainer;
+        } else {
+            const group = generalTaskGroups.find(g => g.id === list);
+            if (group) {
+                if (!group.tasks) group.tasks = [];
+                newTask = { ...common, isShared: false };
+                group.tasks.push(newTask);
+                taskType = 'group';
+                container = document.querySelector(`.task-list-group[data-group-id="${list}"]`);
+            }
+        }
+
+        if (newTask && container) {
+            const taskEl = createTaskElement(newTask, taskType);
+            taskEl.classList.add('adding');
+            container.appendChild(taskEl);
+            taskEl.addEventListener('animationend', () => taskEl.classList.remove('adding'), { once: true });
+            
+            if (list === 'daily') noDailyTasksMessage.style.display = 'none';
+            else noGeneralTasksMessage.style.display = 'none';
+        } else {
+            renderAllLists();
+        }
+
         saveState(); 
         audioManager.playSound('add');
     };
     const addGroup = (name) => { 
-        generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); 
-        renderAllLists();
+        const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false };
+        generalTaskGroups.push(newGroup);
+
+        const groupEl = createGroupElement(newGroup);
+        groupEl.classList.add('adding');
+        generalTaskListContainer.appendChild(groupEl);
+        groupEl.addEventListener('animationend', () => groupEl.classList.remove('adding'), { once: true });
+        noGeneralTasksMessage.style.display = 'none';
+
         saveState(); 
         audioManager.playSound('addGroup'); 
     };
