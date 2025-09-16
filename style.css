@@ -831,7 +831,7 @@ TASK LIST & ITEMS
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 1rem 1.5rem;
     background-color: var(--surface);
     border: var(--border-width) solid var(--border);
     border-radius: var(--radius);
@@ -861,23 +861,9 @@ TASK LIST & ITEMS
     transform: rotate(90deg);
 }
 
-/* Emphasis for group headers */
-.main-quest-group-header::before {
-    content: '';
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    right: 5px;
-    bottom: 5px;
-    border: var(--border-width) dashed var(--border);
-    border-radius: calc(var(--radius) * 0.5);
-    opacity: 0.5;
-    pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
-}
-
 .main-quest-group-header h3 {
-    font-size: 1.3rem;
-    font-weight: 900;
+    font-size: 1.1rem;
+    font-weight: 700;
 }
 
 .main-quest-group-header .group-actions {
@@ -1338,6 +1324,7 @@ BUTTONS & CONTROLS
     align-items: center;
     justify-content: center;
     color: var(--text);
+    position: relative; /* Establish stacking context for z-index on buttons */
 }
 
 .undo-btn {
@@ -1479,6 +1466,12 @@ TASK INTERACTIONS (REFACTORED)
     z-index: 5;
     transition: opacity var(--transition-speed) ease;
     border-radius: calc(var(--radius) - var(--border-width));
+}
+
+/* Give action buttons a higher z-index so they appear above the active trigger button */
+.task-buttons-wrapper .btn,
+.main-quest-group-header .group-actions .btn {
+    z-index: 7;
 }
 
 /* EXCEPTION: If a timer is active, the wrapper becomes a normal flex container again */

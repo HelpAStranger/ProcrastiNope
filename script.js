@@ -2951,7 +2951,7 @@ async function initializeAppLogic(initialUser) {
         if (!requestId) return;
         try {
             await deleteDoc(doc(db, "friendRequests", requestId));
-            playSound('delete');
+            audioManager.playSound('delete');
             // The onSnapshot listener will automatically update the UI.
         } catch (error) {
             console.error("Error cancelling friend request:", getCoolErrorMessage(error));
@@ -3179,6 +3179,7 @@ async function initializeAppLogic(initialUser) {
             friendsModalToggle.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
             e.target.classList.add('active');
             friendsModal.querySelectorAll('.tab-content').forEach(form => form.classList.toggle('active', form.id === `${tab}-tab`));
+            audioManager.playSound('open');
         }
     });
 
