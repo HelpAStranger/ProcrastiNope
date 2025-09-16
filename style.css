@@ -2107,6 +2107,8 @@ VIEW TRANSITIONS
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
+  /* Performance hint: prepare the browser to animate the clip-path property. */
+  will-change: clip-path;
 }
 
 
