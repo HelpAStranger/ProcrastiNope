@@ -275,7 +275,7 @@ function hideActiveTaskActions() {
     if (activeMobileActionsItem) {
         clearTimeout(actionsTimeoutId);
         const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
-        if (optionsBtn) optionsBtn.disabled = false;
+        if (optionsBtn) optionsBtn.classList.remove('is-active-trigger');
         activeMobileActionsItem.classList.remove('actions-visible');
         activeMobileActionsItem = null;
     }
@@ -1896,7 +1896,7 @@ async function initializeAppLogic(initialUser) {
         if (!wasVisible) {
             const optionsBtn = element.querySelector('.options-btn');
             element.classList.add('actions-visible');
-            if (optionsBtn) optionsBtn.disabled = true;
+            if (optionsBtn) optionsBtn.classList.add('is-active-trigger');
             activeMobileActionsItem = element;
 
             actionsTimeoutId = setTimeout(() => {
