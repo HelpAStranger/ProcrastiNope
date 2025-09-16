@@ -31,7 +31,9 @@ import {
     deleteDoc,
     documentId,
     addDoc,
-    enableIndexedDbPersistence
+    initializeFirestore,
+    persistentLocalCache,
+    memoryLocalCache
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
@@ -68,9 +70,10 @@ service cloud.firestore {
       allow update: if request.auth != null &&
                     request.auth.uid == resource.data.recipientUid;
 
-      // The sender can delete the request (to cancel, or after it's handled).
+      // Either participant can delete the request (sender to cancel, recipient
+      // to decline, or either to clean up).
       allow delete: if request.auth != null &&
-                    request.auth.uid == resource.data.senderUid;
+                    request.auth.uid in resource.data.participants;
     }
 
     // The 'friendRemovals' collection handles reciprocal friend removals.
@@ -182,7 +185,23 @@ let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 
 let audioCtx = null; // Will be initialized by the app logic
 
 function playSound(type) {
-    if (!audioCtx || settings.volume === 0 || audioCtx.state === 'suspended') return;
+    // On first call, try to create the audio context. This must happen after a user gesture.
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.error("Web Audio API not supported or could not be created.", e);
+            return; // Can't play sounds if context fails.
+        }
+    }
+
+    // Browsers may create the context in a 'suspended' state. It must be resumed by a user gesture.
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume(); // Attempt to resume, but we'll still bail on this attempt.
+    }
+
+    // Don't play sound if volume is 0 or context is not running.
+    if (!audioCtx || settings.volume === 0 || audioCtx.state !== 'running') return;
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
     o.connect(g); g.connect(audioCtx.destination);
     let v = settings.volume, d = 0.2;
@@ -237,20 +256,18 @@ const closeModal = (modal) => {
 try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getFirestore(app);
 
-    // Enable offline persistence. This must be done before any other Firestore operations.
-    // It allows the app to work offline and syncs changes when the connection is restored.
-    enableIndexedDbPersistence(db)
-        .catch((err) => {
-            if (err.code === 'failed-precondition') {
-                // This happens if multiple tabs are open. Persistence can only be active in one.
-                console.warn("Firestore persistence failed: Multiple tabs open. App will work online only.");
-            } else if (err.code === 'unimplemented') {
-                // The browser is likely too old or doesn't support the required features.
-                console.warn("Firestore persistence is not supported in this browser. App will work online only.");
-            }
-        });
+    // Initialize Firestore with offline persistence.
+    // This must be done before any other Firestore operations.
+    try {
+        db = initializeFirestore(app, { cache: persistentLocalCache() });
+    } catch (err) {
+        if (err.code === 'failed-precondition' || err.code === 'unimplemented') {
+            const reason = err.code === 'failed-precondition' ? 'Multiple tabs open' : 'Browser not supported';
+            console.warn(`Firestore persistence failed: ${reason}. App will work online only.`);
+            db = getFirestore(app); // Fallback to online-only
+        }
+    }
     
     onAuthStateChanged(auth, async (user) => {
         // Cleanup previous user's data listeners to prevent memory leaks.
@@ -3759,24 +3776,6 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
-    const initAudioContext = () => {
-        // FIX: Create the AudioContext on the first user gesture if it doesn't exist.
-        if (!audioCtx) {
-            try {
-                audioCtx = window.AudioContext ? new AudioContext() : null;
-            } catch (e) {
-                console.error("Could not create AudioContext:", e);
-                return; // Stop if creation fails
-            }
-        }
-        // FIX: Resume the context if it was created in a suspended state.
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(e => console.error("AudioContext resume failed:", e));
-        }
-    };
-    document.body.addEventListener('click', initAudioContext, { once: true });
-    document.body.addEventListener('keydown', initAudioContext, { once: true });
-    
     initOnce();
     await loadUserSession();
 
