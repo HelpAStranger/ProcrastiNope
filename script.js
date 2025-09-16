@@ -1682,7 +1682,6 @@ async function initializeAppLogic(initialUser) {
                 // The owner's own listener will see this change and perform the deletion and local state reversion,
                 // centralizing the cleanup logic into a flow that is known to work.
                 await updateDoc(doc(db, "sharedQuests", questId), { status: 'unshared' });
-                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error unsharing quest:", getCoolErrorMessage(error));
                 showConfirm("Error", "Could not unshare the quest.", () => {});
@@ -1742,7 +1741,6 @@ async function initializeAppLogic(initialUser) {
                 // revert the local task, and then delete the document. This centralizes the cleanup logic
                 // and aligns it with the pattern used for abandoning/unsharing active quests.
                 await updateDoc(sharedQuestRef, { status: 'unshared' });
-                audioManager.playSound('delete'); // Give immediate feedback
                 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
