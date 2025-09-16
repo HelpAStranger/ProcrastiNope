@@ -2102,6 +2102,16 @@ CONFETTI & CELEBRATIONS
 VIEW TRANSITIONS
 ==========================================================================
 */
+/* Hide/disable expensive effects during the transition to improve performance */
+:root::view-transition body::after {
+    /* The grain overlay is graphically intensive; hide it during the transition. */
+    display: none;
+}
+:root::view-transition #app-wrapper.blur-background {
+    /* The blur filter is also heavy; disable it temporarily for a smoother animation. */
+    filter: none;
+}
+
 /* Disable default animations for the theme change transition */
 ::view-transition-old(root),
 ::view-transition-new(root) {
