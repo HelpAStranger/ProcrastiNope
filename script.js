@@ -217,7 +217,13 @@ function playSound(type) {
         case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
         case 'share': o.type = 'sine'; o.frequency.setValueAtTime(523.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(659.25, audioCtx.currentTime + 0.15); d=0.2; break;
         case 'friendComplete': o.type = 'triangle'; o.frequency.setValueAtTime(659.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2); d=0.25; v *= 0.8; break;
-        case 'sharedQuestFinish': o.type = 'sawtooth'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.5); d = 0.6; v *= 1.3; break;
+        case 'sharedQuestFinish': 
+            o.type = 'sine'; // A more pleasant, celebratory tone
+            o.frequency.setValueAtTime(523, audioCtx.currentTime); // C5
+            o.frequency.linearRampToValueAtTime(783, audioCtx.currentTime + 0.15); // G5
+            o.frequency.linearRampToValueAtTime(1046, audioCtx.currentTime + 0.4); // C6
+            d = 0.5; v *= 1.2; 
+            break;
     }
     g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
     o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
