@@ -821,6 +821,11 @@ TASK LIST & ITEMS
     z-index: 100; /* Ensure it's above other items */
 }
 
+/* The original item being dragged. We make it invisible to prevent a "duplicate" effect. */
+.sortable-chosen {
+    opacity: 0;
+}
+
 /* Style for the placeholder where the item will be dropped */
 .sortable-ghost {
     opacity: 1;
@@ -828,6 +833,10 @@ TASK LIST & ITEMS
     border-style: dashed !important;
     border-color: var(--accent) !important;
     box-shadow: none !important;
+}
+
+.sortable-ghost * {
+    visibility: hidden; /* Hide the content of the placeholder, leaving just the dashed outline */
 }
 
 
