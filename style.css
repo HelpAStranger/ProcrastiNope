@@ -844,7 +844,7 @@ TASK LIST & ITEMS
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 1.5rem; /* More compact header */
+    padding: 0.75rem 1rem; /* Reduced horizontal padding */
     background-color: var(--surface);
     border: var(--border-width) solid var(--border);
     border-radius: var(--radius);
@@ -863,11 +863,14 @@ TASK LIST & ITEMS
 .expand-indicator {
     transition: transform 0.2s ease;
     flex-shrink: 0;
-    margin-right: 1rem; /* Match the completion indicator for alignment */
+    margin-right: 0.75rem; /* Reduced space after icon */
     width: 28px;
     height: 28px;
     color: var(--text);
     opacity: 0.7;
+    /* Make the icon bolder */
+    stroke: currentColor;
+    stroke-width: 1.5;
 }
 
 .main-quest-group.expanded .expand-indicator {
