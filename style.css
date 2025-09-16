@@ -249,6 +249,11 @@ main.container {
         padding-right: 0.5rem;
         padding-bottom: 0.5rem;
     }
+
+    /* NEW: Add hover effect for task completion indicator on desktop */
+    .task-item:not(.daily-completed):not(.my-part-completed):not(.is-shared-task):not(.pending-deletion):hover .completion-indicator::before {
+        transform: translate(-50%, -50%) scale(1);
+    }
 }
 
 /*
@@ -1380,6 +1385,20 @@ BUTTONS & CONTROLS
     transition: all var(--transition-speed) ease;
     position: relative;
     background-color: var(--surface);
+}
+
+.completion-indicator::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity: 0.8;
 }
 
 .task-item.daily-completed .completion-indicator,
