@@ -1037,6 +1037,7 @@ async function initializeAppLogic(initialUser) {
             const allCompleted = ownerCompleted && friendCompleted;
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
             const optionsBtnDisabled = myPartCompleted ? 'disabled' : '';
+            const optionsBtnDisabled = allCompleted ? 'disabled' : '';
 
             li.classList.add('shared-quest');
             if (allCompleted) {
