@@ -3753,6 +3753,13 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
+        // Add a global click listener to close active task actions when clicking outside.
+        document.addEventListener('click', (e) => {
+            if (activeMobileActionsItem && !activeMobileActionsItem.contains(e.target)) {
+                hideActiveTaskActions();
+            }
+        });
+
         // Add online/offline listeners to show the indicator.
         const updateOnlineStatus = () => {
             if (offlineIndicator) { // Defensive check
