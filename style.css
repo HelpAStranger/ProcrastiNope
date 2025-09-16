@@ -812,9 +812,22 @@ TASK LIST & ITEMS
     cursor: grab;
 }
 
+/* Style for the item being dragged */
+.sortable-drag {
+    opacity: 1 !important; /* Override SortableJS's default opacity */
+    cursor: grabbing;
+    transform: rotate(2deg) scale(1.02);
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.2) !important;
+    z-index: 100; /* Ensure it's above other items */
+}
+
+/* Style for the placeholder where the item will be dropped */
 .sortable-ghost {
-    opacity: 0.4;
-    background-color: var(--accent);
+    opacity: 1;
+    background-color: transparent;
+    border-style: dashed !important;
+    border-color: var(--accent) !important;
+    box-shadow: none !important;
 }
 
 

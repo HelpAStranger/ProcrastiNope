@@ -2565,31 +2565,32 @@ async function initializeAppLogic(initialUser) {
     
     function initSortable() {
         function onTaskDrop(evt) {
-            document.body.classList.remove('is-dragging');
+            // The onStart handler prevents shared tasks from being dragged.
+            // By removing renderAllLists(), we get a smooth animation.
+            // The data model is updated, and the DOM is handled by SortableJS.
             const taskId = evt.item.dataset.id;
             if (!taskId) return;
+
             const { task, list: sourceListArray } = findTaskAndContext(taskId);
             if (!task || !sourceListArray) return;
 
-            // FIX: Prevent dragging of shared tasks
-            if (task.isShared) {
-                evt.cancel = true; 
-                renderAllLists(); 
-                return;
-            }
-
             const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
-            if (originalIndex > -1) sourceListArray.splice(originalIndex, 1);
-             else return; 
+            if (originalIndex > -1) {
+                sourceListArray.splice(originalIndex, 1);
+            } else {
+                return; // Should not happen if findTaskAndContext is correct
+            }
 
             const toListEl = evt.to;
             const toListId = toListEl.id;
             const toGroupId = toListEl.dataset.groupId;
             let destListArray;
 
-            if (toListId === 'daily-task-list') destListArray = dailyTasks;
-            else if (toListId === 'standalone-task-list') destListArray = standaloneMainQuests;
-            else if (toGroupId) {
+            if (toListId === 'daily-task-list') {
+                destListArray = dailyTasks;
+            } else if (toListId === 'standalone-task-list') {
+                destListArray = standaloneMainQuests;
+            } else if (toGroupId) {
                 const group = generalTaskGroups.find(g => g.id === toGroupId);
                 if (group) {
                     if (!group.tasks) group.tasks = [];
@@ -2598,17 +2599,21 @@ async function initializeAppLogic(initialUser) {
             }
 
             if (!destListArray) {
+                // Dragged to an invalid location, put it back.
                 sourceListArray.splice(originalIndex, 0, task);
                 return;
             }
             
             destListArray.splice(evt.newIndex, 0, task);
             saveState();
-            renderAllLists();
+            // NOTE: renderAllLists() was removed to allow for smooth animations.
+            // This means a task's visual style won't update if dragged between
+            // lists of different types until the next refresh. Since dragging is
+            // restricted by group, this is a minor visual trade-off for smoothness.
         }
 
         const commonTaskOptions = {
-            animation: 150,
+            animation: 250, // Smoother animation
             delay: 150, // PERF: Reduced delay for a more responsive feel.
             delayOnTouchOnly: true, // PERF: Start drag immediately on desktop.
             onStart: (evt) => {
@@ -2629,7 +2634,7 @@ async function initializeAppLogic(initialUser) {
             new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
         });
         new Sortable(generalTaskListContainer, {
-            animation: 150,
+            animation: 250, // Smoother animation
             handle: '.main-quest-group-header',
             delay: 150, // PERF: Reduced delay.
             delayOnTouchOnly: true,
