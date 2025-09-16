@@ -796,6 +796,16 @@ async function initializeAppLogic(initialUser) {
         playerData.xp += Math.round(amount);
         if (playerData.xp < 0) playerData.xp = 0;
         const requiredXp = getXpForNextLevel(playerData.level);
+
+        // NEW: Animate the XP bar on gain
+        if (amount > 0) {
+            const container = xpBarEl.parentElement;
+            container.classList.remove('xp-gained');
+            // Force a reflow to restart the animation if the class is re-added
+            void container.offsetWidth;
+            container.classList.add('xp-gained');
+        }
+
         if (playerData.xp >= requiredXp) levelUp(requiredXp);
         updateProgressUI();
     }

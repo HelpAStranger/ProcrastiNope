@@ -476,6 +476,11 @@ HEADER & PROGRESS
     position: relative;
 }
 
+/* NEW: Add animation for when XP is gained */
+.xp-bar-container.xp-gained .xp-bar {
+    animation: xp-gain-flash 0.6s ease-out;
+}
+
 .xp-bar {
     width: 0%;
     height: 25px;
@@ -2061,4 +2066,12 @@ ANIMATIONS
 @keyframes shrink-width {
     from { width: 100%; }
     to { width: 0%; }
+}
+
+/* NEW: Keyframe for XP gain animation */
+@keyframes xp-gain-flash {
+    50% {
+        filter: brightness(1.7);
+        transform: scaleY(1.1);
+    }
 }
