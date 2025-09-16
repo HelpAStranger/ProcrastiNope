@@ -232,7 +232,10 @@ function playSound(type) {
 const openModal = (modal) => {
     if(modal) {
         lastFocusedElement = document.activeElement;
-        hideActiveTaskActions(); // Use the new helper function
+        if (activeMobileActionsItem) {
+            activeMobileActionsItem.classList.remove('actions-visible');
+            activeMobileActionsItem = null;
+        }
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
         playSound('open');
@@ -1824,37 +1827,30 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
-    function hideActiveTaskActions() {
-        if (activeMobileActionsItem) {
-            clearTimeout(actionsTimeoutId);
-            const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
-            if (optionsBtn) optionsBtn.disabled = false;
-            activeMobileActionsItem.classList.remove('actions-visible');
-            activeMobileActionsItem = null;
-        }
-    }
-
     function toggleTaskActions(element) {
         if (element.classList.contains('timer-active')) {
             return;
         }
 
+        clearTimeout(actionsTimeoutId);
+
+        if (activeMobileActionsItem && activeMobileActionsItem !== element) {
+            activeMobileActionsItem.classList.remove('actions-visible');
+        }
+        
         const wasVisible = element.classList.contains('actions-visible');
+        element.classList.toggle('actions-visible');
 
-        // Always hide any currently active actions first.
-        // This handles clicking a new item or clicking the same item again.
-        hideActiveTaskActions();
-
-        // If we didn't just close the actions on the clicked element, open them.
         if (!wasVisible) {
-            const optionsBtn = element.querySelector('.options-btn');
-            element.classList.add('actions-visible');
-            if (optionsBtn) optionsBtn.disabled = true;
             activeMobileActionsItem = element;
-
             actionsTimeoutId = setTimeout(() => {
-                hideActiveTaskActions();
+                if(element.classList.contains('actions-visible')) {
+                    element.classList.remove('actions-visible');
+                    activeMobileActionsItem = null;
+                }
             }, 3000);
+        } else {
+            activeMobileActionsItem = null;
         }
     }
 
