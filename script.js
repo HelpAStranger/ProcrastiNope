@@ -236,6 +236,7 @@ const openModal = (modal) => {
             activeMobileActionsItem.classList.remove('actions-visible');
             activeMobileActionsItem = null;
         }
+        hideActiveTaskActions(); // Use the new helper function
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
         playSound('open');
@@ -958,6 +959,7 @@ async function initializeAppLogic(initialUser) {
         groupEl.dataset.sharedGroupId = group.id;
     
         const allCompleted = group.tasks.every(t => t.ownerCompleted && t.friendCompleted);
+        const optionsBtnDisabled = allCompleted ? 'disabled' : '';
         if (allCompleted) {
             groupEl.classList.add('all-completed');
         }
@@ -980,6 +982,7 @@ async function initializeAppLogic(initialUser) {
                     </div>
                 </div>
                 <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
+                </div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
                     ${editBtnHTML}
                     ${unshareBtnHTML}
                     ${abandonBtnHTML}
@@ -1004,6 +1007,7 @@ async function initializeAppLogic(initialUser) {
         li.dataset.sharedGroupId = group.id;
 
         const myPartCompleted = user.uid === group.ownerUid ? task.ownerCompleted : task.friendCompleted;
+        const optionsBtnDisabled = myPartCompleted ? 'disabled' : '';
 
         const buttonsHTML = `
             <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
@@ -1017,6 +1021,7 @@ async function initializeAppLogic(initialUser) {
                 <span class="task-text">${task.text}</span>
             </div>
             <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="task-buttons-wrapper">${buttonsHTML}</div>
+            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="task-buttons-wrapper">${buttonsHTML}</div>
             <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
                 <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
                 <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
@@ -1039,6 +1044,7 @@ async function initializeAppLogic(initialUser) {
             const allCompleted = ownerCompleted && friendCompleted;
 
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
+            const optionsBtnDisabled = myPartCompleted ? 'disabled' : '';
 
             li.classList.add('shared-quest');
             if (allCompleted) {
@@ -1064,6 +1070,7 @@ async function initializeAppLogic(initialUser) {
                 <div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span></div><div class="task-actions-container">
                     <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                    <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                 </div><div class="task-buttons-wrapper">${buttonsHTML}</div>
                 <div class="shared-quest-info">
                     <span class="shared-with-tag">with ${otherPlayerUsername}</span>
@@ -1080,6 +1087,9 @@ async function initializeAppLogic(initialUser) {
         }
 
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
+        const isCompleted = task.completedToday || task.pendingDeletion;
+        const optionsBtnDisabled = isCompleted ? 'disabled' : '';
+
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
 
         if (task.pendingDeletion) {
@@ -1100,6 +1110,7 @@ async function initializeAppLogic(initialUser) {
             li.innerHTML = `<div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-actions-container">
                     <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+                    <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                 </div><div class="task-buttons-wrapper">${buttonsHTML.trim()}</div>`;
         }
 
@@ -1827,6 +1838,16 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
+    function hideActiveTaskActions() {
+        if (activeMobileActionsItem) {
+            clearTimeout(actionsTimeoutId);
+            const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
+            if (optionsBtn) optionsBtn.disabled = false;
+            activeMobileActionsItem.classList.remove('actions-visible');
+            activeMobileActionsItem = null;
+        }
+    }
+
     function toggleTaskActions(element) {
         if (element.classList.contains('timer-active')) {
             return;
@@ -1841,13 +1862,23 @@ async function initializeAppLogic(initialUser) {
         const wasVisible = element.classList.contains('actions-visible');
         element.classList.toggle('actions-visible');
 
+        // Always hide any currently active actions first.
+        // This handles clicking a new item or clicking the same item again.
+        hideActiveTaskActions();
+
+        // If we didn't just close the actions on the clicked element, open them.
         if (!wasVisible) {
+            const optionsBtn = element.querySelector('.options-btn');
+            element.classList.add('actions-visible');
+            if (optionsBtn) optionsBtn.disabled = true;
             activeMobileActionsItem = element;
+
             actionsTimeoutId = setTimeout(() => {
                 if(element.classList.contains('actions-visible')) {
                     element.classList.remove('actions-visible');
                     activeMobileActionsItem = null;
                 }
+                hideActiveTaskActions();
             }, 3000);
         } else {
             activeMobileActionsItem = null;
