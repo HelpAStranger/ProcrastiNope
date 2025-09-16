@@ -457,6 +457,8 @@ async function initializeAppLogic(initialUser) {
     let playerData = { level: 1, xp: 0 };
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
     // PERF: Refactored timers to use CSS transitions instead of a JS loop.
+    const lastClickTimes = new Map();
+    const CLICK_DEBOUNCE_TIME = 400; // ms, to prevent double-clicks
     let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
     let undoTimeoutMap = new Map();
 
@@ -1906,6 +1908,23 @@ async function initializeAppLogic(initialUser) {
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
+        const groupElement = groupHeader ? groupHeader.parentElement : null;
+        const clickableItem = taskItem || groupElement;
+
+        if (clickableItem) {
+            // Use the most specific ID available on the clicked item.
+            const itemId = clickableItem.dataset.id || clickableItem.dataset.groupId || clickableItem.dataset.sharedGroupId;
+            if (itemId) {
+                const now = Date.now();
+                const lastClick = lastClickTimes.get(itemId) || 0;
+                if (now - lastClick < CLICK_DEBOUNCE_TIME) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return; // Debounce this click to prevent double-click issues.
+                }
+                lastClickTimes.set(itemId, now);
+            }
+        }
         
         if (groupHeader) { 
             const parentEl = groupHeader.parentElement;
