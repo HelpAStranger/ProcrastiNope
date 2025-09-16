@@ -3209,15 +3209,15 @@ async function initializeAppLogic(initialUser) {
     });
 
     deleteAccountBtn.addEventListener('click', () => {
+        // Get the new error element and clear it before showing the confirmation.
+        const deleteAccountErrorEl = document.getElementById('delete-account-error');
+        if (deleteAccountErrorEl) deleteAccountErrorEl.textContent = '';
+
         showConfirm('Delete Account?', 'This action is irreversible and will permanently delete your account and all associated data.', async () => {
             try {
-                const isGoogleUser = currentUser.providerData.some(p => p.providerId === 'google.com');
-                
-                if (!isGoogleUser) {
-                   const password = document.getElementById('reauth-password').value;
-                   const credential = EmailAuthProvider.credential(currentUser.email, password);
-                   await reauthenticateWithCredential(currentUser, credential);
-                }
+                // The user has already re-authenticated to get to this screen.
+                // The deleteUser call below will fail with 'auth/requires-recent-login'
+                // if the token has expired, which is the correct security behavior.
 
                 const userDocRef = doc(db, "users", currentUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -3230,8 +3230,10 @@ async function initializeAppLogic(initialUser) {
                     batch.delete(usernameDocRef);
                 }
 
+                // This is the sensitive operation that requires recent login.
                 await deleteUser(currentUser);
                 
+                // This commit will only run if deleteUser was successful.
                 await batch.commit();
 
                 closeModal(manageAccountModal);
@@ -3239,8 +3241,19 @@ async function initializeAppLogic(initialUser) {
                 window.location.reload(); 
             } catch (error) {
                 console.error("Error deleting account:", error);
-                const errorEl = document.getElementById('update-password-error');
-                errorEl.textContent = getCoolErrorMessage(error);
+                closeModal(confirmModal); // Close the 'are you sure' modal first.
+
+                if (error.code === 'auth/requires-recent-login') {
+                    // If re-auth is needed, send the user back to the password confirmation screen.
+                    document.getElementById('reauth-container').style.display = 'block';
+                    document.getElementById('manage-forms-container').style.display = 'none';
+                    const reauthErrorEl = document.getElementById('reauth-error');
+                    if (reauthErrorEl) reauthErrorEl.textContent = "For security, please confirm your password again to delete your account.";
+                } else {
+                    // For any other error, display it in the dedicated error field.
+                    const deleteErrorEl = document.getElementById('delete-account-error');
+                    if (deleteErrorEl) deleteErrorEl.textContent = getCoolErrorMessage(error);
+                }
             }
         });
     });
