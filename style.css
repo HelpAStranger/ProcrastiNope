@@ -772,6 +772,13 @@ FRIENDS FEATURE & MOBILE NAV
     min-height: 1.2em;
 }
 
+/* Hide empty status/error messages to prevent unnecessary gaps */
+.friend-status-message:empty,
+.error-message:empty,
+.success-message:empty {
+    display: none;
+}
+
 
 /*
 ==========================================================================
