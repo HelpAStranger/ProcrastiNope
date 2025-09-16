@@ -991,8 +991,7 @@ TASK LIST & ITEMS
 }
 
 /* Add/Remove Animation */
-.task-item.adding,
-.main-quest-group.adding {
+.task-item.adding {
     animation: slideIn 0.4s ease forwards;
 }
 
