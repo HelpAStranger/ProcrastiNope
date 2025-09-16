@@ -345,13 +345,13 @@
         <div class="modal-content" role="dialog" aria-modal="true" aria-label="Manage Account">
             <div id="reauth-container">
                 <h2>Confirm Password</h2>
-                <p style="margin-bottom: 1.5rem;">For your security, please enter your password to continue.</p>
+                <p>For your security, please enter your password to continue.</p>
                 <form id="reauth-form" class="auth-form">
                     <div class="form-group">
                         <label for="reauth-password">Current Password</label>
                         <input type="password" id="reauth-password" required>
                     </div>
-                    <button type="submit" class="btn modal-submit-btn" style="width: 100%;">Confirm</button>
+                    <button type="submit" class="btn modal-submit-btn">Confirm</button>
                     <p class="error-message" id="reauth-error"></p>
                 </form>
             </div>
@@ -361,7 +361,7 @@
 
                 <form id="update-username-form" class="auth-form settings-group">
                     <h3>Change Username</h3>
-                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">Changing your username will also update how you log in.</p>
+                    <p>Changing your username will also update how you log in.</p>
                     <div class="form-group">
                         <label for="update-username-input">New Username</label>
                         <input type="text" id="update-username-input" required minlength="3" maxlength="15">
@@ -373,7 +373,7 @@
 
                 <form id="update-email-form" class="auth-form settings-group">
                     <h3>Change Email</h3>
-                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">You will be asked to confirm your current password again.</p>
+                    <p>You will be asked to confirm your current password again.</p>
                     <div class="form-group">
                         <label for="update-email-password">Current Password</label>
                         <input type="password" id="update-email-password" required>
@@ -400,14 +400,14 @@
                 
                 <div class="settings-group">
                     <h3>Reset Data</h3>
-                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">This will reset all your quests and progress in the cloud. It cannot be undone.</p>
-                    <button type="button" id="reset-cloud-data-btn" class="btn" style="width: 100%;">Reset Cloud Data</button>
+                    <p>This will reset all your quests and progress in the cloud. It cannot be undone.</p>
+                    <button type="button" id="reset-cloud-data-btn" class="btn">Reset Cloud Data</button>
                 </div>
 
                 <div class="settings-group">
                     <h3>Delete Account</h3>
-                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">This is permanent and cannot be undone. All your data will be erased.</p>
-                    <button type="button" id="delete-account-btn" class="btn" style="width: 100%; background-color: var(--accent-red); color: var(--text-on-accent); --shadow-color: var(--shadow-dark);">Delete My Account</button>
+                    <p>This is permanent and cannot be undone. All your data will be erased.</p>
+                    <button type="button" id="delete-account-btn" class="btn btn-danger">Delete My Account</button>
                     <p class="error-message" id="delete-account-error"></p>
                 </div>
             </div>
