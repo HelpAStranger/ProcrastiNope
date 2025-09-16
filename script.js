@@ -3552,7 +3552,7 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('.share-btn-action');
         if (button) {
             button.disabled = true;
-            button.textContent = 'Sharing...';
+            button.textContent = 'Sending...';
             const questId = shareQuestIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
@@ -3747,7 +3747,7 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('.share-btn-action');
         if (button) {
             button.disabled = true;
-            button.textContent = 'Sharing...';
+            button.textContent = 'Sending...';
             const groupId = shareGroupIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
