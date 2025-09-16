@@ -241,9 +241,9 @@ main.container {
         margin-right: 0;
     }
 
-    /* Add hover-to-expand behavior only for desktop */
-    .main-quest-group:hover ul.task-list-group {
-        max-height: 1000px;
+    /* Add hover-to-peek behavior for collapsed groups on desktop */
+    .main-quest-group:not(.expanded):hover ul.task-list-group {
+        max-height: 140px; /* A height that shows ~2 tasks */
         margin-top: 1rem;
         transition: max-height 0.25s ease-in;
         padding-right: 0.5rem;
