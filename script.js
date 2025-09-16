@@ -2391,9 +2391,6 @@ async function initializeAppLogic(initialUser) {
         } else {
             reauthContainer.style.display = 'block';
             manageFormsContainer.style.display = 'none';
-            manageAccountModal.querySelector('#update-email-form').style.display = 'block';
-            manageAccountModal.querySelector('#update-password-form').style.display = 'block';
-            manageAccountModal.querySelector('#update-username-form').style.display = 'block';
         }
         openModal(manageAccountModal);
     });
@@ -2416,6 +2413,10 @@ async function initializeAppLogic(initialUser) {
             await reauthenticateWithCredential(currentUser, credential);
             document.getElementById('reauth-container').style.display = 'none';
             document.getElementById('manage-forms-container').style.display = 'block';
+            // Explicitly show the forms for non-Google users after re-auth
+            document.getElementById('update-username-form').style.display = 'block';
+            document.getElementById('update-email-form').style.display = 'block';
+            document.getElementById('update-password-form').style.display = 'block';
         } catch (error) {
             errorEl.textContent = getCoolErrorMessage(error);
         }

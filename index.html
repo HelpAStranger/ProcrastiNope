@@ -358,50 +358,44 @@
 
             <div id="manage-forms-container" style="display: none;">
                 <h2>Manage Account</h2>
-                
-                <form id="update-username-form" class="auth-form" style="margin-top: 2rem;">
-                     <div class="settings-group">
-                        <h3>Change Username</h3>
-                        <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">Changing your username will also update how you log in.</p>
-                        <div class="form-group">
-                            <label for="update-username-input">New Username</label>
-                            <input type="text" id="update-username-input" required minlength="3" maxlength="15">
-                        </div>
-                        <button type="submit" class="btn modal-submit-btn">Update Username</button>
-                        <p class="error-message" id="update-username-error"></p>
-                        <p class="success-message" id="update-username-success"></p>
+
+                <form id="update-username-form" class="auth-form settings-group">
+                    <h3>Change Username</h3>
+                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">Changing your username will also update how you log in.</p>
+                    <div class="form-group">
+                        <label for="update-username-input">New Username</label>
+                        <input type="text" id="update-username-input" required minlength="3" maxlength="15">
                     </div>
+                    <button type="submit" class="btn modal-submit-btn">Update Username</button>
+                    <p class="error-message" id="update-username-error"></p>
+                    <p class="success-message" id="update-username-success"></p>
                 </form>
 
-                <form id="update-email-form" class="auth-form" style="margin-top: 2rem;">
-                     <div class="settings-group">
-                        <h3>Change Email</h3>
-                         <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">You will be asked to confirm your current password again.</p>
-                        <div class="form-group">
-                            <label for="update-email-password">Current Password</label>
-                            <input type="password" id="update-email-password" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="update-email-input">New Email</label>
-                            <input type="email" id="update-email-input" required>
-                        </div>
-                        <button type="submit" class="btn modal-submit-btn">Update Email</button>
-                        <p class="error-message" id="update-email-error"></p>
-                        <p class="success-message" id="update-email-success"></p>
+                <form id="update-email-form" class="auth-form settings-group">
+                    <h3>Change Email</h3>
+                    <p style="margin-bottom: 1rem; font-size: 0.9em; opacity: 0.8;">You will be asked to confirm your current password again.</p>
+                    <div class="form-group">
+                        <label for="update-email-password">Current Password</label>
+                        <input type="password" id="update-email-password" required>
                     </div>
+                    <div class="form-group">
+                        <label for="update-email-input">New Email</label>
+                        <input type="email" id="update-email-input" required>
+                    </div>
+                    <button type="submit" class="btn modal-submit-btn">Update Email</button>
+                    <p class="error-message" id="update-email-error"></p>
+                    <p class="success-message" id="update-email-success"></p>
                 </form>
 
-                <form id="update-password-form" class="auth-form" style="margin-top: 2rem;">
-                    <div class="settings-group">
-                        <h3>Change Password</h3>
-                        <div class="form-group">
-                            <label for="update-password-input">New Password</label>
-                            <input type="password" id="update-password-input" required>
-                        </div>
-                        <button type="submit" class="btn modal-submit-btn">Update Password</button>
-                        <p class="error-message" id="update-password-error"></p>
-                        <p class="success-message" id="update-password-success"></p>
+                <form id="update-password-form" class="auth-form settings-group">
+                    <h3>Change Password</h3>
+                    <div class="form-group">
+                        <label for="update-password-input">New Password</label>
+                        <input type="password" id="update-password-input" required>
                     </div>
+                    <button type="submit" class="btn modal-submit-btn">Update Password</button>
+                    <p class="error-message" id="update-password-error"></p>
+                    <p class="success-message" id="update-password-success"></p>
                 </form>
                 
                 <div class="settings-group">
