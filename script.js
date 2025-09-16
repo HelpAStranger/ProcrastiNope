@@ -183,52 +183,93 @@ const landingAuthContainer = document.getElementById('landing-auth-container');
 
 // --- GLOBAL HELPER FUNCTIONS & STATE ---
 let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
-let audioCtx = null; // Will be initialized by the app logic
 
-function playSound(type) {
-    // On first call, try to create the audio context. This must happen after a user gesture.
-    if (!audioCtx) {
+/**
+ * Manages all audio playback for the application.
+ * This architecture is data-driven, using a "soundBank" to define sounds,
+ * making it modular and easy to extend. It also correctly handles the
+ * AudioContext lifecycle to prevent browser autoplay issues and reduce latency.
+ */
+const audioManager = {
+    audioCtx: null,
+    isInitialized: false,
+
+    // The soundBank defines how each sound is generated. Each entry is a function
+    // that returns an oscillator, its duration, and a volume multiplier.
+    soundBank: {
+        'complete': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'levelUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.4, vol: 1.2 }; },
+        'timerUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(880, ctx.currentTime); o.frequency.linearRampToValueAtTime(440, ctx.currentTime + 0.5); return { oscillator: o, duration: 0.5, vol: 1 }; },
+        'add': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'addGroup': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'delete': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; },
+        'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'open': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(250, ctx.currentTime); o.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'close': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'share': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(659.25, ctx.currentTime + 0.15); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'friendComplete': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(659.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.25, vol: 0.8 }; },
+        'sharedQuestFinish': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523, ctx.currentTime); o.frequency.linearRampToValueAtTime(783, ctx.currentTime + 0.15); o.frequency.linearRampToValueAtTime(1046, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.5, vol: 1.2 }; }
+    },
+
+    /**
+     * Initializes the AudioContext. Must be called after a user gesture.
+     */
+    init() {
+        if (this.isInitialized || this.audioCtx) return;
         try {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.isInitialized = true;
+            console.log('Audio system initialized.');
         } catch (e) {
             console.error("Web Audio API not supported or could not be created.", e);
-            return; // Can't play sounds if context fails.
         }
-    }
+    },
 
-    // Browsers may create the context in a 'suspended' state. It must be resumed by a user gesture.
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume(); // Attempt to resume, but we'll still bail on this attempt.
-    }
+    /**
+     * Plays a sound defined in the soundBank.
+     * @param {string} type The name of the sound to play.
+     */
+    playSound(type) {
+        if (!this.isInitialized || !this.audioCtx) {
+            return; // Audio system not ready.
+        }
 
-    // Don't play sound if volume is 0 or context is not running.
-    if (!audioCtx || settings.volume === 0 || audioCtx.state !== 'running') return;
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.connect(g); g.connect(audioCtx.destination);
-    let v = settings.volume, d = 0.2;
-    switch (type) {
-        case 'complete': o.type = 'sine'; o.frequency.setValueAtTime(440, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); break;
-        case 'levelUp': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.4); d = 0.4; v *= 1.2; break;
-        case 'timerUp': o.type = 'square'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5); d = 0.5; break;
-        case 'add': case 'addGroup': o.type = 'triangle'; o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1); d = 0.15; break;
-        case 'delete': o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); break;
-        case 'hover': o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); v *= 0.2; d = 0.05; break;
-        case 'toggle': o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1); d = 0.1; break;
-        case 'open': o.type = 'triangle'; o.frequency.setValueAtTime(250, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(500, audioCtx.currentTime + 0.1); break;
-        case 'close': o.type = 'triangle'; o.frequency.setValueAtTime(500, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(250, audioCtx.currentTime + 0.1); break;
-        case 'share': o.type = 'sine'; o.frequency.setValueAtTime(523.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(659.25, audioCtx.currentTime + 0.15); d=0.2; break;
-        case 'friendComplete': o.type = 'triangle'; o.frequency.setValueAtTime(659.25, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2); d=0.25; v *= 0.8; break;
-        case 'sharedQuestFinish': 
-            o.type = 'sine'; // A more pleasant, celebratory tone
-            o.frequency.setValueAtTime(523, audioCtx.currentTime); // C5
-            o.frequency.linearRampToValueAtTime(783, audioCtx.currentTime + 0.15); // G5
-            o.frequency.linearRampToValueAtTime(1046, audioCtx.currentTime + 0.4); // C6
-            d = 0.5; v *= 1.2; 
-            break;
+        // If context is suspended, try to resume it. Sound will play on the next interaction.
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+            return;
+        }
+        
+        if (settings.volume === 0) return;
+
+        const soundGenerator = this.soundBank[type];
+        if (!soundGenerator) {
+            console.warn(`Sound type "${type}" not found in sound bank.`);
+            return;
+        }
+
+        const now = this.audioCtx.currentTime;
+        const gainNode = this.audioCtx.createGain();
+        gainNode.connect(this.audioCtx.destination);
+
+        const { oscillator, duration, vol } = soundGenerator(this.audioCtx);
+        oscillator.connect(gainNode);
+
+        const finalVolume = settings.volume * (vol || 1);
+
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(finalVolume, now + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        oscillator.start(now);
+        oscillator.stop(now + duration);
     }
-    g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
-    o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
-}
+};
+
+// Initialize audio on the first user interaction to comply with autoplay policies.
+document.body.addEventListener('click', () => audioManager.init(), { once: true });
+document.body.addEventListener('keydown', () => audioManager.init(), { once: true });
 
 function hideActiveTaskActions() {
     if (activeMobileActionsItem) {
@@ -246,7 +287,7 @@ const openModal = (modal) => {
         hideActiveTaskActions(); // Use the new helper function
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
-        playSound('open');
+        audioManager.playSound('open');
         // Focus the first focusable element inside the modal
         const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
         const firstFocusable = Array.from(focusableElements).find(el => el.offsetParent !== null);
@@ -259,7 +300,7 @@ const closeModal = (modal) => {
     if(modal) {
         appWrapper.classList.remove('blur-background');
         modal.classList.remove('visible');
-        playSound('close');
+        audioManager.playSound('close');
         if (lastFocusedElement) {
             lastFocusedElement.focus();
         }
@@ -405,7 +446,6 @@ async function initializeAppLogic(initialUser) {
     };
 
     let user = initialUser;
-    // audioCtx is now created in initAudioContext on first user gesture.
 
     let lastSection = 'daily';
 
@@ -825,7 +865,7 @@ async function initializeAppLogic(initialUser) {
     function levelUp(requiredXp) {
         playerData.level++;
         playerData.xp -= requiredXp;
-        playSound('levelUp');
+        audioManager.playSound('levelUp');
         levelDisplayEl.classList.add('level-up');
         levelDisplayEl.addEventListener('animationend', () => levelDisplayEl.classList.remove('level-up'), { once: true });
         const newRequiredXp = getXpForNextLevel(playerData.level);
@@ -1175,13 +1215,13 @@ async function initializeAppLogic(initialUser) {
         else { const g = generalTaskGroups.find(g => g.id === list); if (g) { if (!g.tasks) g.tasks = []; g.tasks.push({ ...common, isShared: false }); } }
         renderAllLists();
         saveState(); 
-        playSound('add');
+        audioManager.playSound('add');
     };
     const addGroup = (name) => { 
         generalTaskGroups.push({ id: 'group_' + Date.now(), name, tasks: [], isExpanded: false }); 
         renderAllLists();
         saveState(); 
-        playSound('addGroup'); 
+        audioManager.playSound('addGroup'); 
     };
     const editGroup = (id, newName) => {
         const group = generalTaskGroups.find(g => g.id === id);
@@ -1189,7 +1229,7 @@ async function initializeAppLogic(initialUser) {
             group.name = newName;
             saveState();
             renderAllLists();
-            playSound('toggle');
+            audioManager.playSound('toggle');
         }
     };
     const undoCompleteMainQuest = (id) => {
@@ -1202,7 +1242,7 @@ async function initializeAppLogic(initialUser) {
         if (task && task.pendingDeletion) {
             delete task.pendingDeletion;
             addXp(-XP_PER_TASK); // Revert XP gain
-            playSound('delete'); // Use the 'delete' sound for undo
+            audioManager.playSound('delete'); // Use the 'delete' sound for undo
 
             // Instead of a full re-render, specifically replace this one element.
             // This is more efficient and guarantees the element with the animation is replaced.
@@ -1217,7 +1257,7 @@ async function initializeAppLogic(initialUser) {
             saveState(); // Save the state to persist the undo.
         }
     };
-    const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); playSound('delete'); }); };
+    const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); audioManager.playSound('delete'); }); };
     const findTaskAndContext = (id) => {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
@@ -1279,27 +1319,29 @@ async function initializeAppLogic(initialUser) {
                     const questDocRef = doc(db, "sharedQuests", id);
                     await deleteDoc(questDocRef);
                     // The onSnapshot listener will handle UI updates
-                    playSound('delete');
+                    audioManager.playSound('delete');
                 } catch (error) {
                     console.error("Error deleting shared quest:", getCoolErrorMessage(error));
                     showConfirm("Error", "Failed to delete shared quest. Please try again later.", () => {});
                 }
             });
         } else {
-             const i = list.findIndex(t => t.id === id); 
-             if (i > -1) {
-                 list.splice(i, 1);
-                 // PERF: Instead of re-rendering, find and remove the specific element.
-                 const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
-                 if (taskEl) {
-                     taskEl.classList.add('removing');
-                     taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
-                 } else {
-                     renderAllLists(); // Fallback if element not found
-                 }
-                 saveState();
-                 playSound('delete');
-             }
+            showConfirm(`Delete "${task.text}"?`, 'This action cannot be undone.', () => {
+                const i = list.findIndex(t => t.id === id);
+                if (i > -1) {
+                    list.splice(i, 1);
+                    // PERF: Instead of re-rendering, find and remove the specific element.
+                    const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
+                    if (taskEl) {
+                        taskEl.classList.add('removing');
+                        taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
+                    } else {
+                        renderAllLists(); // Fallback if element not found
+                    }
+                    saveState();
+                    audioManager.playSound('delete');
+                }
+            });
         }
     };
     const completeTask = (id) => {
@@ -1331,7 +1373,7 @@ async function initializeAppLogic(initialUser) {
         delete task.timerFinished;
 
         addXp(XP_PER_TASK);
-        playSound('complete');
+        audioManager.playSound('complete');
         if (type === 'daily') {
             task.completedToday = true;
             task.lastCompleted = new Date().toDateString();
@@ -1412,7 +1454,7 @@ async function initializeAppLogic(initialUser) {
                 task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
             }
             addXp(-XP_PER_TASK);
-            playSound('delete');
+            audioManager.playSound('delete');
             saveState();
 
             // Replace the element directly to stop animations and update state instantly.
@@ -1436,7 +1478,7 @@ async function initializeAppLogic(initialUser) {
                 try {
                     const sharedQuestRef = doc(db, "sharedQuests", id);
                     await updateDoc(sharedQuestRef, { text: text });
-                    playSound('toggle');
+                    audioManager.playSound('toggle');
                 } catch (error) {
                     console.error("Error updating shared quest:", getCoolErrorMessage(error));
                     showConfirm("Error", "Could not update shared quest.", () => {});
@@ -1481,7 +1523,7 @@ async function initializeAppLogic(initialUser) {
             await updateDoc(groupRef, {
                 tasks: arrayUnion(newTask)
             });
-            playSound('add');
+            audioManager.playSound('add');
         } catch (error) {
             console.error("Error adding task to shared group:", getCoolErrorMessage(error));
             showConfirm("Error", "Could not add task to the shared group.", () => {});
@@ -1491,7 +1533,7 @@ async function initializeAppLogic(initialUser) {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
             await updateDoc(groupRef, { name: newName });
-            playSound('toggle');
+            audioManager.playSound('toggle');
         } catch (error) {
             console.error("Error editing shared group name:", getCoolErrorMessage(error));
             showConfirm("Error", "Could not edit group name.", () => {});
@@ -1509,7 +1551,7 @@ async function initializeAppLogic(initialUser) {
                         await updateDoc(groupRef, {
                             tasks: arrayRemove(taskToRemove)
                         });
-                        playSound('delete');
+                        audioManager.playSound('delete');
                     }
                 }
             } catch (error) {
@@ -1528,7 +1570,7 @@ async function initializeAppLogic(initialUser) {
                 if (taskIndex > -1) {
                     tasks[taskIndex].text = newText;
                     await updateDoc(groupRef, { tasks: tasks });
-                    playSound('toggle');
+                    audioManager.playSound('toggle');
                 }
             }
         } catch (error) {
@@ -1562,10 +1604,10 @@ async function initializeAppLogic(initialUser) {
             await updateDoc(groupRef, updatePayload);
     
             if (!uncompleting) {
-                playSound('complete');
+                audioManager.playSound('complete');
                 addXp(XP_PER_TASK / 2);
             } else {
-                playSound('delete');
+                audioManager.playSound('delete');
                 addXp(-(XP_PER_TASK / 2));
             }
         } catch (error) {
@@ -1580,7 +1622,7 @@ async function initializeAppLogic(initialUser) {
             delete task.sharedQuestId;
             saveState();
             renderAllLists();
-            playSound('delete'); // Play sound on successful revert
+            audioManager.playSound('delete'); // Play sound on successful revert
         }
     };
 
@@ -1599,7 +1641,7 @@ async function initializeAppLogic(initialUser) {
                 // The owner's own listener will see this change and perform the deletion and local state reversion,
                 // centralizing the cleanup logic into a flow that is known to work.
                 await updateDoc(doc(db, "sharedQuests", questId), { status: 'unshared' });
-                playSound('delete');
+                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error unsharing quest:", getCoolErrorMessage(error));
                 showConfirm("Error", "Could not unshare the quest.", () => {});
@@ -1615,7 +1657,7 @@ async function initializeAppLogic(initialUser) {
             try {
                 const sharedQuestRef = doc(db, "sharedQuests", questId);
                 await updateDoc(sharedQuestRef, { status: 'abandoned' });
-                playSound('delete');
+                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error abandoning quest:", getCoolErrorMessage(error));
                 showConfirm("Error", "Could not abandon the quest.", () => {});
@@ -1659,7 +1701,7 @@ async function initializeAppLogic(initialUser) {
                 // revert the local task, and then delete the document. This centralizes the cleanup logic
                 // and aligns it with the pattern used for abandoning/unsharing active quests.
                 await updateDoc(sharedQuestRef, { status: 'unshared' });
-                playSound('delete'); // Give immediate feedback
+                audioManager.playSound('delete'); // Give immediate feedback
                 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
@@ -1709,7 +1751,7 @@ async function initializeAppLogic(initialUser) {
                     delete originalGroup.sharedGroupId;
                 }
                 
-                playSound('delete');
+                audioManager.playSound('delete');
                 renderAllLists();
                 saveState(); // Save the reverted state
             } catch (error) {
@@ -1720,7 +1762,7 @@ async function initializeAppLogic(initialUser) {
     };
 
     const finishTimer = (id) => {
-        playSound('timerUp');
+        audioManager.playSound('timerUp');
         activeTimers.delete(id); // Ensure it's removed from the active map.
 
         const { task } = findTaskAndContext(id);
@@ -2224,7 +2266,7 @@ async function initializeAppLogic(initialUser) {
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
     timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
-    addGroupForm.addEventListener('submit', (e) => {
+    addGroupForm.addEventListener('submit', (e) => { // eslint-disable-line
         e.preventDefault();
         const name = newGroupInput.value.trim();
         if (name) { if (currentEditingGroupId) { const isShared = sharedGroups.some(g => g.id === currentEditingGroupId); if (isShared) { editSharedGroupName(currentEditingGroupId, name); } else { editGroup(currentEditingGroupId, name); } } else { addGroup(name); } newGroupInput.value = ''; closeModal(addGroupModal); }
@@ -2275,10 +2317,10 @@ async function initializeAppLogic(initialUser) {
     confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
     confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
     const applySettings = () => { document.documentElement.style.setProperty('--accent', settings.accentColor); document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); if(typeof settings.volume==='undefined') settings.volume=0.3; volumeSlider.value = settings.volume; const d = window.matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.classList.toggle('dark-mode', settings.theme === 'dark' || (settings.theme === 'system' && d)); document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected')); const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`); if(s)s.classList.add('selected'); };
-    themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(); playSound('toggle'); } });
+    themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(); audioManager.playSound('toggle'); } });
     colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
     volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
-    volumeSlider.addEventListener('change', () => playSound('toggle'));
+    volumeSlider.addEventListener('change', () => audioManager.playSound('toggle'));
     
     function updateGoalDisplay(slider, display) {
         const value = slider.value;
@@ -2291,7 +2333,7 @@ async function initializeAppLogic(initialUser) {
     weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
     editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
     
-    resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); playSound('delete'); }));
+    resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
     exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
     resetCloudDataBtn.addEventListener('click', () => {
         showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => {
@@ -2301,12 +2343,12 @@ async function initializeAppLogic(initialUser) {
             generalTaskGroups = [];
             renderAllLists();
             saveState(); // This will save the empty state to Firestore because `user` is not null
-            playSound('delete');
+            audioManager.playSound('delete');
         });
     });
     importDataBtn.addEventListener('click', () => importFileInput.click());
     importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
-    document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; playSound('hover'); });
+    document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; audioManager.playSound('hover'); });
     
     manageAccountBtn.addEventListener('click', () => {
         const reauthContainer = manageAccountModal.querySelector('#reauth-container');
@@ -3138,7 +3180,7 @@ async function initializeAppLogic(initialUser) {
                 group.classList.toggle('mobile-visible', group.dataset.section === section);
             });
         }
-        playSound('toggle');
+        audioManager.playSound('toggle');
     });
 
     deleteAccountBtn.addEventListener('click', () => {
@@ -3231,7 +3273,7 @@ async function initializeAppLogic(initialUser) {
                              if(taskEl) {
                                 taskEl.classList.add('friend-completed-pulse');
                                 taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
-                                playSound('friendComplete');
+                                audioManager.playSound('friendComplete');
                              }
                         }
                     }
@@ -3449,7 +3491,7 @@ async function initializeAppLogic(initialUser) {
         batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
         
         await batch.commit();
-        playSound('share');
+        audioManager.playSound('share');
         renderAllLists(); // Re-render to show the original task as 'isShared'
     }
     
@@ -3481,10 +3523,10 @@ async function initializeAppLogic(initialUser) {
         await updateDoc(sharedQuestRef, updateData);
         
         if (!uncompleting) {
-            playSound('complete');
+            audioManager.playSound('complete');
             addXp(XP_PER_SHARED_QUEST / 2);
         } else {
-            playSound('delete');
+            audioManager.playSound('delete');
             addXp(-(XP_PER_SHARED_QUEST / 2));
         }
 
@@ -3497,7 +3539,7 @@ async function initializeAppLogic(initialUser) {
     }
     
     async function finishSharedQuestAnimation(questData) {
-        playSound('sharedQuestFinish');
+        audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
         
         if (taskEl) {
@@ -3652,7 +3694,7 @@ async function initializeAppLogic(initialUser) {
 
         await batch.commit();
 
-        playSound('share');
+        audioManager.playSound('share');
         renderAllLists();
     }
 
@@ -3705,7 +3747,7 @@ async function initializeAppLogic(initialUser) {
         const sharedQuestRef = doc(db, collectionName, itemId);
         try {
             await updateDoc(sharedQuestRef, { status: 'active' });
-            playSound('toggle'); // Use toggle sound for acceptance
+            audioManager.playSound('toggle'); // Use toggle sound for acceptance
         } catch (error) {
             console.error("Error accepting shared quest:", getCoolErrorMessage(error));
             showConfirm("Error", "Failed to accept quest. Please try again.", () => {});
@@ -3723,7 +3765,7 @@ async function initializeAppLogic(initialUser) {
                 // Instead of deleting, update the status to 'rejected'.
                 // The owner's client will listen for this change and clean up.
                 await updateDoc(sharedQuestRef, { status: 'rejected' });
-                playSound('delete');
+                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error denying shared quest:", getCoolErrorMessage(error));
                 showConfirm("Error", "Failed to deny quest. Please try again.", () => {});
