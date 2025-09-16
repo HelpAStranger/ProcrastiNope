@@ -943,12 +943,24 @@ TASK LIST & ITEMS
 
 /* Standalone quests look like group headers */
 .task-item.standalone-quest {
-     /* This is now styled like a regular task item. */
+     /* This is now styled like a regular task item, but with flair. */
 }
- .task-item.standalone-quest::before {
-    /* The distinctive dashed border is removed to match other tasks. */
-    content: none;
+
+/* NEW: Add traced border effect to main quest items */
+.main-quest-group-header::before,
+.task-item.standalone-quest::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    right: 5px;
+    bottom: 5px;
+    border: var(--border-width) dashed var(--border);
+    border-radius: calc(var(--radius) * 0.75); /* Match inner curve */
+    opacity: 0.5;
+    pointer-events: none;
 }
+
  .task-item.standalone-quest .task-text {
     /* Font size and weight are reset to match regular tasks. */
     font-size: 1.1rem;
