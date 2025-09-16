@@ -2035,7 +2035,9 @@ async function initializeAppLogic(initialUser) {
                     );
                     return;
                 }
-                return;
+                // If the click was on the overlay but not on a specific button, close the actions.
+                hideActiveTaskActions();
+                return; // Event handled, don't fall through to expand/collapse
             }
             
             // Click on header body to expand/collapse
@@ -2221,6 +2223,9 @@ async function initializeAppLogic(initialUser) {
                         openModal(editTaskModal);
                         focusOnDesktop(editTaskInput);
                     }
+                } else {
+                    // If the click was on the overlay but not on a specific button, close the actions.
+                    hideActiveTaskActions();
                 }
                 return; // Click was inside the actions menu
             }
