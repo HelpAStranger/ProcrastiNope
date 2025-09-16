@@ -232,10 +232,6 @@ function playSound(type) {
 const openModal = (modal) => {
     if(modal) {
         lastFocusedElement = document.activeElement;
-        if (activeMobileActionsItem) {
-            activeMobileActionsItem.classList.remove('actions-visible');
-            activeMobileActionsItem = null;
-        }
         hideActiveTaskActions(); // Use the new helper function
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
@@ -980,8 +976,6 @@ async function initializeAppLogic(initialUser) {
                         <h3>${group.name}</h3>
                         <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     </div>
-                </div>
-                <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
                 </div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
                     ${editBtnHTML}
                     ${unshareBtnHTML}
@@ -1020,7 +1014,6 @@ async function initializeAppLogic(initialUser) {
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
-            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="task-buttons-wrapper">${buttonsHTML}</div>
             <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="task-buttons-wrapper">${buttonsHTML}</div>
             <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
                 <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
@@ -1042,9 +1035,7 @@ async function initializeAppLogic(initialUser) {
             const friendCompleted = task.friendCompleted;
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
             const allCompleted = ownerCompleted && friendCompleted;
-
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
-            const optionsBtnDisabled = myPartCompleted ? 'disabled' : '';
             const optionsBtnDisabled = allCompleted ? 'disabled' : '';
 
             li.classList.add('shared-quest');
@@ -1070,7 +1061,6 @@ async function initializeAppLogic(initialUser) {
             li.innerHTML = `
                 <div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span></div><div class="task-actions-container">
-                    <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                     <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                 </div><div class="task-buttons-wrapper">${buttonsHTML}</div>
                 <div class="shared-quest-info">
@@ -1110,7 +1100,6 @@ async function initializeAppLogic(initialUser) {
             `;
             li.innerHTML = `<div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-actions-container">
-                    <button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                     <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                 </div><div class="task-buttons-wrapper">${buttonsHTML.trim()}</div>`;
         }
@@ -1654,15 +1643,13 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // Owner is cancelling a pending request.
-                // Instead of deleting directly, update the status to 'rejected'.
-                // The owner's own listener will see this change and perform the deletion and local state reversion,
-                // centralizing the cleanup logic.
-                // Owner cancels by deleting the pending request directly. This mirrors the working `cancelSharedGroup` logic.
-                await deleteDoc(sharedQuestRef);
-                // Revert the original task in local state for responsiveness.
-                revertSharedQuest(questData.originalTaskId);
-
+                // FIX: Instead of deleting directly (which causes a permission error), we update the status.
+                // The owner's own Firestore listener will detect the 'unshared' status,
+                // revert the local task, and then delete the document. This centralizes the cleanup logic
+                // and aligns it with the pattern used for abandoning/unsharing active quests.
+                await updateDoc(sharedQuestRef, { status: 'unshared' });
+                playSound('delete'); // Give immediate feedback
+                
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
                 showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
@@ -1854,14 +1841,7 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
-        clearTimeout(actionsTimeoutId);
-
-        if (activeMobileActionsItem && activeMobileActionsItem !== element) {
-            activeMobileActionsItem.classList.remove('actions-visible');
-        }
-        
         const wasVisible = element.classList.contains('actions-visible');
-        element.classList.toggle('actions-visible');
 
         // Always hide any currently active actions first.
         // This handles clicking a new item or clicking the same item again.
@@ -1875,14 +1855,8 @@ async function initializeAppLogic(initialUser) {
             activeMobileActionsItem = element;
 
             actionsTimeoutId = setTimeout(() => {
-                if(element.classList.contains('actions-visible')) {
-                    element.classList.remove('actions-visible');
-                    activeMobileActionsItem = null;
-                }
                 hideActiveTaskActions();
             }, 3000);
-        } else {
-            activeMobileActionsItem = null;
         }
     }
 
