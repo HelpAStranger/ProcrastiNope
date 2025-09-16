@@ -1027,6 +1027,7 @@ async function initializeAppLogic(initialUser) {
     };
     const createTaskElement = (task, type) => {
         const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
+        let optionsBtnDisabled = '';
         
         // Shared Quest specific rendering (from sharedQuests collection)
         if(type === 'shared') {
@@ -1036,7 +1037,7 @@ async function initializeAppLogic(initialUser) {
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
             const allCompleted = ownerCompleted && friendCompleted;
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
-            const optionsBtnDisabled = allCompleted ? 'disabled' : '';
+            optionsBtnDisabled = allCompleted ? 'disabled' : '';
 
             li.classList.add('shared-quest');
             if (allCompleted) {
@@ -1079,7 +1080,7 @@ async function initializeAppLogic(initialUser) {
 
         // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
         const isCompleted = task.completedToday || task.pendingDeletion;
-        const optionsBtnDisabled = isCompleted ? 'disabled' : '';
+        optionsBtnDisabled = isCompleted ? 'disabled' : '';
 
         let goalHTML = ''; if (type === 'daily' && task.weeklyGoal > 0) { goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`; if (task.weeklyCompletions >= task.weeklyGoal) li.classList.add('weekly-goal-met'); }
 
