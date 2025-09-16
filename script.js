@@ -373,6 +373,7 @@ try {
             } else {
                 await appController.updateUser(user);
             }
+            appWrapper.classList.add('loaded'); // Trigger load animations
         } else { 
             // No user is logged in.
             if (sessionStorage.getItem('isGuest')) {
@@ -380,12 +381,14 @@ try {
                 landingPage.style.display = 'none';
                 appWrapper.style.display = 'block';
                 if (!appController) appController = await initializeAppLogic(null);
+                appWrapper.classList.add('loaded'); // Trigger load animations
             } else {
                 loaderOverlay.style.display = 'none';
                 landingPage.style.display = 'flex';
                 appWrapper.style.display = 'none';
                 if(appController) appController.shutdown();
                 appController = null;
+                appWrapper.classList.remove('loaded'); // Reset on logout
             }
         }
     });
@@ -2377,8 +2380,53 @@ async function initializeAppLogic(initialUser) {
     function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
     confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
     confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
-    const applySettings = () => { document.documentElement.style.setProperty('--accent', settings.accentColor); document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor)); if(typeof settings.volume==='undefined') settings.volume=0.3; volumeSlider.value = settings.volume; const d = window.matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.classList.toggle('dark-mode', settings.theme === 'dark' || (settings.theme === 'system' && d)); document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected')); const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`); if(s)s.classList.add('selected'); };
-    themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(); audioManager.playSound('toggle'); } });
+    const applySettings = (e) => {
+        // Determine target theme state
+        const isCurrentlyDark = document.documentElement.classList.contains('dark-mode');
+        const d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const willBeDark = settings.theme === 'dark' || (settings.theme === 'system' && d);
+
+        // Apply non-theme settings immediately
+        document.documentElement.style.setProperty('--accent', settings.accentColor);
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
+        if(typeof settings.volume === 'undefined') settings.volume = 0.3;
+        volumeSlider.value = settings.volume;
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
+        const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
+        if(s) s.classList.add('selected');
+
+        // If theme isn't changing, we're done.
+        if (isCurrentlyDark === willBeDark) return;
+
+        // --- View Transition Logic ---
+        if (!document.startViewTransition) {
+            // Fallback for unsupported browsers
+            document.documentElement.classList.toggle('dark-mode', willBeDark);
+            return;
+        }
+
+        // Get click coordinates for the animation origin
+        const x = e ? e.clientX : window.innerWidth / 2;
+        const y = e ? e.clientY : window.innerHeight / 2;
+        const endRadius = Math.hypot(
+            Math.max(x, window.innerWidth - x),
+            Math.max(y, window.innerHeight - y)
+        );
+
+        // Start the transition
+        const transition = document.startViewTransition(() => {
+            document.documentElement.classList.toggle('dark-mode', willBeDark);
+        });
+
+        // Animate the transition
+        transition.ready.then(() => {
+            document.documentElement.animate(
+                { clipPath: [ `circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)` ] },
+                { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', pseudoElement: '::view-transition-new(root)' }
+            );
+        });
+    };
+    themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(e); audioManager.playSound('toggle'); } });
     colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
     volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
     volumeSlider.addEventListener('change', () => audioManager.playSound('toggle'));
