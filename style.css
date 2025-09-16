@@ -832,7 +832,7 @@ TASK LIST & ITEMS
 
 
 .main-quest-group {
-    margin-bottom: 1.5rem; /* FIX: Reduced spacing */
+    margin-bottom: 1rem; /* More compact spacing between groups */
     transition: all var(--transition-speed) ease;
 }
 
@@ -844,7 +844,7 @@ TASK LIST & ITEMS
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
+    padding: 0.75rem 1.5rem; /* More compact header */
     background-color: var(--surface);
     border: var(--border-width) solid var(--border);
     border-radius: var(--radius);
@@ -875,8 +875,8 @@ TASK LIST & ITEMS
 }
 
 .main-quest-group-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
+    font-size: 1rem; /* Slightly smaller to de-emphasize vs tasks */
+    font-weight: 900; /* Bolder to compensate for size */
 }
 
 .main-quest-group-header .group-actions {
@@ -933,25 +933,23 @@ TASK LIST & ITEMS
     cursor: grab; /* For sorting */
 }
 
+/* Make tasks inside groups more compact */
+.main-quest-group .task-item {
+    margin-bottom: 1rem;
+}
+
 /* Standalone quests look like group headers */
 .task-item.standalone-quest {
-     padding: 1rem;
+     /* This is now styled like a regular task item. */
 }
  .task-item.standalone-quest::before {
-    content: '';
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    right: 5px;
-    bottom: 5px;
-    border: var(--border-width) dashed var(--border);
-    border-radius: calc(var(--radius) * 0.5);
-    opacity: 0.5;
-    pointer-events: none; /* Fix: Allow clicks to pass through the overlay */
+    /* The distinctive dashed border is removed to match other tasks. */
+    content: none;
 }
  .task-item.standalone-quest .task-text {
-    font-size: 1.3rem;
-    font-weight: 900;
+    /* Font size and weight are reset to match regular tasks. */
+    font-size: 1.1rem;
+    font-weight: 700;
 }
 
 .task-item.overdue {
