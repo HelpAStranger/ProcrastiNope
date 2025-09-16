@@ -172,6 +172,7 @@ let lastFocusedElement = null;
 let localDataTimestamp = 0; // To track the timestamp of the currently loaded data.
 
 let activeMobileActionsItem = null; 
+let actionsTimeoutId = null;
 
 // --- DOM ELEMENTS FOR STARTUP ---
 const loaderOverlay = document.getElementById('loader-overlay');
@@ -227,6 +228,16 @@ function playSound(type) {
     }
     g.gain.setValueAtTime(0, audioCtx.currentTime); g.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.01);
     o.start(audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d);
+}
+
+function hideActiveTaskActions() {
+    if (activeMobileActionsItem) {
+        clearTimeout(actionsTimeoutId);
+        const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
+        if (optionsBtn) optionsBtn.disabled = false;
+        activeMobileActionsItem.classList.remove('actions-visible');
+        activeMobileActionsItem = null;
+    }
 }
 
 const openModal = (modal) => {
@@ -407,7 +418,6 @@ async function initializeAppLogic(initialUser) {
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
     // PERF: Refactored timers to use CSS transitions instead of a JS loop.
     let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
-    let actionsTimeoutId = null;
     let undoTimeoutMap = new Map();
 
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
@@ -1826,16 +1836,6 @@ async function initializeAppLogic(initialUser) {
             renderAllLists();
         }
     };
-
-    function hideActiveTaskActions() {
-        if (activeMobileActionsItem) {
-            clearTimeout(actionsTimeoutId);
-            const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
-            if (optionsBtn) optionsBtn.disabled = false;
-            activeMobileActionsItem.classList.remove('actions-visible');
-            activeMobileActionsItem = null;
-        }
-    }
 
     function toggleTaskActions(element) {
         if (element.classList.contains('timer-active')) {
