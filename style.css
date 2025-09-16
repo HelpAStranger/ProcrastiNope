@@ -1359,7 +1359,7 @@ BUTTONS & CONTROLS
 
 /* NEW: Style for the options button when its actions are visible */
 .btn.is-active-trigger {
-    opacity: 0.7;
+    opacity: 0.4;
     cursor: pointer; /* Remains clickable to close the menu */
     /* Mimic the :active state to look "pressed" or "locked" */
     transform: translate(2px, 2px);
