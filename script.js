@@ -1204,13 +1204,8 @@ async function initializeAppLogic(initialUser) {
             const remaining = Math.max(0, task.timerDuration - elapsed);
             if (remaining > 0) {
                 li.classList.add('timer-active');
-                const ring = li.querySelector('.progress-ring-circle');
-                if (ring) {
-                    const r = 10;
-                    const c = r * 2 * Math.PI;
-                    const p = remaining / task.timerDuration;
-                    ring.style.strokeDashoffset = c - (p * c);
-                }
+                // The `resumeTimers` function, called after render, will handle the visual state of the ring.
+                // We just need to ensure the class is present.
             }
         }
 
