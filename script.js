@@ -1327,7 +1327,7 @@ async function initializeAppLogic(initialUser) {
             addXp(-XP_PER_TASK); // Revert XP gain
             // FIX: Ensure timer properties are cleared when undoing completion
             // to prevent the timer from reappearing.
-            delete task.timerFinished;
+        task.timerFinished = false; // Explicitly set to false to prevent race conditions.
             delete task.timerStartTime;
             delete task.timerDuration;
             audioManager.playSound('delete'); // Use the 'delete' sound for undo
@@ -3508,9 +3508,9 @@ async function initializeAppLogic(initialUser) {
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
             friendEl.innerHTML = `
+                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
                 <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
                 <span class="friend-name">${friendData.username}</span>
-                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
             `;
             listElement.appendChild(friendEl);
         });
