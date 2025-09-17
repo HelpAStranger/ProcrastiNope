@@ -879,7 +879,6 @@ async function initializeAppLogic(initialUser) {
                 if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
                 else if (!task.completedToday) task.streak = 0;
                 task.completedToday = false;
-                delete task.timerFinished; // Clear timer finished state on reset
                 task.timerFinished = false; // Clear timer finished state on reset
                 // FIX: Also clear timer properties to prevent it from resuming on a new day.
                 delete task.timerStartTime;
@@ -1906,7 +1905,6 @@ async function initializeAppLogic(initialUser) {
         if (task) {
             delete task.timerStartTime;
             delete task.timerDuration;
-            delete task.timerFinished;
             task.timerFinished = false;
 
             // Also reset the ring's CSS when a timer is stopped.
