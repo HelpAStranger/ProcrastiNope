@@ -1608,18 +1608,36 @@ TASK INTERACTIONS (REFACTORED)
     z-index: 7;
 }
 
-/* EXCEPTION: If a timer is active, the wrapper becomes a normal flex container again */
+/* NEW: When a timer is active, its button becomes a centered overlay */
 .task-item.timer-active .task-buttons-wrapper {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: static;
-    width: auto;
-    height: auto;
-    background: transparent;
-    z-index: auto;
-    margin-left: auto;
-    border-radius: 0;
+    /* This re-uses the base overlay styles but makes it visible and transparent */
+    opacity: 1;
+    pointer-events: auto;
+    background-color: transparent;
 }
+
+/* NEW: Fade out the task content when a timer is active */
+.task-item.timer-active .task-content,
+.task-item.timer-active .completion-indicator,
+.task-item.timer-active .task-actions-container,
+.task-item.timer-active .multi-select-checkbox {
+    opacity: 0.3;
+    filter: blur(2px);
+    transition: opacity var(--transition-speed) ease, filter var(--transition-speed) ease;
+}
+
+/* NEW: Style the timer button itself when active */
+.task-item.timer-active .timer-clock-btn {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+    transform: scale(1.2); /* Make it a bit larger */
+    box-shadow: 8px 8px 0 var(--shadow-color);
+}
+.task-item.timer-active .timer-clock-btn:hover {
+    transform: scale(1.2) translate(-2px, -2px); /* Adjust hover for new scale */
+    box-shadow: 10px 10px 0 var(--shadow-color);
+}
+.task-item.timer-active .timer-clock-btn svg:not(.progress-ring) { stroke: var(--text-on-accent); }
 
 /* When timer is active, only show the timer button */
 .task-item.timer-active .task-buttons-wrapper .btn:not(.timer-clock-btn) {

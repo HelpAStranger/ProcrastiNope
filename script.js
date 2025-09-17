@@ -3918,11 +3918,11 @@ async function initializeAppLogic(initialUser) {
 
         batch.set(sharedGroupRef, sharedGroupData);
 
-        // Instead of marking the group as shared, we remove it from the local list.
-        // The shared version will appear via the Firestore listener.
-        generalTaskGroups.splice(groupIndex, 1);
+        // Mark the original group as shared, so it renders as a placeholder.
+        groupToShare.isShared = true;
+        groupToShare.sharedGroupId = sharedGroupRef.id;
 
-        // The saveState() call will persist the removal of the group from the local list.
+        // The saveState() call will persist the updated state of the group.
         saveState();
 
         await batch.commit();
