@@ -644,7 +644,7 @@ FRIENDS FEATURE & MOBILE NAV
     border-radius: var(--radius);
     flex: 1 1 0px;
     /* This transition handles all user interactions (clicking tabs) */
-    transition: transform var(--transition-speed) ease, background-color var(--transition-speed) ease, color var(--transition-speed) ease, box-shadow var(--transition-speed) ease, opacity var(--transition-speed) ease;
+    transition: transform var(--transition-speed) ease, background-color var(--transition-speed) ease, color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
     position: relative;
     display: flex;
     flex-direction: column;
