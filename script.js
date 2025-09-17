@@ -2712,6 +2712,21 @@ async function initializeAppLogic(initialUser) {
     }
     const renderAllLists = () => { renderSharedItems(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingItems(); initSortable(); resumeTimers(); };
     
+    function setInitialActiveTab() {
+        // The animation for the nav buttons is the longest, finishing around 0.4s (delay) + 0.4s (duration) = 0.8s.
+        // We wait until after this animation to add the 'active' class. This prevents the class's styles
+        // from interfering with the entrance animation and provides a nice "settling" effect.
+        setTimeout(() => {
+            const dailyBtn = mobileNav.querySelector('[data-section="daily"]');
+            // By default, the 'daily' tab is active. Ensure no other buttons are active
+            // and apply the class to the correct button.
+            if (dailyBtn && !dailyBtn.classList.contains('active')) {
+                mobileNav.querySelectorAll('.mobile-nav-btn.active').forEach(btn => btn.classList.remove('active'));
+                dailyBtn.classList.add('active');
+            }
+        }, 850); // A safe delay after the last animation finishes.
+    }
+
     settingsLoginBtn.addEventListener('click', () => {
         const accountModalContent = accountModal.querySelector('.modal-content');
         setupAuthForms(accountModalContent, () => {
