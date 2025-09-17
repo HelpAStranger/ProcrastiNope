@@ -452,6 +452,8 @@ async function initializeAppLogic(initialUser) {
     let lastSection = 'daily';
 
     let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
+    let isMultiSelectModeActive = false;
+    let selectedQuestIds = new Set();
     let sharedGroups = [];
     let allSharedGroupsFromListener = [];
     let questsMap = new Map(); // Make it available in the broader scope
@@ -474,6 +476,7 @@ async function initializeAppLogic(initialUser) {
     const standaloneTaskListContainer = document.getElementById('standalone-task-list');
     const generalTaskListContainer = document.getElementById('general-task-list-container');
     const playerLevelEl = document.getElementById('player-level');
+    const questsLayout = document.querySelector('.quests-layout');
     const xpBarEl = document.getElementById('xp-bar');
     const xpTextEl = document.getElementById('xp-text');
     const levelDisplayEl = document.querySelector('.level-display');
@@ -559,6 +562,14 @@ async function initializeAppLogic(initialUser) {
     const shareGroupIdInput = document.getElementById('share-group-id-input');
     const shareGroupFriendList = document.getElementById('share-group-friend-list');
 
+    // NEW: DOM elements for Multi-Select
+    const multiSelectBtn = document.getElementById('multi-select-btn');
+    const batchActionToolbar = document.getElementById('batch-action-toolbar');
+    const batchActionCounter = document.getElementById('batch-action-counter');
+    const batchDeleteBtn = document.getElementById('batch-delete-btn');
+    const batchUnshareBtn = document.getElementById('batch-unshare-btn');
+    const batchCompleteBtn = document.getElementById('batch-complete-btn');
+    const batchCancelBtn = document.getElementById('batch-cancel-btn');
     // NEW: DOM elements for Shares tab
     const sharesTabContent = document.getElementById('shares-tab'); // eslint-disable-line no-unused-vars
     const incomingSharesContainer = sharesTabContent.querySelector('.incoming-shares-container');
@@ -964,6 +975,9 @@ async function initializeAppLogic(initialUser) {
     };
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
+        if (selectedQuestIds.has(group.id)) {
+            el.classList.add('multi-select-selected');
+        }
         
         if (group.isShared) {
             const sharedGroupData = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
@@ -998,7 +1012,7 @@ async function initializeAppLogic(initialUser) {
             return el;
         }
 
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        el.innerHTML = `<header class="main-quest-group-header"><div class="multi-select-checkbox"></div><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
@@ -1070,7 +1084,7 @@ async function initializeAppLogic(initialUser) {
         `;
 
         li.innerHTML = `
-            <div class="completion-indicator"></div>
+            <div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
@@ -1087,6 +1101,9 @@ async function initializeAppLogic(initialUser) {
     };
     const createTaskElement = (task, type) => {
         const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
+        if (selectedQuestIds.has(task.id)) {
+            li.classList.add('multi-select-selected');
+        }
         let optionsBtnDisabled = '';
         
         // Shared Quest specific rendering (from sharedQuests collection)
@@ -1120,7 +1137,7 @@ async function initializeAppLogic(initialUser) {
             `;
 
             li.innerHTML = `
-                <div class="completion-indicator"></div>
+                <div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
                 <div class="task-buttons-wrapper">${buttonsHTML}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
                 <div class="shared-quest-info">
@@ -1145,7 +1162,7 @@ async function initializeAppLogic(initialUser) {
 
         if (task.pendingDeletion) {
             // For pending deletion, show a full-width overlay with just the Undo button.
-            li.innerHTML = `<div class="completion-indicator"></div>
+            li.innerHTML = `<div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
                 <div class="task-buttons-wrapper">
                     <button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>
@@ -1158,7 +1175,7 @@ async function initializeAppLogic(initialUser) {
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
-            li.innerHTML = `<div class="completion-indicator"></div><div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
+            li.innerHTML = `<div class="multi-select-checkbox"></div><div class="completion-indicator"></div><div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
                 <div class="task-buttons-wrapper">${buttonsHTML.trim()}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
         }
 
@@ -1956,6 +1973,10 @@ async function initializeAppLogic(initialUser) {
         const groupHeader = e.target.closest('.main-quest-group-header');
         const groupElement = groupHeader ? groupHeader.parentElement : null;
         const clickableItem = taskItem || groupElement;
+        const selectableItem = taskItem || groupHeader;
+        const selectableParent = groupHeader ? groupHeader.parentElement : null;
+        const idForSelection = selectableItem ? (selectableItem.dataset.id || (selectableParent ? selectableParent.dataset.groupId : null)) : null;
+
 
         if (clickableItem) {
             // Use the most specific ID available on the clicked item.
@@ -1970,6 +1991,35 @@ async function initializeAppLogic(initialUser) {
                 }
                 lastClickTimes.set(itemId, now);
             }
+        }
+
+        if (isMultiSelectModeActive) {
+            if (!selectableItem) return;
+
+            // Prevent selecting items from daily list or shared list
+            if (selectableItem.closest('.task-group[data-section="daily"]')) {
+                return;
+            }
+
+            // Don't select if clicking on an action button inside
+            if (e.target.closest('.task-buttons-wrapper, .group-actions, .options-btn')) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (!idForSelection) return;
+
+            if (selectedQuestIds.has(idForSelection)) {
+                selectedQuestIds.delete(idForSelection);
+                (taskItem || groupElement).classList.remove('multi-select-selected');
+            } else {
+                selectedQuestIds.add(idForSelection);
+                (taskItem || groupElement).classList.add('multi-select-selected');
+            }
+            updateBatchActionToolbar();
+            return; // Stop further processing
         }
         
         if (groupHeader) { 
@@ -3967,6 +4017,10 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
+        multiSelectBtn.addEventListener('click', () => toggleMultiSelectMode());
+        batchCancelBtn.addEventListener('click', () => toggleMultiSelectMode(true));
+        addBatchActionListeners();
+
         // NEW: Add keydown listener for Shift to show actions immediately
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Shift' && !e.repeat && lastPotentialShiftHoverItem) {
@@ -4034,6 +4088,116 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
+
+    function toggleMultiSelectMode(forceOff = false) {
+        isMultiSelectModeActive = forceOff ? false : !isMultiSelectModeActive;
+
+        if (isMultiSelectModeActive) {
+            multiSelectBtn.classList.add('active');
+            questsLayout.classList.add('multi-select-active');
+            hideActiveTaskActions(); // Close any open single-action menus
+        } else {
+            multiSelectBtn.classList.remove('active');
+            questsLayout.classList.remove('multi-select-active');
+            
+            // Clear selection and update UI
+            document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
+            selectedQuestIds.clear();
+            updateBatchActionToolbar();
+        }
+    }
+
+    function updateBatchActionToolbar() {
+        const count = selectedQuestIds.size;
+        if (count > 0) {
+            batchActionCounter.textContent = `${count} selected`;
+            batchActionToolbar.classList.add('visible');
+        } else {
+            batchActionToolbar.classList.remove('visible');
+        }
+    }
+
+    function addBatchActionListeners() {
+        batchDeleteBtn.addEventListener('click', () => {
+            const count = selectedQuestIds.size;
+            if (count === 0) return;
+
+            showConfirm(`Delete ${count} items?`, 'This action cannot be undone. Shared items will be ignored.', () => {
+                let itemsDeleted = false;
+                selectedQuestIds.forEach(id => {
+                    if (id.startsWith('group_')) {
+                        const groupIndex = generalTaskGroups.findIndex(g => g.id === id);
+                        if (groupIndex > -1 && !generalTaskGroups[groupIndex].isShared) {
+                            generalTaskGroups.splice(groupIndex, 1);
+                            itemsDeleted = true;
+                        }
+                    } else {
+                        const { task, list } = findTaskAndContext(id);
+                        if (task && !task.isShared) {
+                            const i = list.findIndex(t => t.id === id);
+                            if (i > -1) {
+                                list.splice(i, 1);
+                                itemsDeleted = true;
+                            }
+                        }
+                    }
+                });
+
+                if (itemsDeleted) {
+                    saveState();
+                    renderAllLists();
+                    audioManager.playSound('delete');
+                }
+                toggleMultiSelectMode(true);
+            });
+        });
+
+        batchCompleteBtn.addEventListener('click', () => {
+            const count = selectedQuestIds.size;
+            if (count === 0) return;
+
+            let completedCount = 0;
+            selectedQuestIds.forEach(id => {
+                const { task, type, list } = findTaskAndContext(id);
+                if (task && (type === 'standalone' || type === 'group') && !task.pendingDeletion && !task.isShared) {
+                    stopTimer(id, false);
+                    addXp(XP_PER_TASK);
+                    const i = list.findIndex(t => t.id === id);
+                    if (i > -1) list.splice(i, 1);
+                    completedCount++;
+                }
+            });
+
+            if (completedCount > 0) {
+                audioManager.playSound('complete');
+                if (completedCount > 2) createFullScreenConfetti(false);
+                saveState();
+                renderAllLists();
+            }
+            toggleMultiSelectMode(true);
+        });
+
+        batchUnshareBtn.addEventListener('click', () => {
+            const count = selectedQuestIds.size;
+            if (count === 0) return;
+
+            showConfirm(`Unshare ${count} items?`, 'This will cancel any pending shares. Active shares are not affected by this action.', async () => {
+                const promises = [];
+                selectedQuestIds.forEach(id => {
+                    const { task } = findTaskAndContext(id);
+                    if (task && task.isShared && task.sharedQuestId) {
+                        const sharedQuestRef = doc(db, "sharedQuests", task.sharedQuestId);
+                        promises.push(updateDoc(sharedQuestRef, { status: 'unshared' }).catch(err => console.warn(`Failed to unshare ${id}:`, err)));
+                    }
+                });
+
+                await Promise.all(promises);
+                audioManager.playSound('delete');
+                toggleMultiSelectMode(true);
+                // Listeners will handle UI updates.
+            });
+        });
+    }
 
     const showShiftHoverActions = (item) => {
         // Only proceed if we found an item and it's not the one we're already hovering
