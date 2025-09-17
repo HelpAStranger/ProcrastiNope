@@ -2021,7 +2021,7 @@ async function initializeAppLogic(initialUser) {
                 selectedQuestIds.add(idForSelection);
                 (taskItem || groupElement).classList.add('multi-select-selected');
             }
-            // The batch action toolbar is now a modal, so we don't update it here.
+            updateBatchActionsUI();
             return; // Stop further processing
         }
         
@@ -3454,6 +3454,38 @@ async function initializeAppLogic(initialUser) {
     
     // --- SHARED QUESTS LOGIC ---
     
+    async function populateFriendListForSharing(listElement) {
+        if (!user) {
+            listElement.innerHTML = '<p style="text-align: center; padding: 1rem;">You must be logged in to share.</p>';
+            return;
+        }
+        
+        listElement.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const friendUIDs = userDoc.data()?.friends || [];
+        
+        if (friendUIDs.length === 0) {
+            listElement.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share with!</p>';
+            return;
+        }
+
+        listElement.innerHTML = '';
+        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+        const friendDocs = await getDocs(friendsQuery);
+
+        friendDocs.forEach(friendDoc => {
+            const friendData = friendDoc.data();
+            const friendEl = document.createElement('div');
+            friendEl.className = 'share-friend-item';
+            friendEl.innerHTML = `
+                <span class="friend-name">${friendData.username}</span>
+                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+            `;
+            listElement.appendChild(friendEl);
+        });
+    }
     function listenForSharedQuests() {
         if (!user) return;
         if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
@@ -3613,9 +3645,8 @@ async function initializeAppLogic(initialUser) {
         }
 
         shareQuestIdInput.value = questId;
-        shareQuestFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
         openModal(shareQuestModal);
-        await populateShareFriendList();
+        await populateFriendListForSharing(shareQuestFriendList);
     }
 
     shareQuestFriendList.addEventListener('click', async (e) => {
@@ -3798,32 +3829,8 @@ async function initializeAppLogic(initialUser) {
 
         shareGroupNameDisplay.textContent = group.name;
         shareGroupIdInput.value = groupId;
-        shareGroupFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
         openModal(shareGroupModal);
-
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        const friendUIDs = userDoc.data().friends || [];
-        
-        if (friendUIDs.length === 0) {
-            shareGroupFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share groups with!</p>';
-            return;
-        }
-
-        shareGroupFriendList.innerHTML = '';
-        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
-        const friendDocs = await getDocs(friendsQuery);
-
-        friendDocs.forEach(friendDoc => {
-            const friendData = friendDoc.data();
-            const friendEl = document.createElement('div');
-            friendEl.className = 'share-friend-item';
-            friendEl.innerHTML = `
-                <span class="friend-name">${friendData.username}</span>
-                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
-            `;
-            shareGroupFriendList.appendChild(friendEl);
-        });
+        await populateFriendListForSharing(shareGroupFriendList);
     }
 
     shareGroupFriendList.addEventListener('click', async (e) => {
@@ -3998,6 +4005,174 @@ async function initializeAppLogic(initialUser) {
         }
     });
 
+    // --- MULTI-SELECT LOGIC ---
+
+    function updateBatchActionsUI() {
+        if (!isMultiSelectModeActive) return;
+
+        const count = selectedQuestIds.size;
+        batchActionsModalCounter.textContent = `${count} item${count !== 1 ? 's' : ''} selected`;
+
+        const hasSelection = count > 0;
+        let canComplete = hasSelection;
+        let canUncomplete = hasSelection;
+        let canSetTimer = hasSelection;
+        let canShare = hasSelection;
+        let canUnshare = false;
+        let canDelete = hasSelection;
+
+        if (hasSelection) {
+            let hasShared = false;
+            let hasUnshared = false;
+            let hasGroup = false;
+            let hasActiveShared = false;
+
+            for (const id of selectedQuestIds) {
+                const { task, group } = findTaskAndContext(id);
+                const item = task || group;
+
+                if (!item) {
+                    canComplete = canUncomplete = canSetTimer = canShare = canUnshare = canDelete = false;
+                    break;
+                }
+
+                if (group) hasGroup = true;
+                if (item.isShared || (task && task.status)) hasShared = true;
+                else hasUnshared = true;
+                if (task && task.status === 'active') hasActiveShared = true;
+            }
+
+            if (hasShared && hasUnshared) { // Mixed selection
+                canShare = false;
+                canUnshare = false;
+            } else if (hasShared) { // Only shared items
+                canShare = false;
+                canUnshare = hasActiveShared;
+            } else { // Only unshared items
+                canUnshare = false;
+            }
+            
+            if (hasGroup) {
+                canComplete = false;
+                canUncomplete = false;
+                canSetTimer = false;
+                canUnshare = false;
+            }
+        }
+
+        batchModalCompleteBtn.disabled = !canComplete;
+        batchModalUncompleteBtn.disabled = !canUncomplete;
+        batchModalTimerBtn.disabled = !canSetTimer;
+        batchModalShareBtn.disabled = !canShare;
+        batchModalUnshareBtn.style.display = canUnshare ? 'flex' : 'none';
+        batchModalDeleteBtn.disabled = !canDelete;
+    }
+
+    function deactivateMultiSelectMode() {
+        isMultiSelectModeActive = false;
+        questsLayout.classList.remove('multi-select-active');
+        multiSelectToggleBtns.forEach(btn => btn.classList.remove('active'));
+        
+        document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
+        selectedQuestIds.clear();
+
+        closeModal(batchActionsModal);
+    }
+
+    function activateMultiSelectMode() {
+        isMultiSelectModeActive = true;
+        questsLayout.classList.add('multi-select-active');
+        multiSelectToggleBtns.forEach(btn => btn.classList.add('active'));
+        
+        selectedQuestIds.clear();
+        document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
+
+        openModal(batchActionsModal);
+        updateBatchActionsUI();
+    }
+
+    function toggleMultiSelectMode() {
+        if (isMultiSelectModeActive) {
+            deactivateMultiSelectMode();
+        } else {
+            activateMultiSelectMode();
+        }
+    }
+
+    function addBatchActionListeners() {
+        batchModalCompleteBtn.addEventListener('click', () => {
+            selectedQuestIds.forEach(id => {
+                const { task, type } = findTaskAndContext(id);
+                if (task && !task.isShared) {
+                    if (type === 'daily' && !task.completedToday) {
+                        completeTask(id);
+                    } else if ((type === 'standalone' || type === 'group') && !task.pendingDeletion) {
+                        completeTask(id);
+                    }
+                }
+            });
+            deactivateMultiSelectMode();
+            renderAllLists();
+        });
+
+        batchModalUncompleteBtn.addEventListener('click', () => {
+            selectedQuestIds.forEach(id => {
+                const { task, type } = findTaskAndContext(id);
+                if (task && type === 'daily' && task.completedToday) {
+                    uncompleteDailyTask(id);
+                }
+            });
+            deactivateMultiSelectMode();
+            renderAllLists();
+        });
+
+        batchModalTimerBtn.addEventListener('click', () => {
+            currentEditingTaskId = 'batch_timer';
+            openModal(timerModal);
+        });
+
+        batchModalShareBtn.addEventListener('click', () => {
+            if (!user) {
+                showConfirm("Login Required", "You must be logged in to share quests.", () => {
+                    closeModal(batchActionsModal);
+                    openModal(accountModal);
+                });
+                return;
+            }
+            shareQuestIdInput.value = 'batch_share';
+            openModal(shareQuestModal);
+            populateFriendListForSharing(shareQuestFriendList);
+        });
+
+        batchModalDeleteBtn.addEventListener('click', () => {
+            showConfirm(`Delete ${selectedQuestIds.size} items?`, "This action cannot be undone.", () => {
+                let needsSave = false;
+                selectedQuestIds.forEach(id => {
+                    const { task, list, group } = findTaskAndContext(id);
+                    if ((task && !task.isShared) || (group && !group.isShared)) {
+                        if (task) {
+                            stopTimer(id, false);
+                            const i = list.findIndex(t => t.id === id);
+                            if (i > -1) { list.splice(i, 1); needsSave = true; }
+                        } else if (group) {
+                            const i = generalTaskGroups.findIndex(g => g.id === id);
+                            if (i > -1) { generalTaskGroups.splice(i, 1); needsSave = true; }
+                        }
+                    }
+                });
+                
+                if (needsSave) saveState();
+                deactivateMultiSelectMode();
+                renderAllLists();
+                audioManager.playSound('delete');
+            });
+        });
+
+        batchActionsModal.querySelector('[data-close-modal="batch-actions-modal"]').addEventListener('click', deactivateMultiSelectMode);
+        batchActionsModal.addEventListener('click', (e) => {
+            if (e.target === batchActionsModal) deactivateMultiSelectMode();
+        });
+    }
 
     const initOnce = () => {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
