@@ -564,12 +564,15 @@ async function initializeAppLogic(initialUser) {
 
     // NEW: DOM elements for Multi-Select
     const multiSelectToggleBtns = document.querySelectorAll('.multi-select-toggle-btn');
-    const batchActionToolbar = document.getElementById('batch-action-toolbar');
-    const batchActionCounter = document.getElementById('batch-action-counter');
-    const batchDeleteBtn = document.getElementById('batch-delete-btn');
-    const batchUnshareBtn = document.getElementById('batch-unshare-btn');
-    const batchCompleteBtn = document.getElementById('batch-complete-btn');
-    const batchCancelBtn = document.getElementById('batch-cancel-btn');
+    const batchActionsModal = document.getElementById('batch-actions-modal');
+    const batchActionsModalCounter = document.getElementById('batch-actions-modal-counter');
+    const batchModalCompleteBtn = document.getElementById('batch-modal-complete-btn');
+    const batchModalUncompleteBtn = document.getElementById('batch-modal-uncomplete-btn');
+    const batchModalTimerBtn = document.getElementById('batch-modal-timer-btn');
+    const batchModalShareBtn = document.getElementById('batch-modal-share-btn');
+    const batchModalUnshareBtn = document.getElementById('batch-modal-unshare-btn');
+    const batchModalDeleteBtn = document.getElementById('batch-modal-delete-btn');
+
     // NEW: DOM elements for Shares tab
     const sharesTabContent = document.getElementById('shares-tab'); // eslint-disable-line no-unused-vars
     const incomingSharesContainer = sharesTabContent.querySelector('.incoming-shares-container');
@@ -2018,7 +2021,7 @@ async function initializeAppLogic(initialUser) {
                 selectedQuestIds.add(idForSelection);
                 (taskItem || groupElement).classList.add('multi-select-selected');
             }
-            updateBatchActionToolbar();
+            // The batch action toolbar is now a modal, so we don't update it here.
             return; // Stop further processing
         }
         
@@ -2386,7 +2389,7 @@ async function initializeAppLogic(initialUser) {
             closeModal(editTaskModal);
         }
     });
-    timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){startTimer(currentEditingTaskId,m);closeModal(timerModal);currentEditingTaskId=null;} });
+    timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){ if (currentEditingTaskId === 'batch_timer') { selectedQuestIds.forEach(id => { const { task } = findTaskAndContext(id); if (task && !task.isShared) { startTimer(id, m); } }); deactivateMultiSelectMode(); renderAllLists(); } else { startTimer(currentEditingTaskId,m); } closeModal(timerModal); currentEditingTaskId=null; } });
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
     timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
@@ -2427,7 +2430,7 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal].forEach(m => { 
+    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal, batchActionsModal].forEach(m => { 
         if (m) m.addEventListener('click', (e) => { 
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
                 closeModal(m); 
@@ -3615,30 +3618,7 @@ async function initializeAppLogic(initialUser) {
         shareQuestIdInput.value = questId;
         shareQuestFriendList.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
         openModal(shareQuestModal);
-
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        const friendUIDs = userDoc.data().friends || [];
-        
-        if (friendUIDs.length === 0) {
-            shareQuestFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share quests with!</p>';
-            return;
-        }
-
-        shareQuestFriendList.innerHTML = '';
-        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
-        const friendDocs = await getDocs(friendsQuery);
-
-        friendDocs.forEach(friendDoc => {
-            const friendData = friendDoc.data();
-            const friendEl = document.createElement('div');
-            friendEl.className = 'share-friend-item';
-            friendEl.innerHTML = `
-                <span class="friend-name">${friendData.username}</span>
-                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
-            `;
-            shareQuestFriendList.appendChild(friendEl);
-        });
+        await populateShareFriendList();
     }
 
     shareQuestFriendList.addEventListener('click', async (e) => {
@@ -3649,16 +3629,29 @@ async function initializeAppLogic(initialUser) {
             const questId = shareQuestIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
-
-            try {
-                await shareQuest(questId, friendUid, friendUsername);
-                closeModal(shareQuestModal);
-            } catch (error) {
-                console.error("Failed to share quest:", error);
-                showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
-                button.disabled = false;
-                button.textContent = 'Share';
+            
+            if (questId === 'batch_share') {
+                const promises = [];
+                selectedQuestIds.forEach(id => {
+                    const { task } = findTaskAndContext(id);
+                    if (task && !task.isShared) {
+                        promises.push(shareQuest(id, friendUid, friendUsername));
+                    }
+                });
+                await Promise.all(promises);
+                deactivateMultiSelectMode();
+                renderAllLists();
+            } else {
+                try {
+                    await shareQuest(questId, friendUid, friendUsername);
+                } catch (error) {
+                    console.error("Failed to share quest:", error);
+                    showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
+                    button.disabled = false;
+                    button.textContent = 'Share';
+                }
             }
+            closeModal(shareQuestModal);
         }
     });
 
@@ -4017,8 +4010,7 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
-        multiSelectToggleBtns.forEach(btn => btn.addEventListener('click', () => toggleMultiSelectMode()));
-        batchCancelBtn.addEventListener('click', () => toggleMultiSelectMode(true));
+        multiSelectToggleBtns.forEach(btn => btn.addEventListener('click', toggleMultiSelectMode));
         addBatchActionListeners();
 
         // NEW: Add keydown listener for Shift to show actions immediately
@@ -4088,132 +4080,6 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
-
-    function toggleMultiSelectMode(forceOff = false) {
-        isMultiSelectModeActive = forceOff ? false : !isMultiSelectModeActive;
-
-        if (isMultiSelectModeActive) {
-            multiSelectToggleBtns.forEach(btn => btn.classList.add('active'));
-            questsLayout.classList.add('multi-select-active');
-            hideActiveTaskActions(); // Close any open single-action menus
-        } else {
-            multiSelectToggleBtns.forEach(btn => btn.classList.remove('active'));
-            questsLayout.classList.remove('multi-select-active');
-            
-            // Clear selection and update UI
-            document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
-            selectedQuestIds.clear();
-            updateBatchActionToolbar();
-        }
-    }
-
-    function updateBatchActionToolbar() {
-        const count = selectedQuestIds.size;
-        if (count > 0) {
-            batchActionCounter.textContent = `${count} selected`;
-            batchActionToolbar.classList.add('visible');
-        } else {
-            batchActionToolbar.classList.remove('visible');
-        }
-    }
-
-    function addBatchActionListeners() {
-        batchDeleteBtn.addEventListener('click', () => {
-            const count = selectedQuestIds.size;
-            if (count === 0) return;
-
-            showConfirm(`Delete ${count} items?`, 'This action cannot be undone. Shared items will be ignored.', () => {
-                let itemsDeleted = false;
-                selectedQuestIds.forEach(id => {
-                    if (id.startsWith('group_')) {
-                        const groupIndex = generalTaskGroups.findIndex(g => g.id === id);
-                        if (groupIndex > -1 && !generalTaskGroups[groupIndex].isShared) {
-                            generalTaskGroups.splice(groupIndex, 1);
-                            itemsDeleted = true;
-                        }
-                    } else {
-                        const { task, list } = findTaskAndContext(id);
-                        if (task && !task.isShared) {
-                            const i = list.findIndex(t => t.id === id);
-                            if (i > -1) {
-                                list.splice(i, 1);
-                                itemsDeleted = true;
-                            }
-                        }
-                    }
-                });
-
-                if (itemsDeleted) {
-                    saveState();
-                    renderAllLists();
-                    audioManager.playSound('delete');
-                }
-                toggleMultiSelectMode(true);
-            });
-        });
-
-        batchCompleteBtn.addEventListener('click', () => {
-            const count = selectedQuestIds.size;
-            if (count === 0) return;
-
-            let completedCount = 0;
-            selectedQuestIds.forEach(id => {
-                const { task, type, list } = findTaskAndContext(id);
-                if (!task || task.isShared || task.pendingDeletion) return;
-
-                if (type === 'daily') {
-                    if (!task.completedToday) {
-                        stopTimer(id, false);
-                        addXp(XP_PER_TASK);
-                        task.completedToday = true;
-                        task.lastCompleted = new Date().toDateString();
-                        if (task.weeklyGoal > 0) {
-                            const now = new Date();
-                            if (task.weekStartDate < getStartOfWeek(now)) {
-                                task.weekStartDate = getStartOfWeek(now);
-                                task.weeklyCompletions = 1;
-                            } else {
-                                task.weeklyCompletions = (task.weeklyCompletions || 0) + 1;
-                            }
-                        }
-                        completedCount++;
-                    }
-                } else if (type === 'standalone' || type === 'group') {
-                    stopTimer(id, false); addXp(XP_PER_TASK);
-                    const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); completedCount++;
-                }
-            });
-
-            if (completedCount > 0) {
-                audioManager.playSound('complete');
-                if (completedCount > 2) createFullScreenConfetti(false);
-                saveState();
-                renderAllLists();
-            }
-            toggleMultiSelectMode(true);
-        });
-
-        batchUnshareBtn.addEventListener('click', () => {
-            const count = selectedQuestIds.size;
-            if (count === 0) return;
-
-            showConfirm(`Unshare ${count} items?`, 'This will cancel any pending shares. Active shares are not affected by this action.', async () => {
-                const promises = [];
-                selectedQuestIds.forEach(id => {
-                    const { task } = findTaskAndContext(id);
-                    if (task && task.isShared && task.sharedQuestId) {
-                        const sharedQuestRef = doc(db, "sharedQuests", task.sharedQuestId);
-                        promises.push(updateDoc(sharedQuestRef, { status: 'unshared' }).catch(err => console.warn(`Failed to unshare ${id}:`, err)));
-                    }
-                });
-
-                await Promise.all(promises);
-                audioManager.playSound('delete');
-                toggleMultiSelectMode(true);
-                // Listeners will handle UI updates.
-            });
-        });
-    }
 
     const showShiftHoverActions = (item) => {
         // Only proceed if we found an item and it's not the one we're already hovering
