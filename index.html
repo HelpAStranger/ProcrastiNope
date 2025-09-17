@@ -101,9 +101,14 @@
                 <section class="task-group mobile-visible" data-section="daily">
                     <header class="task-group-header">
                         <h2>Daily Quests</h2>
-                        <button class="btn icon-btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest" title="Add Daily Quest" aria-haspopup="dialog" aria-controls="add-task-modal">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        </button>
+                        <div class="header-actions">
+                            <button class="btn icon-btn multi-select-toggle-btn" aria-label="Toggle Multi-Select" title="Toggle Multi-Select">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="m9 14 2 2 4-4"/></svg>
+                            </button>
+                            <button class="btn icon-btn add-task-trigger-btn" data-list="daily" aria-label="Add Daily Quest" title="Add Daily Quest" aria-haspopup="dialog" aria-controls="add-task-modal">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
+                        </div>
                     </header>
                     <div id="shared-quests-container" class="shared-quests-container">
                         <!-- Shared quests will be dynamically inserted here -->
@@ -117,7 +122,7 @@
                     <header class="task-group-header">
                         <h2>Main Quests</h2>
                         <div class="header-actions">
-                            <button id="multi-select-btn" class="btn icon-btn" aria-label="Toggle Multi-Select" title="Toggle Multi-Select">
+                            <button class="btn icon-btn multi-select-toggle-btn" aria-label="Toggle Multi-Select" title="Toggle Multi-Select">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="m9 14 2 2 4-4"/></svg>
                             </button>
                             <button id="add-standalone-task-btn" class="btn icon-btn" aria-label="Add Quest" title="Add Quest" aria-haspopup="dialog" aria-controls="add-task-modal">
@@ -142,11 +147,18 @@
     <div id="batch-action-toolbar">
         <span id="batch-action-counter"></span>
         <div class="batch-actions">
-            <button id="batch-delete-btn" class="btn">Delete</button>
-            <button id="batch-unshare-btn" class="btn">Unshare</button>
-            <button id="batch-complete-btn" class="btn">Complete</button>
+            <button id="batch-complete-btn" class="btn icon-btn" title="Mark as Complete" aria-label="Mark selected as Complete">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </button>
+            <button id="batch-unshare-btn" class="btn icon-btn" title="Unshare selected" aria-label="Unshare selected">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg>
+            </button>
+            <button id="batch-delete-btn" class="btn icon-btn" title="Delete selected" aria-label="Delete selected">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
         </div>
-        <button id="batch-cancel-btn" class="btn icon-btn" aria-label="Cancel Multi-Select">
+        <div class="batch-action-separator"></div>
+        <button id="batch-cancel-btn" class="btn icon-btn" aria-label="Cancel Multi-Select" title="Cancel Multi-Select">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
     </div>

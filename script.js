@@ -563,7 +563,7 @@ async function initializeAppLogic(initialUser) {
     const shareGroupFriendList = document.getElementById('share-group-friend-list');
 
     // NEW: DOM elements for Multi-Select
-    const multiSelectBtn = document.getElementById('multi-select-btn');
+    const multiSelectToggleBtns = document.querySelectorAll('.multi-select-toggle-btn');
     const batchActionToolbar = document.getElementById('batch-action-toolbar');
     const batchActionCounter = document.getElementById('batch-action-counter');
     const batchDeleteBtn = document.getElementById('batch-delete-btn');
@@ -1992,11 +1992,6 @@ async function initializeAppLogic(initialUser) {
 
         if (isMultiSelectModeActive) {
             if (!selectableItem) return;
-
-            // Prevent selecting items from daily list or shared list
-            if (selectableItem.closest('.task-group[data-section="daily"]')) {
-                return;
-            }
 
             // Don't select if clicking on an action button inside
             if (e.target.closest('.task-buttons-wrapper, .group-actions, .options-btn')) {
@@ -4014,7 +4009,7 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
-        multiSelectBtn.addEventListener('click', () => toggleMultiSelectMode());
+        multiSelectToggleBtns.forEach(btn => btn.addEventListener('click', () => toggleMultiSelectMode()));
         batchCancelBtn.addEventListener('click', () => toggleMultiSelectMode(true));
         addBatchActionListeners();
 
@@ -4090,11 +4085,11 @@ async function initializeAppLogic(initialUser) {
         isMultiSelectModeActive = forceOff ? false : !isMultiSelectModeActive;
 
         if (isMultiSelectModeActive) {
-            multiSelectBtn.classList.add('active');
+            multiSelectToggleBtns.forEach(btn => btn.classList.add('active'));
             questsLayout.classList.add('multi-select-active');
             hideActiveTaskActions(); // Close any open single-action menus
         } else {
-            multiSelectBtn.classList.remove('active');
+            multiSelectToggleBtns.forEach(btn => btn.classList.remove('active'));
             questsLayout.classList.remove('multi-select-active');
             
             // Clear selection and update UI
@@ -4156,12 +4151,28 @@ async function initializeAppLogic(initialUser) {
             let completedCount = 0;
             selectedQuestIds.forEach(id => {
                 const { task, type, list } = findTaskAndContext(id);
-                if (task && (type === 'standalone' || type === 'group') && !task.pendingDeletion && !task.isShared) {
-                    stopTimer(id, false);
-                    addXp(XP_PER_TASK);
-                    const i = list.findIndex(t => t.id === id);
-                    if (i > -1) list.splice(i, 1);
-                    completedCount++;
+                if (!task || task.isShared || task.pendingDeletion) return;
+
+                if (type === 'daily') {
+                    if (!task.completedToday) {
+                        stopTimer(id, false);
+                        addXp(XP_PER_TASK);
+                        task.completedToday = true;
+                        task.lastCompleted = new Date().toDateString();
+                        if (task.weeklyGoal > 0) {
+                            const now = new Date();
+                            if (task.weekStartDate < getStartOfWeek(now)) {
+                                task.weekStartDate = getStartOfWeek(now);
+                                task.weeklyCompletions = 1;
+                            } else {
+                                task.weeklyCompletions = (task.weeklyCompletions || 0) + 1;
+                            }
+                        }
+                        completedCount++;
+                    }
+                } else if (type === 'standalone' || type === 'group') {
+                    stopTimer(id, false); addXp(XP_PER_TASK);
+                    const i = list.findIndex(t => t.id === id); if (i > -1) list.splice(i, 1); completedCount++;
                 }
             });
 
