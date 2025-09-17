@@ -465,6 +465,8 @@ async function initializeAppLogic(initialUser) {
     let undoTimeoutMap = new Map();
     let shiftHoverItem = null; // To track items whose actions are shown via shift-hover
 
+    let lastPotentialShiftHoverItem = null; // To track the item under the mouse for shift-hover
+
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
@@ -3965,6 +3967,13 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
+        // NEW: Add keydown listener for Shift to show actions immediately
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Shift' && !e.repeat && lastPotentialShiftHoverItem) {
+                showShiftHoverActions(lastPotentialShiftHoverItem);
+            }
+        });
+
         // Listen for Shift key release to close any hover-opened menus
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Shift' && shiftHoverItem) {
@@ -4026,12 +4035,7 @@ async function initializeAppLogic(initialUser) {
         }
     };
 
-    document.querySelector('.quests-layout').addEventListener('mouseover', (e) => {
-        if (!e.shiftKey) return;
-
-        // Find the target item, which can be a task or a group header
-        const item = e.target.closest('.task-item, .main-quest-group-header');
-        
+    const showShiftHoverActions = (item) => {
         // Only proceed if we found an item and it's not the one we're already hovering
         if (item && item !== shiftHoverItem) {
             // If a menu is already open from a click (and not from a previous shift-hover), do nothing.
@@ -4051,7 +4055,6 @@ async function initializeAppLogic(initialUser) {
             if (optionsBtn && optionsBtn.disabled) return;
 
             // Don't show for placeholder shared items in main/daily lists.
-            // These are items marked as 'is-shared-task' but are NOT inside the shared quests container.
             const isPlaceholder = item.closest('.is-shared-task') && !item.closest('#shared-quests-container');
             if (isPlaceholder) return;
 
@@ -4061,13 +4064,23 @@ async function initializeAppLogic(initialUser) {
             activeMobileActionsItem = item; // Use the global state.
             shiftHoverItem = item; // Mark it as hover-opened.
         }
+    };
+
+    document.querySelector('.quests-layout').addEventListener('mouseover', (e) => {
+        const item = e.target.closest('.task-item, .main-quest-group-header');
+        lastPotentialShiftHoverItem = item;
+
+        if (e.shiftKey) {
+            showShiftHoverActions(item);
+        }
     });
 
     document.querySelector('.quests-layout').addEventListener('mouseout', (e) => {
-        if (shiftHoverItem) {
-            const item = e.target.closest('.task-item, .main-quest-group-header');
-            // If we are moving out of the item completely.
-            if (item === shiftHoverItem && !item.contains(e.relatedTarget)) {
+        const item = e.target.closest('.task-item, .main-quest-group-header');
+        if (item && !item.contains(e.relatedTarget)) {
+            lastPotentialShiftHoverItem = null;
+            // If we are moving out of the item that has the shift-hover menu open, close it.
+            if (shiftHoverItem === item) {
                 hideActiveTaskActions();
                 shiftHoverItem = null;
             }
