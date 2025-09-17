@@ -695,14 +695,15 @@ async function initializeAppLogic(initialUser) {
             localStorage.setItem('userTheme', data.settings.theme);
         }
 
-        // Add a timestamp to the data payload to resolve multi-device conflicts.
-        const dataWithTimestamp = {
-            ...data,
-            lastModified: Date.now()
-        };
+        // The timestamp is now added in saveState() to prevent race conditions,
+        // so we just use the provided data object. If for some reason it's missing,
+        // we add a fallback.
+        if (!data.lastModified) {
+            data.lastModified = Date.now();
+        }
 
         if (!user) {
-            localStorage.setItem('anonymousUserData', JSON.stringify(dataWithTimestamp));
+            localStorage.setItem('anonymousUserData', JSON.stringify(data));
             return;
         }
         
@@ -710,7 +711,7 @@ async function initializeAppLogic(initialUser) {
             const userDocRef = doc(db, "users", user.uid);
             // By including the timestamp, we can check on the client-side if the data
             // we receive from a snapshot is newer than what we currently have.
-            await setDoc(userDocRef, { appData: dataWithTimestamp }, { merge: true });
+            await setDoc(userDocRef, { appData: data }, { merge: true });
         } catch (error) { 
             console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); 
         }
@@ -727,8 +728,15 @@ async function initializeAppLogic(initialUser) {
             standaloneMainQuests, 
             generalTaskGroups: groupsToSave, // Use the cleaned version
             playerData, 
-            settings 
+            settings
         };
+
+        // BUGFIX: Optimistically update the local timestamp and add it to the data payload.
+        // This prevents a race condition where a slightly older snapshot from Firestore
+        // could overwrite fresh in-memory changes before the debounced save completes.
+        localDataTimestamp = Date.now();
+        data.lastModified = localDataTimestamp;
+
         if (!user) {
             saveData(data);
         } else {
