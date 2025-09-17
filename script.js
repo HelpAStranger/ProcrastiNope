@@ -1436,6 +1436,14 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
+        // Explicitly delete all timer properties on completion.
+        // This is the most reliable way to ensure that a completed task, if un-completed,
+        // does not retain any 'finished' or 'running' timer state. This provides an
+        // extra layer of safety on top of the stopTimer() call.
+        delete task.timerFinished;
+        delete task.timerStartTime;
+        delete task.timerDuration;
+
         addXp(XP_PER_TASK);
         audioManager.playSound('complete');
         if (type === 'daily') {
