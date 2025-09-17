@@ -1195,7 +1195,11 @@ async function initializeAppLogic(initialUser) {
 
         if (task.pendingDeletion) li.classList.add('pending-deletion');
         if (task.completedToday) { li.classList.add('daily-completed'); }
-        if (task.timerFinished) li.classList.add('timer-finished');
+        // BUGFIX: A completed or pending-deletion task should never show the 'timer finished' animation,
+        // even if the timerFinished flag was not cleared correctly.
+        if (task.timerFinished && !task.completedToday && !task.pendingDeletion) {
+            li.classList.add('timer-finished');
+        }
 
         // REGRESSION TWEAK: A completed task should never display an active timer.
         // This guard prevents the timer UI from showing even if timer properties were not cleared.        
