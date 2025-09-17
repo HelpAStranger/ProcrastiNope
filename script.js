@@ -1070,7 +1070,7 @@ async function initializeAppLogic(initialUser) {
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
-            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="task-buttons-wrapper">${buttonsHTML}</div>
+            <div class="task-buttons-wrapper">${buttonsHTML}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
             <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
                 <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
                 <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
@@ -1117,9 +1117,8 @@ async function initializeAppLogic(initialUser) {
 
             li.innerHTML = `
                 <div class="completion-indicator"></div>
-                <div class="task-content"><span class="task-text">${task.text}</span></div><div class="task-actions-container">
-                    <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
-                </div><div class="task-buttons-wrapper">${buttonsHTML}</div>
+                <div class="task-content"><span class="task-text">${task.text}</span></div>
+                <div class="task-buttons-wrapper">${buttonsHTML}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
                 <div class="shared-quest-info">
                     <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
@@ -1155,10 +1154,8 @@ async function initializeAppLogic(initialUser) {
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
-            li.innerHTML = `<div class="completion-indicator"></div>
-                <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div><div class="task-actions-container">
-                    <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
-                </div><div class="task-buttons-wrapper">${buttonsHTML.trim()}</div>`;
+            li.innerHTML = `<div class="completion-indicator"></div><div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
+                <div class="task-buttons-wrapper">${buttonsHTML.trim()}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
         }
 
         if (task.pendingDeletion) li.classList.add('pending-deletion');
