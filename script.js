@@ -1324,12 +1324,8 @@ async function initializeAppLogic(initialUser) {
         const { task, type } = findTaskAndContext(id);
         if (task && task.pendingDeletion) {
             delete task.pendingDeletion;
+            stopTimer(id, false); // Centralize timer state clearing
             addXp(-XP_PER_TASK); // Revert XP gain
-            // FIX: Ensure timer properties are cleared when undoing completion
-            // to prevent the timer from reappearing.
-        task.timerFinished = false; // Explicitly set to false to prevent race conditions.
-            delete task.timerStartTime;
-            delete task.timerDuration;
             audioManager.playSound('delete'); // Use the 'delete' sound for undo
 
             // Instead of a full re-render, specifically replace this one element.
@@ -1503,7 +1499,7 @@ async function initializeAppLogic(initialUser) {
         delete task.timerStartTime;
         delete task.timerDuration;
 
-        if (type === 'daily') saveState();
+        saveState(); // Always save state to update local timestamp and persist completion.
 
         // Replace the element directly to stop animations and update state instantly.
         const oldTaskEl = document.querySelector(`.task-item[data-id="${id}"]`);
@@ -1538,11 +1534,7 @@ async function initializeAppLogic(initialUser) {
 
         if (task.completedToday) {
             task.completedToday = false;
-            task.timerFinished = false; // Explicitly set to false to prevent race conditions.
-            // FIX: Ensure timer properties are cleared when un-completing a task
-            // to prevent it from resuming on page reload.
-            delete task.timerStartTime;
-            delete task.timerDuration;
+            stopTimer(id, false); // Centralize timer state clearing
             if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
                 task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
             }
@@ -1913,6 +1905,7 @@ async function initializeAppLogic(initialUser) {
             // By removing the class, we disable all timer-related CSS rules,
             // which is the most robust way to stop the animation.
             taskEl.classList.remove('timer-active');
+            taskEl.classList.remove('timer-finished'); // Also remove the shaking animation class.
                 const ringEl = taskEl.querySelector('.progress-ring-circle');
                 if (ringEl) {
                 // Resetting the transition and offset is good practice to prevent flashes.
