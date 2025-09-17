@@ -3540,9 +3540,9 @@ async function initializeAppLogic(initialUser) {
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
             friendEl.innerHTML = `
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
                 <span class="friend-name">${friendData.username}</span>
                 <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
             `;
             shareQuestFriendList.appendChild(friendEl);
         });
@@ -3735,9 +3735,9 @@ async function initializeAppLogic(initialUser) {
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
             friendEl.innerHTML = `
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
                 <span class="friend-name">${friendData.username}</span>
                 <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
             `;
             shareGroupFriendList.appendChild(friendEl);
         });

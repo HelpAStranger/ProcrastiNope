@@ -741,7 +741,8 @@ FRIENDS FEATURE & MOBILE NAV
 
 .friend-item .friend-name, 
 .friend-request-item span,
-.incoming-share-item span {
+.incoming-share-item span,
+.share-friend-item .friend-name {
     font-weight: 700;
     flex-grow: 1;
 }
@@ -761,7 +762,7 @@ FRIENDS FEATURE & MOBILE NAV
     background-color: var(--accent);
     color: var(--text-on-accent);
     font-weight: 900;
-    padding: 0.25rem 0.75rem;
+    padding: 0.25rem 0.5rem;
     border: var(--border-width) solid var(--border);
     border-radius: var(--radius);
     box-shadow: 4px 4px 0 var(--shadow);
@@ -1345,9 +1346,6 @@ SHARED QUESTS
     opacity: 0.5;
     cursor: not-allowed;
     background-color: transparent;
-}
-.share-friend-item .btn {
-    margin-left: auto;
 }
 /*
 ==========================================================================
