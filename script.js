@@ -4064,7 +4064,7 @@ async function initializeAppLogic(initialUser) {
         batchModalUncompleteBtn.disabled = !canUncomplete;
         batchModalTimerBtn.disabled = !canSetTimer;
         batchModalShareBtn.disabled = !canShare;
-        batchModalUnshareBtn.style.display = canUnshare ? 'flex' : 'none';
+        batchModalUnshareBtn.disabled = !canUnshare;
         batchModalDeleteBtn.disabled = !canDelete;
     }
 
