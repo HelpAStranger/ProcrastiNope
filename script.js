@@ -183,6 +183,7 @@ const landingAuthContainer = document.getElementById('landing-auth-container');
 
 // --- GLOBAL HELPER FUNCTIONS & STATE ---
 let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
+let zIndexCounter = 1000; // Base z-index for modals
 
 /**
  * Manages all audio playback for the application.
@@ -283,7 +284,12 @@ function hideActiveTaskActions() {
 const openModal = (modal) => {
     if(modal) {
         lastFocusedElement = document.activeElement;
-        hideActiveTaskActions(); // Use the new helper function
+        hideActiveTaskActions();
+
+        // NEW: Increment and apply z-index to ensure new modals open on top.
+        zIndexCounter++;
+        modal.style.zIndex = zIndexCounter;
+
         appWrapper.classList.add('blur-background');
         modal.classList.add('visible');
         audioManager.playSound('open');
@@ -297,7 +303,12 @@ const openModal = (modal) => {
 };
 const closeModal = (modal) => {
     if(modal) {
-        appWrapper.classList.remove('blur-background');
+        // Only remove the blur if this is the last modal being closed.
+        const visibleModals = document.querySelectorAll('.modal-overlay.visible');
+        if (visibleModals.length <= 1) {
+            appWrapper.classList.remove('blur-background');
+        }
+
         modal.classList.remove('visible');
         audioManager.playSound('close');
         if (lastFocusedElement) {
