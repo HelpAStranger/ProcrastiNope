@@ -375,8 +375,8 @@ LANDING PAGE
 
 .landing-buttons .btn {
     width: 100%;
-    padding: 1rem;
-    font-size: 1.2rem;
+    padding: 0.95rem;
+    font-size: 1.14rem;
 }
 #landing-back-btn {
     margin-top: 1.5rem;
@@ -617,7 +617,7 @@ FRIENDS FEATURE & MOBILE NAV
     bottom: 0;
     left: 0;
     right: 0;
-    height: 75px; /* More compact */
+    height: 72px; /* ~5% smaller */
     background-color: var(--surface);
     border-top: var(--border-width) solid var(--border);
     box-shadow: 0px -6px 0 var(--shadow);
@@ -640,7 +640,7 @@ FRIENDS FEATURE & MOBILE NAV
     color: var(--text);
     opacity: 0.7; /* Final non-active state */
     transform: translateY(0); /* Final non-active state */
-    padding: 0.5rem;
+    padding: 0.47rem;
     border-radius: var(--radius);
     flex: 1 1 0px;
     /* This transition handles all state changes. The initial load animation is handled by the rules below. */
@@ -653,7 +653,7 @@ FRIENDS FEATURE & MOBILE NAV
     gap: 4px;
     font-family: var(--font-main);
     font-weight: 700;
-    height: 60px;
+    height: 57px;
 }
 
 /* Initial state before the app is loaded. This is the "from" state for the load-in animation. */
@@ -669,7 +669,7 @@ FRIENDS FEATURE & MOBILE NAV
 
 .mobile-nav-btn span {
     font-weight: 900;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
 }
 
 .mobile-nav-btn.active {
@@ -1448,8 +1448,8 @@ BUTTONS & CONTROLS
     border-radius: var(--radius);
     font-family: var(--font-main);
     font-weight: 700;
-    font-size: 1rem;
-    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    padding: 0.47rem 0.95rem;
     cursor: pointer;
     transition: all var(--transition-speed) ease;
     --shadow-color: var(--accent); /* Buttons get accent colored shadows */
@@ -1519,7 +1519,7 @@ BUTTONS & CONTROLS
 
 
 .btn.icon-btn {
-    padding: 0.5rem;
+    padding: 0.47rem;
     aspect-ratio: 1 / 1;
 }
 
@@ -1922,8 +1922,8 @@ MODALS & PANELS (ADD TASK, SETTINGS)
 
 .timer-unit-btn {
     --shadow-color: var(--shadow);
-    font-size: 0.9rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    padding: 0.47rem 0.71rem;
 }
 .timer-unit-btn.selected {
     background-color: var(--accent);
@@ -2048,8 +2048,8 @@ input[type="range"]::-moz-range-track {
     border-radius: var(--radius);
     font-family: var(--font-main);
     font-weight: 700;
-    font-size: 1rem;
-    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    padding: 0.71rem 0.95rem;
     cursor: pointer;
     transition: all var(--transition-speed) ease;
     box-shadow: 4px 4px 0 var(--shadow);
@@ -2113,10 +2113,10 @@ input[type="range"]::-moz-range-track {
 .btn.icon-btn-text {
     flex-direction: column;
     gap: 0.25rem;
-    padding: 0.75rem 0.5rem;
+    padding: 0.71rem 0.47rem;
     height: auto;
     aspect-ratio: unset;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     text-align: center;
 }
 
