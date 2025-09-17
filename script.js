@@ -480,6 +480,13 @@ async function initializeAppLogic(initialUser) {
     const addGroupBtn = document.getElementById('add-group-btn');
     
     const addTaskModal = document.getElementById('add-task-modal');
+    const multiSelectBtns = document.querySelectorAll('.multi-select-btn');
+    const multiSelectActionBar = document.getElementById('multi-select-actions-bar');
+    const multiSelectCount = document.getElementById('multi-select-count');
+    const multiSelectDeleteBtn = document.getElementById('multi-select-delete-btn');
+    const multiSelectShareBtn = document.getElementById('multi-select-share-btn');
+    const multiSelectCancelBtn = document.getElementById('multi-select-cancel-btn');
+
     const addTaskModalTitle = document.getElementById('add-task-modal-title');
     const addTaskForm = document.getElementById('add-task-form');
     const newTaskInput = document.getElementById('new-task-input');
@@ -550,6 +557,8 @@ async function initializeAppLogic(initialUser) {
     const shareQuestModal = document.getElementById('share-quest-modal');
     const shareQuestFriendList = document.getElementById('share-quest-friend-list');
     const shareQuestIdInput = document.getElementById('share-quest-id-input');
+    const shareMultipleQuestsModal = document.getElementById('share-multiple-quests-modal');
+    const shareMultipleQuestsFriendList = document.getElementById('share-multiple-quests-friend-list');
 
     // NEW: DOM elements for Share Group feature
     const shareGroupModal = document.getElementById('share-group-modal');
@@ -923,6 +932,10 @@ async function initializeAppLogic(initialUser) {
         // Only render daily tasks that are NOT associated with an active or completed shared quest.
         // The placeholder for pending shares should still be rendered.
         const tasksToRender = dailyTasks.filter(task => {
+            // If in multi-select mode for main quests, don't render daily tasks as selectable
+            if (isMultiSelectMode && currentMultiSelectSection === 'main') {
+                return true; // Render normally, but they won't be selectable
+            }
             if (!task.isShared) return true; // Render normal tasks
             // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
@@ -934,6 +947,9 @@ async function initializeAppLogic(initialUser) {
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = '';
         const tasksToRender = standaloneMainQuests.filter(task => {
+            if (isMultiSelectMode && currentMultiSelectSection === 'daily') {
+                return true; // Render normally, but they won't be selectable
+            }
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
         });
@@ -942,6 +958,9 @@ async function initializeAppLogic(initialUser) {
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
         generalTaskGroups.forEach(group => {
+            if (isMultiSelectMode && currentMultiSelectSection === 'daily') {
+                return; // Don't render groups if multi-selecting daily
+            }
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
         });
@@ -963,6 +982,10 @@ async function initializeAppLogic(initialUser) {
     const createGroupElement = (group) => {
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         
+        if (isMultiSelectMode && selectedQuestIds.has(group.id)) {
+            el.classList.add('selected');
+        }
+
         if (group.isShared) {
             const sharedGroupData = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
             const otherParticipant = sharedGroupData ? sharedGroupData.participants.find(p => p !== user.uid) : null;
@@ -996,7 +1019,16 @@ async function initializeAppLogic(initialUser) {
             return el;
         }
 
-        el.innerHTML = `<header class="main-quest-group-header"><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        let headerHTML = `<header class="main-quest-group-header">`;
+        if (isMultiSelectMode) {
+            headerHTML += `<div class="multi-select-checkbox"></div>`;
+            el.classList.add('multi-select-mode');
+        } else {
+            headerHTML += `<div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div>`;
+        }
+        headerHTML += `</header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        el.innerHTML = headerHTML;
+
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
@@ -1006,7 +1038,10 @@ async function initializeAppLogic(initialUser) {
         return el;
     };
     const createSharedGroupElement = (group) => {
-        const groupEl = document.createElement('div');
+        const groupEl = document.createElement('div'); // Shared groups are not selectable in multi-select mode
+        if (isMultiSelectMode) {
+            groupEl.classList.add('multi-select-mode'); // Apply styling to disable interactions
+        }
         // Re-use main-quest-group for structure and styling
         groupEl.className = 'main-quest-group shared-quest-group';
         if (group.isExpanded) groupEl.classList.add('expanded');
@@ -1053,7 +1088,10 @@ async function initializeAppLogic(initialUser) {
         return groupEl;
     };
     const createSharedTaskElement = (task, group) => {
-        const li = document.createElement('li');
+        const li = document.createElement('li'); // Shared tasks are not selectable in multi-select mode
+        if (isMultiSelectMode) {
+            li.classList.add('multi-select-mode'); // Apply styling to disable interactions
+        }
         li.className = 'task-item shared-group-task';
         li.dataset.id = task.id;
         li.dataset.sharedGroupId = group.id;
@@ -1084,7 +1122,11 @@ async function initializeAppLogic(initialUser) {
         return li;
     };
     const createTaskElement = (task, type) => {
-        const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; if (type === 'standalone') li.classList.add('standalone-quest');
+        const li = document.createElement('li'); li.className = 'task-item'; li.dataset.id = task.id; 
+        if (type === 'standalone') li.classList.add('standalone-quest');
+        if (isMultiSelectMode && selectedQuestIds.has(task.id)) {
+            li.classList.add('selected');
+        }
         let optionsBtnDisabled = '';
         
         // Shared Quest specific rendering (from sharedQuests collection)
@@ -1095,6 +1137,10 @@ async function initializeAppLogic(initialUser) {
             const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
             const allCompleted = ownerCompleted && friendCompleted;
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
+
+            if (isMultiSelectMode) { // Shared quests are not selectable in multi-select mode
+                li.classList.add('multi-select-mode');
+            }
             optionsBtnDisabled = allCompleted ? 'disabled' : '';
 
             li.classList.add('shared-quest');
@@ -1135,7 +1181,11 @@ async function initializeAppLogic(initialUser) {
             return li;
         }
 
-        // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups)
+        // Regular task rendering (from dailyTasks, standaloneMainQuests, generalTaskGroups) for multi-select
+        if (isMultiSelectMode) {
+            li.classList.add('multi-select-mode');
+        }
+
         const isCompleted = task.completedToday || task.pendingDeletion;
         optionsBtnDisabled = isCompleted ? 'disabled' : '';
 
@@ -1145,7 +1195,11 @@ async function initializeAppLogic(initialUser) {
             // For pending deletion, show a full-width overlay with just the Undo button.
             li.innerHTML = `<div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
-                <div class="task-buttons-wrapper">
+                <div class="task-buttons-wrapper">`;
+            if (isMultiSelectMode) {
+                li.innerHTML += `<div class="multi-select-checkbox"></div>`;
+            }
+            li.innerHTML += `
                     <button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>
                 </div>`;
         } else {
@@ -1156,7 +1210,13 @@ async function initializeAppLogic(initialUser) {
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
             `;
-            li.innerHTML = `<div class="completion-indicator"></div><div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
+            li.innerHTML = ``;
+            if (isMultiSelectMode) {
+                li.innerHTML += `<div class="multi-select-checkbox"></div>`;
+            } else {
+                li.innerHTML += `<div class="completion-indicator"></div>`;
+            }
+            li.innerHTML += `<div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
                 <div class="task-buttons-wrapper">${buttonsHTML.trim()}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
         }
 
@@ -1253,6 +1313,7 @@ async function initializeAppLogic(initialUser) {
         saveState(); 
         audioManager.playSound('add');
     };
+
     const addGroup = (name) => { 
         const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false };
         generalTaskGroups.push(newGroup);
@@ -1266,6 +1327,7 @@ async function initializeAppLogic(initialUser) {
         saveState(); 
         audioManager.playSound('addGroup'); 
     };
+
     const editGroup = (id, newName) => {
         const group = generalTaskGroups.find(g => g.id === id);
         if (group) {
@@ -1275,6 +1337,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('toggle');
         }
     };
+
     const undoCompleteMainQuest = (id) => {
         if (undoTimeoutMap.has(id)) {
             clearTimeout(undoTimeoutMap.get(id));
@@ -1305,8 +1368,10 @@ async function initializeAppLogic(initialUser) {
             saveState(); // Save the state to persist the undo.
         }
     };
+
     const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); audioManager.playSound('delete'); }); };
     const findTaskAndContext = (id) => {
+        if (!id) return {};
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
         for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } 
@@ -1314,6 +1379,7 @@ async function initializeAppLogic(initialUser) {
         const group = sharedGroups.find(g => g && g.id === id); if (group) return { group, type: 'shared-group' };
         return {};
     };
+
     const deleteTask = (id) => { 
         stopTimer(id, false); 
         const {task, list, type} = findTaskAndContext(id); 
@@ -1392,6 +1458,7 @@ async function initializeAppLogic(initialUser) {
             });
         }
     };
+
     const completeTask = (id) => {
         stopTimer(id, false);
         const { task, type } = findTaskAndContext(id);
@@ -1519,6 +1586,7 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
+
     const editTask = async (id, text, goal) => {
         const { task, type } = findTaskAndContext(id);
         if (task) {
@@ -1548,6 +1616,7 @@ async function initializeAppLogic(initialUser) {
             renderAllLists();
         }
     };
+
     const openEditSharedTaskModal = (groupId, taskId) => {
         const group = sharedGroups.find(g => g.id === groupId);
         if (!group) return;
@@ -1563,6 +1632,7 @@ async function initializeAppLogic(initialUser) {
         openModal(editTaskModal);
         focusOnDesktop(editTaskInput);
     };
+
     const addTaskToSharedGroup = async (groupId, text) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         const newTask = {
@@ -1581,6 +1651,7 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not add task to the shared group.", () => {});
         }
     };
+
     const editSharedGroupName = async (groupId, newName) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
@@ -1591,6 +1662,7 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not edit group name.", () => {});
         }
     };
+
     const deleteSharedTask = async (groupId, taskId) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         showConfirm("Delete Task?", "This will delete the task for both you and your friend.", async () => {
@@ -1612,6 +1684,7 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
+
     const editSharedTask = async (groupId, taskId, newText) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
@@ -1630,6 +1703,7 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not edit task.", () => {});
         }
     };
+
     const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
@@ -1666,6 +1740,7 @@ async function initializeAppLogic(initialUser) {
             console.error("Error completing shared group task:", getCoolErrorMessage(error));
         }
     };
+
     const revertSharedQuest = (originalTaskId) => {
         if (!originalTaskId) return;
         const { task } = findTaskAndContext(originalTaskId);
@@ -1677,7 +1752,6 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('delete'); // Play sound on successful revert
         }
     };
-
     const unshareQuest = async (questId) => {
         const { task: sharedQuest, type: taskType } = findTaskAndContext(questId);
         if (!sharedQuest || taskType !== 'shared') return;
@@ -1699,7 +1773,6 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
-
     const abandonQuest = async (questId) => {
         const { task: sharedQuest } = findTaskAndContext(questId);
         if (!sharedQuest || (user && sharedQuest.ownerUid === user.uid)) return; // Only friend can abandon
@@ -1715,6 +1788,7 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
+
     const cancelShare = async (originalTaskId) => {
         // The parameter is the ID of the sharedQuest document itself.
         const sharedQuestId = originalTaskId;
@@ -1759,6 +1833,7 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
+
     const cancelSharedGroup = async (sharedGroupId) => {
         if (!sharedGroupId) return;
 
@@ -1810,7 +1885,6 @@ async function initializeAppLogic(initialUser) {
             }
         });
     };
-
     const finishTimer = (id) => {
         audioManager.playSound('timerUp');
         activeTimers.delete(id); // Ensure it's removed from the active map.
@@ -1824,7 +1898,6 @@ async function initializeAppLogic(initialUser) {
             saveState();
         }
     };
-
     const startTimer = (id, mins) => {
         stopTimer(id, false);
         const { task, type } = findTaskAndContext(id);
@@ -1842,7 +1915,6 @@ async function initializeAppLogic(initialUser) {
 
         renderAllLists(); // Re-render to apply 'timer-active' class and allow resumeTimers to pick it up.
     };
-
     const stopTimer = (id, shouldRender = true) => {
         if (activeTimers.has(id)) {
             clearTimeout(activeTimers.get(id));
@@ -1871,7 +1943,6 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
-
     const resumeTimers = () => {
         // Clear any previously running timeouts that haven't been explicitly stopped.
         activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
@@ -1949,6 +2020,60 @@ async function initializeAppLogic(initialUser) {
         }
     }
 
+    function toggleMultiSelectMode(section) {
+        isMultiSelectMode = !isMultiSelectMode;
+        selectedQuestIds.clear();
+        currentMultiSelectSection = isMultiSelectMode ? section : null;
+
+        // Toggle global class for styling and pointer-events
+        document.body.classList.toggle('multi-select-mode', isMultiSelectMode);
+        multiSelectActionBar.classList.toggle('visible', isMultiSelectMode);
+
+        // Disable/enable add buttons
+        addTaskTriggerBtnDaily.disabled = isMultiSelectMode;
+        addStandaloneTaskBtn.disabled = isMultiSelectMode;
+        addGroupBtn.disabled = isMultiSelectMode;
+
+        updateMultiSelectCount();
+        renderAllLists(); // Re-render to show/hide checkboxes and apply styling
+        audioManager.playSound('toggle');
+    }
+
+    function updateMultiSelectCount() {
+        multiSelectCount.textContent = `${selectedQuestIds.size} selected`;
+        multiSelectDeleteBtn.disabled = selectedQuestIds.size === 0;
+        multiSelectShareBtn.disabled = selectedQuestIds.size === 0;
+    }
+
+    multiSelectBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const section = e.currentTarget.dataset.section;
+            toggleMultiSelectMode(section);
+        });
+    });
+
+    multiSelectCancelBtn.addEventListener('click', () => toggleMultiSelectMode(false));
+    multiSelectDeleteBtn.addEventListener('click', deleteSelectedQuests);
+    multiSelectShareBtn.addEventListener('click', openShareMultipleQuestsModal);
+
+    async function deleteSelectedQuests() {
+        if (selectedQuestIds.size === 0) return;
+        showConfirm(`Delete ${selectedQuestIds.size} selected items?`, 'This action cannot be undone.', async () => {
+            const idsToDelete = Array.from(selectedQuestIds);
+            for (const id of idsToDelete) {
+                const { task, list, group } = findTaskAndContext(id);
+                if (task) { // It's a task
+                    const i = list.findIndex(t => t.id === id);
+                    if (i > -1) list.splice(i, 1);
+                } else if (group) { // It's a group
+                    generalTaskGroups = generalTaskGroups.filter(g => g.id !== id);
+                }
+            }
+            saveState();
+            toggleMultiSelectMode(false); // Exit multi-select mode after action
+        });
+    }
+
     document.querySelector('.quests-layout').addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         const groupHeader = e.target.closest('.main-quest-group-header');
@@ -1968,6 +2093,39 @@ async function initializeAppLogic(initialUser) {
                 }
                 lastClickTimes.set(itemId, now);
             }
+        }
+
+        // Handle multi-select mode clicks
+        if (isMultiSelectMode) {
+            const clickedItem = taskItem || groupElement;
+            if (clickedItem) {
+                const id = clickedItem.dataset.id || clickedItem.dataset.groupId;
+                if (id) {
+                    // Prevent selection of shared tasks/groups
+                    const { task, group } = findTaskAndContext(id);
+                    if ((task && task.isShared) || (group && group.isShared)) {
+                        // Do nothing, not selectable
+                        return;
+                    }
+
+                    // Ensure only items from the current multi-select section are selected
+                    const isDailyItem = dailyTasks.some(t => t.id === id);
+                    const isMainItem = standaloneMainQuests.some(t => t.id === id) || generalTaskGroups.some(g => g.id === id);
+
+                    if ((currentMultiSelectSection === 'daily' && isDailyItem) ||
+                        (currentMultiSelectSection === 'main' && isMainItem)) {
+                        if (selectedQuestIds.has(id)) {
+                            selectedQuestIds.delete(id);
+                            clickedItem.classList.remove('selected');
+                        } else {
+                            selectedQuestIds.add(id);
+                            clickedItem.classList.add('selected');
+                        }
+                        updateMultiSelectCount();
+                    }
+                }
+            }
+            return; // Consume click event in multi-select mode
         }
         
         if (groupHeader) { 
@@ -2355,6 +2513,7 @@ async function initializeAppLogic(initialUser) {
         focusOnDesktop(newGroupInput);
     });
     settingsBtn.addEventListener('click', () => openModal(settingsModal));
+
     
     function handleFriendsModalClose() {
         mobileNav.querySelector('[data-section="friends"]').classList.remove('active');
@@ -2381,6 +2540,10 @@ async function initializeAppLogic(initialUser) {
                 closeModal(m); 
                 if (m.id === 'friends-modal') {
                     handleFriendsModalClose();
+                }
+                if (m.id === 'share-multiple-quests-modal') {
+                    // If sharing multiple quests was cancelled, ensure multi-select mode is still active
+                    // unless the user explicitly cancelled it.
                 }
             }
         }); 
@@ -3557,10 +3720,10 @@ async function initializeAppLogic(initialUser) {
         
         if (friendUIDs.length === 0) {
             shareQuestFriendList.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share quests with!</p>';
-            return;
+            return; // No friends to share with
         }
 
-        shareQuestFriendList.innerHTML = '';
+        shareMultipleQuestsFriendList.innerHTML = '';
         const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
         const friendDocs = await getDocs(friendsQuery);
 
@@ -3573,22 +3736,27 @@ async function initializeAppLogic(initialUser) {
                 <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
                 <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
             `;
-            shareQuestFriendList.appendChild(friendEl);
+            shareMultipleQuestsFriendList.appendChild(friendEl);
         });
     }
 
-    shareQuestFriendList.addEventListener('click', async (e) => {
+    // NEW: Event listener for sharing multiple quests
+    shareMultipleQuestsFriendList.addEventListener('click', async (e) => {
         const button = e.target.closest('.share-btn-action');
         if (button) {
             button.disabled = true;
             button.textContent = 'Sending...';
-            const questId = shareQuestIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
 
-            try {
+            // Share all selected quests
+            for (const questId of selectedQuestIds) {
                 await shareQuest(questId, friendUid, friendUsername);
-                closeModal(shareQuestModal);
+            }
+
+            try {
+                closeModal(shareMultipleQuestsModal);
+                toggleMultiSelectMode(false); // Exit multi-select mode after sharing
             } catch (error) {
                 console.error("Failed to share quest:", error);
                 showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
