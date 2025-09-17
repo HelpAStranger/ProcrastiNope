@@ -3508,7 +3508,7 @@ async function initializeAppLogic(initialUser) {
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
             friendEl.innerHTML = `
-                <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
+                <button class="btn icon-btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}" aria-label="Share with ${friendData.username}"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
                 <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
                 <span class="friend-name">${friendData.username}</span>
             `;
@@ -3682,7 +3682,6 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('.share-btn-action');
         if (button) {
             button.disabled = true;
-            button.textContent = 'Sending...';
             const questId = shareQuestIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
@@ -3704,8 +3703,6 @@ async function initializeAppLogic(initialUser) {
                 } catch (error) {
                     console.error("Failed to share quest:", error);
                     showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
-                    button.disabled = false;
-                    button.textContent = 'Share';
                 }
             }
             closeModal(shareQuestModal);
@@ -3866,20 +3863,17 @@ async function initializeAppLogic(initialUser) {
         const button = e.target.closest('.share-btn-action');
         if (button) {
             button.disabled = true;
-            button.textContent = 'Sending...';
             const groupId = shareGroupIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
 
             try {
                 await shareGroup(groupId, friendUid, friendUsername);
-                closeModal(shareGroupModal);
             } catch (error) {
                 console.error("Failed to share group:", error);
                 showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => {});
-                button.disabled = false;
-                button.textContent = 'Share';
             }
+            closeModal(shareGroupModal);
         }
     });
 
