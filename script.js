@@ -3723,7 +3723,7 @@ async function initializeAppLogic(initialUser) {
             return; // No friends to share with
         }
 
-        shareMultipleQuestsFriendList.innerHTML = '';
+        shareQuestFriendList.innerHTML = '';
         const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
         const friendDocs = await getDocs(friendsQuery);
 
@@ -3736,9 +3736,30 @@ async function initializeAppLogic(initialUser) {
                 <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
                 <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
             `;
-            shareMultipleQuestsFriendList.appendChild(friendEl);
+            shareQuestFriendList.appendChild(friendEl);
         });
     }
+
+    shareQuestFriendList.addEventListener('click', async (e) => {
+        const button = e.target.closest('.share-btn-action');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            const questId = shareQuestIdInput.value;
+            const friendUid = button.dataset.uid;
+            const friendUsername = button.dataset.username;
+
+            try {
+                await shareQuest(questId, friendUid, friendUsername);
+                closeModal(shareQuestModal);
+            } catch (error) {
+                console.error("Failed to share quest:", error);
+                showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
+                button.disabled = false;
+                button.textContent = 'Share';
+            }
+        }
+    });
 
     // NEW: Event listener for sharing multiple quests
     shareMultipleQuestsFriendList.addEventListener('click', async (e) => {
