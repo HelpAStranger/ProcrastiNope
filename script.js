@@ -2270,7 +2270,7 @@ async function initializeAppLogic(initialUser) {
                             });
                             
                             lastSection = 'daily';
-                            playSound('toggle');
+                            audioManager.playSound('toggle');
                         }
 
                         const scrollAndAnimate = () => {
@@ -2409,7 +2409,7 @@ async function initializeAppLogic(initialUser) {
     timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){ if (currentEditingTaskId === 'batch_timer') { selectedQuestIds.forEach(id => { const { task } = findTaskAndContext(id); if (task && !task.isShared) { startTimer(id, m); } }); deactivateMultiSelectMode(); renderAllLists(); } else { startTimer(currentEditingTaskId,m); } closeModal(timerModal); currentEditingTaskId=null; } });
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
-    timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); playSound('toggle'); } });
+    timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); audioManager.playSound('toggle'); } });
     addGroupForm.addEventListener('submit', (e) => { // eslint-disable-line
         e.preventDefault();
         const name = newGroupInput.value.trim();
