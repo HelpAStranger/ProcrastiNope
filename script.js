@@ -1436,13 +1436,6 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
-        // This is the key change. When a task is completed, any 'timer finished' state should be cleared.
-        delete task.timerFinished;
-        // FIX: Explicitly delete timer properties on completion to prevent them from
-        // reappearing if the task is un-completed or reset.
-        delete task.timerStartTime;
-        delete task.timerDuration;
-
         addXp(XP_PER_TASK);
         audioManager.playSound('complete');
         if (type === 'daily') {
@@ -1877,8 +1870,12 @@ async function initializeAppLogic(initialUser) {
             // Also reset the ring's CSS when a timer is stopped.
             const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
             if (taskEl) {
+            // By removing the class, we disable all timer-related CSS rules,
+            // which is the most robust way to stop the animation.
+            taskEl.classList.remove('timer-active');
                 const ringEl = taskEl.querySelector('.progress-ring-circle');
                 if (ringEl) {
+                // Resetting the transition and offset is good practice to prevent flashes.
                     ringEl.style.transitionDuration = '0s';
                     ringEl.style.strokeDashoffset = 0;
                 }
