@@ -3303,15 +3303,13 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
             try {
-                const originalGroup = generalTaskGroups.find(g => g.id === group.originalGroupId);
-                if (originalGroup) {
-                    delete originalGroup.isShared;
-                    delete originalGroup.sharedGroupId;
-                    saveState();
-                }
+                // Re-create the group in the owner's local list.
+                const newLocalGroup = { id: group.originalGroupId, name: group.name, tasks: group.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false };
+                generalTaskGroups.push(newLocalGroup);
+                saveState();
 
                 await deleteDoc(doc(db, "sharedGroups", groupId));
-                playSound('delete');
+                audioManager.playSound('delete');
                 renderAllLists();
             } catch (error) {
                 console.error("Error unsharing group:", getCoolErrorMessage(error));
@@ -3328,7 +3326,7 @@ async function initializeAppLogic(initialUser) {
             try {
                 const sharedGroupRef = doc(db, "sharedGroups", groupId);
                 await updateDoc(sharedGroupRef, { status: 'abandoned' });
-                playSound('delete');
+                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error abandoning group:", getCoolErrorMessage(error));
                 showConfirm("Error", "Could not abandon the group.", () => {});
@@ -3559,12 +3557,11 @@ async function initializeAppLogic(initialUser) {
 
                     // Handle when a friend rejects or abandons a group share
                     if ((newGroup.status === 'rejected' || newGroup.status === 'abandoned') && newGroup.ownerUid === user.uid) {
-                        const group = generalTaskGroups.find(g => g.id === newGroup.originalGroupId);
-                        if (group) {
-                            delete group.isShared;
-                            delete group.sharedGroupId;
-                            saveState();
-                        }
+                        // Re-create the group locally for the owner.
+                        const newLocalGroup = { id: newGroup.originalGroupId, name: newGroup.name, tasks: newGroup.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false };
+                        generalTaskGroups.push(newLocalGroup);
+                        saveState();
+
                         deleteDoc(doc(db, "sharedGroups", newGroup.id));
                         groupsMap.delete(change.doc.id);
                         return;
@@ -3856,7 +3853,7 @@ async function initializeAppLogic(initialUser) {
         const groupIndex = generalTaskGroups.findIndex(g => g.id === groupId);
         if (groupIndex === -1) return;
 
-        const groupToShare = generalTaskGroups.find(g => g.id === groupId);
+        const groupToShare = generalTaskGroups[groupIndex]; // Get the group by index
         if (groupToShare.isShared) {
             console.warn("Attempted to share an already shared group.");
             return;
@@ -3892,20 +3889,17 @@ async function initializeAppLogic(initialUser) {
             createdAt: Date.now(),
             participants: [user.uid, friendUid],
             status: 'pending',
-            originalGroupId: groupId
+            originalGroupId: groupId // Keep this for reverting
         };
 
         batch.set(sharedGroupRef, sharedGroupData);
 
-        groupToShare.isShared = true;
-        groupToShare.sharedGroupId = sharedGroupRef.id;
+        // Instead of marking the group as shared, we remove it from the local list.
+        // The shared version will appear via the Firestore listener.
+        generalTaskGroups.splice(groupIndex, 1);
 
-        const dataToSave = {
-            dailyTasks, standaloneMainQuests,
-            generalTaskGroups: generalTaskGroups.map(({ isExpanded, ...rest }) => rest),
-            playerData, settings
-        };
-        batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
+        // The saveState() call will persist the removal of the group from the local list.
+        saveState();
 
         await batch.commit();
 
