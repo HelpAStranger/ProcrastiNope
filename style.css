@@ -638,7 +638,6 @@ FRIENDS FEATURE & MOBILE NAV
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
     color: var(--text);
     opacity: 0.7; /* Default opacity for non-active buttons */
-    transition: all var(--transition-speed) ease;
     /* Transitions are now handled by a more specific rule to manage load vs. interaction */
     padding: 0.5rem;
     border-radius: var(--radius);
@@ -662,16 +661,12 @@ FRIENDS FEATURE & MOBILE NAV
 }
 /* 2. Define the transition that runs when .loaded is added */
 #app-wrapper.loaded .mobile-nav-btn {
-    transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
     /* Define all transitions, but give different timings for load vs. interaction */
     transition-property: opacity, transform, background-color, color, box-shadow;
     transition-duration: 0.6s, 0.6s, var(--transition-speed), var(--transition-speed), var(--transition-speed);
     transition-timing-function: ease, cubic-bezier(0.25, 1, 0.5, 1), ease, ease, ease;
 }
 /* 3. Stagger the transitions */
-#app-wrapper.loaded .mobile-nav-btn:nth-child(1) { transition-delay: 0.8s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(2) { transition-delay: 0.9s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(3) { transition-delay: 1.0s; }
 #app-wrapper.loaded .mobile-nav-btn:nth-child(1) {
     transition-delay: 0.8s, 0.8s, 0s, 0s, 0s;
 }
