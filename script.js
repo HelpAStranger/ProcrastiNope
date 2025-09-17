@@ -880,6 +880,7 @@ async function initializeAppLogic(initialUser) {
                 else if (!task.completedToday) task.streak = 0;
                 task.completedToday = false;
                 delete task.timerFinished; // Clear timer finished state on reset
+                task.timerFinished = false; // Clear timer finished state on reset
                 // FIX: Also clear timer properties to prevent it from resuming on a new day.
                 delete task.timerStartTime;
                 delete task.timerDuration;
@@ -1906,6 +1907,7 @@ async function initializeAppLogic(initialUser) {
             delete task.timerStartTime;
             delete task.timerDuration;
             delete task.timerFinished;
+            task.timerFinished = false;
 
             // Also reset the ring's CSS when a timer is stopped.
             const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
