@@ -1461,7 +1461,7 @@ async function initializeAppLogic(initialUser) {
         // This is the most reliable way to ensure that a completed task, if un-completed,
         // does not retain any 'finished' or 'running' timer state. This provides an
         // extra layer of safety on top of the stopTimer() call.
-        delete task.timerFinished;
+        task.timerFinished = false; // Explicitly set to false to prevent race conditions.
         delete task.timerStartTime;
         delete task.timerDuration;
 
@@ -1538,7 +1538,7 @@ async function initializeAppLogic(initialUser) {
 
         if (task.completedToday) {
             task.completedToday = false;
-            delete task.timerFinished;
+            task.timerFinished = false; // Explicitly set to false to prevent race conditions.
             // FIX: Ensure timer properties are cleared when un-completing a task
             // to prevent it from resuming on page reload.
             delete task.timerStartTime;
@@ -3508,9 +3508,9 @@ async function initializeAppLogic(initialUser) {
             const friendEl = document.createElement('div');
             friendEl.className = 'share-friend-item';
             friendEl.innerHTML = `
+                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
                 <span class="friend-name">${friendData.username}</span>
                 <button class="btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}">Share</button>
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
             `;
             listElement.appendChild(friendEl);
         });
