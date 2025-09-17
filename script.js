@@ -4153,6 +4153,37 @@ async function initializeAppLogic(initialUser) {
             populateFriendListForSharing(shareQuestFriendList);
         });
 
+        batchModalUnshareBtn.addEventListener('click', () => {
+            const selectedCount = selectedQuestIds.size;
+            if (selectedCount === 0) return;
+
+            showConfirm(`Unshare/Abandon ${selectedCount} quest${selectedCount > 1 ? 's' : ''}?`, "This will remove the quests from your friends' lists and convert them back to normal quests for the owner.", async () => {
+                const promises = [];
+                for (const id of selectedQuestIds) {
+                    const { task } = findTaskAndContext(id);
+                    // Only act on active shared quests selected for unsharing
+                    if (task && task.status === 'active') { 
+                        if (user.uid === task.ownerUid) {
+                            // If I am the owner, I unshare.
+                            promises.push(updateDoc(doc(db, "sharedQuests", id), { status: 'unshared' }));
+                        } else {
+                            // If I am the friend, I abandon.
+                            promises.push(updateDoc(doc(db, "sharedQuests", id), { status: 'abandoned' }));
+                        }
+                    }
+                }
+                
+                try {
+                    await Promise.all(promises);
+                    audioManager.playSound('delete');
+                } catch (error) {
+                    console.error("Batch unshare/abandon failed:", getCoolErrorMessage(error));
+                    showConfirm("Error", "Could not update all selected quests. Please try again.", () => {});
+                }
+                deactivateMultiSelectMode();
+            });
+        });
+
         batchModalDeleteBtn.addEventListener('click', () => {
             showConfirm(`Delete ${selectedQuestIds.size} items?`, "This action cannot be undone.", () => {
                 let needsSave = false;

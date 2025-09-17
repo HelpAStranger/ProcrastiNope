@@ -989,6 +989,17 @@ TASK LIST & ITEMS
 
 .quests-layout.multi-select-active .multi-select-checkbox {
     display: block; /* Show when multi-select is active */
+    border-color: var(--accent); /* Use theme color for the border */
+}
+
+/* NEW: Style for the multi-select button when active */
+.multi-select-toggle-btn.active {
+    background-color: var(--accent);
+    color: var(--text-on-accent);
+}
+
+.multi-select-toggle-btn.active svg {
+    stroke: var(--text-on-accent);
 }
 
 .multi-select-selected .multi-select-checkbox {
@@ -2068,6 +2079,32 @@ input[type="range"]::-moz-range-track {
     color: var(--accent-green-light);
 }
 
+/* NEW: Batch Actions Modal Styles */
+#batch-actions-modal .modal-content {
+    max-width: 450px;
+    padding: 1.5rem;
+}
+
+#batch-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+}
+
+.btn.icon-btn-text {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem 0.5rem;
+    height: auto;
+    aspect-ratio: unset;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.btn.icon-btn-text svg {
+    width: 28px;
+    height: 28px;
+}
 /*
 ==========================================================================
 MODALS - MOBILE ADJUSTMENTS
