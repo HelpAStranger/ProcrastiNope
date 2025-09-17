@@ -1457,14 +1457,6 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
-        // Explicitly delete all timer properties on completion.
-        // This is the most reliable way to ensure that a completed task, if un-completed,
-        // does not retain any 'finished' or 'running' timer state. This provides an
-        // extra layer of safety on top of the stopTimer() call.
-        task.timerFinished = false; // Explicitly set to false to prevent race conditions.
-        delete task.timerStartTime;
-        delete task.timerDuration;
-
         addXp(XP_PER_TASK);
         audioManager.playSound('complete');
         if (type === 'daily') {
@@ -1503,6 +1495,14 @@ async function initializeAppLogic(initialUser) {
 
             undoTimeoutMap.set(id, timeoutId);
         }
+
+        // FINAL BUGFIX: Explicitly clear all timer-related properties *after*
+        // setting the completion state (completedToday or pendingDeletion). This ensures
+        // that even if a race condition occurs, the state being saved is definitively clean.
+        task.timerFinished = false;
+        delete task.timerStartTime;
+        delete task.timerDuration;
+
         if (type === 'daily') saveState();
 
         // Replace the element directly to stop animations and update state instantly.
