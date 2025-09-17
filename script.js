@@ -4079,7 +4079,7 @@ async function initializeAppLogic(initialUser) {
         closeModal(batchActionsModal);
     }
 
-    function activateMultiSelectMode() {
+    function enableMultiSelectMode() {
         isMultiSelectModeActive = true;
         questsLayout.classList.add('multi-select-active');
         multiSelectToggleBtns.forEach(btn => btn.classList.add('active'));
@@ -4087,15 +4087,24 @@ async function initializeAppLogic(initialUser) {
         selectedQuestIds.clear();
         document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
 
-        openModal(batchActionsModal);
-        updateBatchActionsUI();
+        // The modal is not opened automatically.
+        // The UI is updated as items are selected.
     }
 
     function toggleMultiSelectMode() {
-        if (isMultiSelectModeActive) {
-            deactivateMultiSelectMode();
+        if (!isMultiSelectModeActive) {
+            // First click: enable the mode.
+            enableMultiSelectMode();
         } else {
-            activateMultiSelectMode();
+            // Mode is already active.
+            if (selectedQuestIds.size > 0) {
+                // Second click with items selected: open the modal.
+                openModal(batchActionsModal);
+                updateBatchActionsUI(); // Update counts etc. when opening.
+            } else {
+                // Second click with no items selected: disable the mode.
+                deactivateMultiSelectMode();
+            }
         }
     }
 
