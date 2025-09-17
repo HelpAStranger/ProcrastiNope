@@ -173,7 +173,6 @@ let lastFocusedElement = null;
 let localDataTimestamp = 0; // To track the timestamp of the currently loaded data.
 
 let activeMobileActionsItem = null; 
-let actionsTimeoutId = null;
 
 // --- DOM ELEMENTS FOR STARTUP ---
 const loaderOverlay = document.getElementById('loader-overlay');
@@ -274,7 +273,6 @@ document.body.addEventListener('keydown', () => audioManager.init(), { once: tru
 
 function hideActiveTaskActions() {
     if (activeMobileActionsItem) {
-        clearTimeout(actionsTimeoutId);
         const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
         if (optionsBtn) optionsBtn.classList.remove('is-active-trigger');
         activeMobileActionsItem.classList.remove('actions-visible');
@@ -1935,10 +1933,6 @@ async function initializeAppLogic(initialUser) {
             element.classList.add('actions-visible');
             if (optionsBtn) optionsBtn.classList.add('is-active-trigger');
             activeMobileActionsItem = element;
-
-            actionsTimeoutId = setTimeout(() => {
-                hideActiveTaskActions();
-            }, 3000);
         }
     }
 
