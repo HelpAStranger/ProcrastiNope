@@ -495,19 +495,11 @@ HEADER & PROGRESS
     left: 50%;
     transform: translate(-50%, -50%);
     font-weight: 700;
-    color: var(--text);
-    mix-blend-mode: difference;
-    filter: invert(1) grayscale(1);
     /* This text needs to contrast with both the background and the accent color.
        The `mix-blend-mode` trick was brittle and caused color issues (e.g., purple text).
        Using `var(--text-on-accent)` is more robust as it's designed to contrast
        with the accent color, and also contrasts well with the main background. */
     color: var(--text-on-accent);
-}
-.dark-mode #xp-text {
-    mix-blend-mode: normal; /* Changed from unset */
-    filter: none; /* Changed from unset */
-    color: var(--text-dark); /* Explicitly set color for dark mode */
 }
 
 /* Mobile Responsiveness for Header */
