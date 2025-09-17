@@ -844,6 +844,9 @@ async function initializeAppLogic(initialUser) {
                 else if (!task.completedToday) task.streak = 0;
                 task.completedToday = false;
                 delete task.timerFinished; // Clear timer finished state on reset
+                // FIX: Also clear timer properties to prevent it from resuming on a new day.
+                delete task.timerStartTime;
+                delete task.timerDuration;
             });
             localStorage.setItem('lastVisitDate', today);
             saveState();
@@ -1281,6 +1284,11 @@ async function initializeAppLogic(initialUser) {
         if (task && task.pendingDeletion) {
             delete task.pendingDeletion;
             addXp(-XP_PER_TASK); // Revert XP gain
+            // FIX: Ensure timer properties are cleared when undoing completion
+            // to prevent the timer from reappearing.
+            delete task.timerFinished;
+            delete task.timerStartTime;
+            delete task.timerDuration;
             audioManager.playSound('delete'); // Use the 'delete' sound for undo
 
             // Instead of a full re-render, specifically replace this one element.
@@ -1410,6 +1418,10 @@ async function initializeAppLogic(initialUser) {
 
         // This is the key change. When a task is completed, any 'timer finished' state should be cleared.
         delete task.timerFinished;
+        // FIX: Explicitly delete timer properties on completion to prevent them from
+        // reappearing if the task is un-completed or reset.
+        delete task.timerStartTime;
+        delete task.timerDuration;
 
         addXp(XP_PER_TASK);
         audioManager.playSound('complete');
