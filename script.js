@@ -2450,172 +2450,184 @@ async function initializeAppLogic(initialUser) {
     weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
     editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
     
-    resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
-    exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
-    resetCloudDataBtn.addEventListener('click', () => {
-        showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => {
-            playerData = { level: 1, xp: 0 };
-            dailyTasks = [];
-            standaloneMainQuests = [];
-            generalTaskGroups = [];
-            renderAllLists();
-            saveState(); // This will save the empty state to Firestore because `user` is not null
-            audioManager.playSound('delete');
+    if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
+    if (exportDataBtn) exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
+    if (resetCloudDataBtn) {
+        resetCloudDataBtn.addEventListener('click', () => {
+            showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => {
+                playerData = { level: 1, xp: 0 };
+                dailyTasks = [];
+                standaloneMainQuests = [];
+                generalTaskGroups = [];
+                renderAllLists();
+                saveState(); // This will save the empty state to Firestore because `user` is not null
+                audioManager.playSound('delete');
+            });
         });
-    });
-    importDataBtn.addEventListener('click', () => importFileInput.click());
-    importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
+    }
+    if (importDataBtn) importDataBtn.addEventListener('click', () => importFileInput.click());
+    if (importFileInput) importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
     document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; audioManager.playSound('hover'); });
     
-    manageAccountBtn.addEventListener('click', () => {
-        const reauthContainer = manageAccountModal.querySelector('#reauth-container');
-        const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
-        const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
+    if (manageAccountBtn) {
+        manageAccountBtn.addEventListener('click', () => {
+            const reauthContainer = manageAccountModal.querySelector('#reauth-container');
+            const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
+            const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
 
-        manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
-        manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
+            manageAccountModal.querySelectorAll('.error-message, .success-message').forEach(el => el.textContent = '');
+            manageAccountModal.querySelectorAll('form').forEach(form => form.reset());
 
-        if (isGoogleUser) {
-            reauthContainer.style.display = 'none';
-            manageFormsContainer.style.display = 'block';
-            manageAccountModal.querySelector('#update-email-form').style.display = 'none';
-            manageAccountModal.querySelector('#update-password-form').style.display = 'none';
-            manageAccountModal.querySelector('#update-username-form').style.display = 'block';
-        } else {
-            reauthContainer.style.display = 'block';
-            manageFormsContainer.style.display = 'none';
-        }
-        openModal(manageAccountModal);
-    });
+            if (isGoogleUser) {
+                reauthContainer.style.display = 'none';
+                manageFormsContainer.style.display = 'block';
+                manageAccountModal.querySelector('#update-email-form').style.display = 'none';
+                manageAccountModal.querySelector('#update-password-form').style.display = 'none';
+                manageAccountModal.querySelector('#update-username-form').style.display = 'block';
+            } else {
+                reauthContainer.style.display = 'block';
+                manageFormsContainer.style.display = 'none';
+            }
+            openModal(manageAccountModal);
+        });
+    }
 
     const reauthForm = document.getElementById('reauth-form');
-    reauthForm.addEventListener('submit', async(e) => {
-        e.preventDefault();
-        const password = document.getElementById('reauth-password').value;
-        const errorEl = document.getElementById('reauth-error');
-        errorEl.textContent = '';
+    if (reauthForm) {
+        reauthForm.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const password = document.getElementById('reauth-password').value;
+            const errorEl = document.getElementById('reauth-error');
+            errorEl.textContent = '';
 
-        if (!currentUser || !currentUser.email) {
-            errorEl.textContent = 'No user is currently logged in.';
-            return;
-        }
+            if (!currentUser || !currentUser.email) {
+                errorEl.textContent = 'No user is currently logged in.';
+                return;
+            }
 
-        const credential = EmailAuthProvider.credential(currentUser.email, password);
+            const credential = EmailAuthProvider.credential(currentUser.email, password);
 
-        try {
-            await reauthenticateWithCredential(currentUser, credential);
-            document.getElementById('reauth-container').style.display = 'none';
-            document.getElementById('manage-forms-container').style.display = 'block';
-            // Explicitly show the forms for non-Google users after re-auth
-            document.getElementById('update-username-form').style.display = 'block';
-            document.getElementById('update-email-form').style.display = 'block';
-            document.getElementById('update-password-form').style.display = 'block';
-        } catch (error) {
-            errorEl.textContent = getCoolErrorMessage(error);
-        }
-    });
+            try {
+                await reauthenticateWithCredential(currentUser, credential);
+                document.getElementById('reauth-container').style.display = 'none';
+                document.getElementById('manage-forms-container').style.display = 'block';
+                // Explicitly show the forms for non-Google users after re-auth
+                document.getElementById('update-username-form').style.display = 'block';
+                document.getElementById('update-email-form').style.display = 'block';
+                document.getElementById('update-password-form').style.display = 'block';
+            } catch (error) {
+                errorEl.textContent = getCoolErrorMessage(error);
+            }
+        });
+    }
 
     const updateEmailForm = document.getElementById('update-email-form');
-    updateEmailForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newEmail = document.getElementById('update-email-input').value;
-        const password = document.getElementById('update-email-password').value;
-        const errorEl = document.getElementById('update-email-error');
-        const successEl = document.getElementById('update-email-success');
-        errorEl.textContent = '';
-        successEl.textContent = '';
+    if (updateEmailForm) {
+        updateEmailForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newEmail = document.getElementById('update-email-input').value;
+            const password = document.getElementById('update-email-password').value;
+            const errorEl = document.getElementById('update-email-error');
+            const successEl = document.getElementById('update-email-success');
+            errorEl.textContent = '';
+            successEl.textContent = '';
 
-        if (!password) {
-            errorEl.textContent = 'Please enter your current password.';
-            return;
-        }
+            if (!password) {
+                errorEl.textContent = 'Please enter your current password.';
+                return;
+            }
 
-        try {
-            const credential = EmailAuthProvider.credential(currentUser.email, password);
-            await reauthenticateWithCredential(currentUser, credential);
-            await updateEmail(currentUser, newEmail);
-            
-            const userDocRef = doc(db, "users", currentUser.uid);
-            await updateDoc(userDocRef, { email: newEmail });
+            try {
+                const credential = EmailAuthProvider.credential(currentUser.email, password);
+                await reauthenticateWithCredential(currentUser, credential);
+                await updateEmail(currentUser, newEmail);
+                
+                const userDocRef = doc(db, "users", currentUser.uid);
+                await updateDoc(userDocRef, { email: newEmail });
 
-            successEl.textContent = 'Email updated successfully!';
-            updateEmailForm.reset();
+                successEl.textContent = 'Email updated successfully!';
+                updateEmailForm.reset();
 
-        } catch (error) {
-            errorEl.textContent = getCoolErrorMessage(error);
-        }
-    });
+            } catch (error) {
+                errorEl.textContent = getCoolErrorMessage(error);
+            }
+        });
+    }
 
     const updatePasswordForm = document.getElementById('update-password-form');
-    updatePasswordForm.addEventListener('submit', async(e) => {
-        e.preventDefault();
-        const newPassword = document.getElementById('update-password-input').value;
-        const errorEl = document.getElementById('update-password-error');
-        const successEl = document.getElementById('update-password-success');
-        errorEl.textContent = '';
-        successEl.textContent = '';
+    if (updatePasswordForm) {
+        updatePasswordForm.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const newPassword = document.getElementById('update-password-input').value;
+            const errorEl = document.getElementById('update-password-error');
+            const successEl = document.getElementById('update-password-success');
+            errorEl.textContent = '';
+            successEl.textContent = '';
 
-        try {
-            await updatePassword(currentUser, newPassword);
-            successEl.textContent = 'Password updated successfully!';
-            updatePasswordForm.reset();
-        } catch (error) {
-             errorEl.textContent = getCoolErrorMessage(error);
-        }
-    });
+            try {
+                await updatePassword(currentUser, newPassword);
+                successEl.textContent = 'Password updated successfully!';
+                updatePasswordForm.reset();
+            } catch (error) {
+                 errorEl.textContent = getCoolErrorMessage(error);
+            }
+        });
+    }
 
     const updateUsernameForm = document.getElementById('update-username-form');
-    updateUsernameForm.addEventListener('submit', async(e) => {
-        e.preventDefault();
-        const newUsername = document.getElementById('update-username-input').value.trim().toLowerCase();
-        const errorEl = document.getElementById('update-username-error');
-        const successEl = document.getElementById('update-username-success');
-        errorEl.textContent = '';
-        successEl.textContent = '';
+    if (updateUsernameForm) {
+        updateUsernameForm.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const newUsername = document.getElementById('update-username-input').value.trim().toLowerCase();
+            const errorEl = document.getElementById('update-username-error');
+            const successEl = document.getElementById('update-username-success');
+            errorEl.textContent = '';
+            successEl.textContent = '';
 
-        if (!currentUser) {
-            errorEl.textContent = "You must be logged in.";
-            return;
-        }
-        
-        if (!newUsername || newUsername.length < 3) {
-            errorEl.textContent = 'Username must be at least 3 characters.';
-            return;
-        }
-
-        try {
-            const userDocRef = doc(db, "users", currentUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            const currentUsername = userDocSnap.exists() ? userDocSnap.data().username : null;
-
-            if (newUsername === currentUsername) {
-                errorEl.textContent = "This is already your username.";
+            if (!currentUser) {
+                errorEl.textContent = "You must be logged in.";
                 return;
             }
             
-            const newUsernameRef = doc(db, "usernames", newUsername);
-            const newUsernameSnap = await getDoc(newUsernameRef);
-            
-            if (newUsernameSnap.exists()) {
-                errorEl.textContent = "This username is already taken.";
+            if (!newUsername || newUsername.length < 3) {
+                errorEl.textContent = 'Username must be at least 3 characters.';
                 return;
             }
 
-            const oldUsernameRef = doc(db, "usernames", currentUsername);
+            try {
+                const userDocRef = doc(db, "users", currentUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                const currentUsername = userDocSnap.exists() ? userDocSnap.data().username : null;
 
-            const batch = writeBatch(db);
-            batch.delete(oldUsernameRef);
-            batch.set(newUsernameRef, { userId: currentUser.uid });
-            batch.update(userDocRef, { username: newUsername });
-            await batch.commit();
+                if (newUsername === currentUsername) {
+                    errorEl.textContent = "This is already your username.";
+                    return;
+                }
+                
+                const newUsernameRef = doc(db, "usernames", newUsername);
+                const newUsernameSnap = await getDoc(newUsernameRef);
+                
+                if (newUsernameSnap.exists()) {
+                    errorEl.textContent = "This username is already taken.";
+                    return;
+                }
 
-            successEl.textContent = "Username updated successfully!";
-            updateUserUI();
-            updateUsernameForm.reset();
-        } catch (error) {
-            errorEl.textContent = getCoolErrorMessage(error);
-        }
-    });
+                const oldUsernameRef = doc(db, "usernames", currentUsername);
+
+                const batch = writeBatch(db);
+                batch.delete(oldUsernameRef);
+                batch.set(newUsernameRef, { userId: currentUser.uid });
+                batch.update(userDocRef, { username: newUsername });
+                await batch.commit();
+
+                successEl.textContent = "Username updated successfully!";
+                updateUserUI();
+                updateUsernameForm.reset();
+            } catch (error) {
+                errorEl.textContent = getCoolErrorMessage(error);
+            }
+        });
+    }
     
     function initSortable() {
         function onTaskDrop(evt) {
