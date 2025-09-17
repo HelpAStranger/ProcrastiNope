@@ -637,7 +637,7 @@ FRIENDS FEATURE & MOBILE NAV
     border: var(--border-width) solid var(--border);
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
     color: var(--text);
-    opacity: 0; /* Prepare for load animation */
+    opacity: 0.7; /* Default opacity for non-active buttons */
     transition: all var(--transition-speed) ease;
     padding: 0.5rem;
     border-radius: var(--radius);
@@ -653,18 +653,20 @@ FRIENDS FEATURE & MOBILE NAV
     height: 60px;
 }
 
-/* NEW: Trigger load animation for nav buttons */
-#app-wrapper.loaded .mobile-nav-btn:not(.active) {
-    animation: nav-btn-slide-in-normal 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+/* NEW: Animate nav buttons on load using transitions for robustness */
+/* 1. Define the initial, pre-load state. This is overridden when .loaded is added. */
+#app-wrapper:not(.loaded) .mobile-nav-btn {
+    opacity: 0;
+    transform: translateY(20px);
 }
-#app-wrapper.loaded .mobile-nav-btn.active {
-    animation: nav-btn-slide-in-active 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+/* 2. Define the transition that runs when .loaded is added */
+#app-wrapper.loaded .mobile-nav-btn {
+    transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
-
-/* Stagger the button animations */
-#app-wrapper.loaded .mobile-nav-btn:nth-child(1) { animation-delay: 0.8s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(2) { animation-delay: 0.9s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(3) { animation-delay: 1.0s; }
+/* 3. Stagger the transitions */
+#app-wrapper.loaded .mobile-nav-btn:nth-child(1) { transition-delay: 0.8s; }
+#app-wrapper.loaded .mobile-nav-btn:nth-child(2) { transition-delay: 0.9s; }
+#app-wrapper.loaded .mobile-nav-btn:nth-child(3) { transition-delay: 1.0s; }
 
 .mobile-nav-btn span {
     font-weight: 900;
@@ -672,8 +674,8 @@ FRIENDS FEATURE & MOBILE NAV
 }
 
 .mobile-nav-btn.active {
-    opacity: 1;
-    transform: translateY(-8px); /* This will be the target for the active animation */
+    opacity: 1; /* Final state for active button */
+    transform: translateY(-8px);
     background-color: var(--accent);
     color: var(--text-on-accent);
     box-shadow: 6px 6px 0 var(--shadow);
@@ -2279,41 +2281,6 @@ ANIMATIONS
     from {
         opacity: 0;
         transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* NEW: Keyframes for mobile nav button load animations */
-@keyframes nav-btn-slide-in-normal {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 0.7; /* Default opacity for non-active buttons */
-        transform: translateY(0);
-    }
-}
-
-@keyframes nav-btn-slide-in-active {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1; /* Final opacity for the active button */
-        transform: translateY(-8px); /* Final transform for the active button */
-    }
-}
-
-/* NEW: Keyframe for main content load animation */
-@keyframes slide-up-fade {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
     }
     to {
         opacity: 1;
