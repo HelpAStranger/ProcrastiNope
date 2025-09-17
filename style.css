@@ -498,6 +498,11 @@ HEADER & PROGRESS
     color: var(--text);
     mix-blend-mode: difference;
     filter: invert(1) grayscale(1);
+    /* This text needs to contrast with both the background and the accent color.
+       The `mix-blend-mode` trick was brittle and caused color issues (e.g., purple text).
+       Using `var(--text-on-accent)` is more robust as it's designed to contrast
+       with the accent color, and also contrasts well with the main background. */
+    color: var(--text-on-accent);
 }
 .dark-mode #xp-text {
     mix-blend-mode: normal; /* Changed from unset */
@@ -546,16 +551,16 @@ HEADER & PROGRESS
 }
 
 #app-wrapper.loaded .sticky-header .header-content {
-    animation: slide-down-fade 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.1s forwards;
+    animation: slide-down-fade 0.4s cubic-bezier(0.25, 1, 0.5, 1) 0.0s forwards;
 }
 #app-wrapper.loaded .sticky-header .header-controls {
-    animation: slide-down-fade 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.2s forwards;
+    animation: slide-down-fade 0.4s cubic-bezier(0.25, 1, 0.5, 1) 0.05s forwards;
 }
 #app-wrapper.loaded .player-progress-section .level-display {
-    animation: slide-down-fade 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.3s forwards;
+    animation: slide-down-fade 0.4s cubic-bezier(0.25, 1, 0.5, 1) 0.1s forwards;
 }
 #app-wrapper.loaded .player-progress-section .xp-bar-container {
-    animation: slide-down-fade 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.4s forwards;
+    animation: slide-down-fade 0.4s cubic-bezier(0.25, 1, 0.5, 1) 0.15s forwards;
 }
 
 /* NEW: Animation for main content sections on load */
@@ -568,12 +573,12 @@ HEADER & PROGRESS
 
 /* 2. Define the transition that runs ONLY when .loaded is added */
 #app-wrapper.loaded .task-group[data-section] {
-    transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1), transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 /* 3. Stagger the transitions for the initial load */
-#app-wrapper.loaded .task-group[data-section="daily"] { transition-delay: 0.5s; }
-#app-wrapper.loaded .task-group[data-section="main"] { transition-delay: 0.6s; }
+#app-wrapper.loaded .task-group[data-section="daily"] { transition-delay: 0.2s; }
+#app-wrapper.loaded .task-group[data-section="main"] { transition-delay: 0.25s; }
 /*
 ==========================================================================
 FRIENDS FEATURE & MOBILE NAV
@@ -667,12 +672,12 @@ FRIENDS FEATURE & MOBILE NAV
 }
 /* 2. When loaded, run the staggered animation. `forwards` keeps the final state. */
 #app-wrapper.loaded .mobile-nav-btn {
-    animation: nav-btn-slide-up 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    animation: nav-btn-slide-up 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 /* 3. Stagger the animation delays. */
-#app-wrapper.loaded .mobile-nav-btn:nth-child(1) { animation-delay: 0.8s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(2) { animation-delay: 0.9s; }
-#app-wrapper.loaded .mobile-nav-btn:nth-child(3) { animation-delay: 1.0s; }
+#app-wrapper.loaded .mobile-nav-btn:nth-child(1) { animation-delay: 0.3s; }
+#app-wrapper.loaded .mobile-nav-btn:nth-child(2) { animation-delay: 0.35s; }
+#app-wrapper.loaded .mobile-nav-btn:nth-child(3) { animation-delay: 0.4s; }
 
 .mobile-nav-btn span {
     font-weight: 900;
