@@ -1938,11 +1938,13 @@ async function initializeAppLogic(initialUser) {
         
         allTasks.forEach(t => {
             const isCompleted = t.completedToday || t.pendingDeletion;
+            // Only process timers for tasks that have timer properties and are not completed/shared.
             if (t && t.timerStartTime && t.timerDuration && !t.isShared && !isCompleted) {
                 const elapsed = (Date.now() - t.timerStartTime) / 1000;
                 const remaining = Math.max(0, t.timerDuration - elapsed);
 
                 if (remaining > 0) {
+                    // Timer is still running, resume it.
                     const taskEl = document.querySelector(`.task-item[data-id="${t.id}"]`);
                     if (taskEl) {
                         const ringEl = taskEl.querySelector('.progress-ring-circle');
@@ -1968,8 +1970,9 @@ async function initializeAppLogic(initialUser) {
                         }
                     }
                 } else {
-                    // Timer has finished while the app was closed or tab was inactive
-                    if (!t.timerFinished) {
+                    // Timer has finished while the app was closed or tab was inactive.
+                    // This is the correct place to set timerFinished.
+                    if (!t.timerFinished) { // Check to avoid redundant saves
                         t.timerFinished = true;
                         delete t.timerStartTime;
                         delete t.timerDuration;
