@@ -3361,6 +3361,7 @@ async function initializeAppLogic(initialUser) {
         await updateUserUI();
         checkDailyReset();
         resumeTimers();
+        setInitialActiveTab(); // Set the initial active tab after everything is loaded.
     }
     
     // --- SHARED QUESTS LOGIC ---
