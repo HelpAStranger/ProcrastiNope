@@ -1851,6 +1851,17 @@ async function initializeAppLogic(initialUser) {
 
         const { task } = findTaskAndContext(id);
         if (task) {
+            // BUGFIX: If the task has already been completed, do not mark its timer as finished.
+            // This prevents a race condition where a timer finishes after the task is marked complete,
+            // which would cause the 'shaking' animation to reappear on un-completion.
+            if (task.completedToday || task.pendingDeletion) {
+                // Just ensure the timer properties are gone and exit.
+                delete task.timerStartTime;
+                delete task.timerDuration;
+                saveState();
+                return;
+            }
+
             task.timerFinished = true;
             delete task.timerStartTime;
             delete task.timerDuration;
