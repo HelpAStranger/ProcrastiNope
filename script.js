@@ -2669,6 +2669,8 @@ async function initializeAppLogic(initialUser) {
                     evt.cancel = true;
                     return;
                 }
+                // FIX: Remove animation classes to prevent visual duplication from opacity conflicts.
+                evt.item.classList.remove('adding', 'removing');
                 // PERF: Removed adding a class to body to prevent expensive global animations.
             },
             onEnd: onTaskDrop 
@@ -2684,7 +2686,10 @@ async function initializeAppLogic(initialUser) {
             handle: '.main-quest-group-header',
             delay: 150, // PERF: Reduced delay.
             delayOnTouchOnly: true,
-            onStart: () => {}, // PERF: Removed adding a class to body.
+            onStart: (evt) => {
+                // FIX: Remove animation classes to prevent visual duplication from opacity conflicts.
+                evt.item.classList.remove('adding', 'removing');
+            },
             onEnd: (e) => {
                 const [item] = generalTaskGroups.splice(e.oldIndex, 1);
                 generalTaskGroups.splice(e.newIndex, 0, item);
