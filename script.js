@@ -463,7 +463,6 @@ async function initializeAppLogic(initialUser) {
     const CLICK_DEBOUNCE_TIME = 250; // ms, to prevent double-clicks
     let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
     let undoTimeoutMap = new Map();
-    let shiftHoverItem = null; // To track items whose actions are shown via shift-hover
 
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
     
@@ -1979,7 +1978,6 @@ async function initializeAppLogic(initialUser) {
                 const group = sharedGroups.find(g => g.id === sharedGroupId);
 
                 if (e.target.closest('.options-btn')) {
-                    shiftHoverItem = null; // A click on options button takes precedence
                     toggleTaskActions(groupHeader);
                     return;
                 }
@@ -2025,7 +2023,6 @@ async function initializeAppLogic(initialUser) {
             const g = generalTaskGroups.find(g => g.id === groupId);
 
             if (e.target.closest('.options-btn')) {
-                shiftHoverItem = null; // A click on options button takes precedence
                 toggleTaskActions(groupHeader);
                 return;
             }
@@ -2144,7 +2141,6 @@ async function initializeAppLogic(initialUser) {
                 if (!sharedTask) return;
                 
                 if (e.target.closest('.options-btn')) {
-                    shiftHoverItem = null; // A click on options button takes precedence
                     toggleTaskActions(taskItem);
                 } else if (e.target.closest('.task-buttons-wrapper')) {
                     // Clicks inside the actions menu
@@ -2165,7 +2161,6 @@ async function initializeAppLogic(initialUser) {
             
             // --- Case 2: Task is a normal task (not in a shared group) ---
             if (e.target.closest('.options-btn')) {
-                shiftHoverItem = null; // A click on options button takes precedence
                 toggleTaskActions(taskItem);
                 return;
             }
@@ -3953,14 +3948,6 @@ async function initializeAppLogic(initialUser) {
         showRandomQuote();
         document.addEventListener('keydown', handleGlobalKeys);
 
-        // Listen for Shift key release to close any hover-opened menus
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Shift' && shiftHoverItem) {
-                hideActiveTaskActions();
-                shiftHoverItem = null;
-            }
-        });
-
         // Add a global click listener to close active task actions when clicking outside.
         document.addEventListener('click', (e) => {
             if (activeMobileActionsItem && !activeMobileActionsItem.contains(e.target)) {
@@ -4013,54 +4000,6 @@ async function initializeAppLogic(initialUser) {
             }
         }
     };
-
-    document.querySelector('.quests-layout').addEventListener('mouseover', (e) => {
-        if (!e.shiftKey) return;
-
-        // Find the target item, which can be a task or a group header
-        const item = e.target.closest('.task-item, .main-quest-group-header');
-        
-        // Only proceed if we found an item and it's not the one we're already hovering
-        if (item && item !== shiftHoverItem) {
-            // If a menu is already open from a click (and not from a previous shift-hover), do nothing.
-            if (activeMobileActionsItem && activeMobileActionsItem !== shiftHoverItem) {
-                return;
-            }
-
-            // Hide any previously hover-opened menu.
-            if (shiftHoverItem) {
-                hideActiveTaskActions(); // This will nullify activeMobileActionsItem
-                shiftHoverItem = null;
-            }
-            
-            // --- Pre-condition checks for showing the menu ---
-            if (item.classList.contains('timer-active')) return;
-            const optionsBtn = item.querySelector('.options-btn');
-            if (optionsBtn && optionsBtn.disabled) return;
-
-            // Don't show for placeholder shared items in main/daily lists.
-            // These are items marked as 'is-shared-task' but are NOT inside the shared quests container.
-            const isPlaceholder = item.closest('.is-shared-task') && !item.closest('#shared-quests-container');
-            if (isPlaceholder) return;
-
-            // Show the new menu
-            item.classList.add('actions-visible');
-            if (optionsBtn) optionsBtn.classList.add('is-active-trigger');
-            activeMobileActionsItem = item; // Use the global state.
-            shiftHoverItem = item; // Mark it as hover-opened.
-        }
-    });
-
-    document.querySelector('.quests-layout').addEventListener('mouseout', (e) => {
-        if (shiftHoverItem) {
-            const item = e.target.closest('.task-item, .main-quest-group-header');
-            // If we are moving out of the item completely.
-            if (item === shiftHoverItem && !item.contains(e.relatedTarget)) {
-                hideActiveTaskActions();
-                shiftHoverItem = null;
-            }
-        }
-    });
 
     initOnce();
     await loadUserSession();
