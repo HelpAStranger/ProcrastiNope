@@ -647,8 +647,8 @@ FRIENDS FEATURE & MOBILE NAV
     border: var(--border-width) solid var(--border);
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
     color: var(--text);
-    opacity: 0; /* Start hidden. Animation will bring it to 0.7 */
-    transform: translateY(20px); /* Start shifted down */
+    opacity: 0.7; /* Default opacity for non-active buttons */
+    transform: translateY(0); /* Default position */
     padding: 0.5rem;
     border-radius: var(--radius);
     flex: 1 1 0px;
@@ -670,11 +670,17 @@ FRIENDS FEATURE & MOBILE NAV
     height: 60px;
 }
 
-/* REFACTORED: Use animation for a robust, one-time load effect. */
-/* 1. The initial state (opacity: 0, transform: translateY(20px)) is now the default in the .mobile-nav-btn rule. */
-/* 2. When loaded, run the staggered animation. `forwards` keeps the final state. */
+/* REFACTORED: Use animation for load, but without `forwards` to allow transitions to work for interactions. */
+/* 1. Define the initial, pre-load state. This is overridden when .loaded is added. */
+#app-wrapper:not(.loaded) .mobile-nav-btn {
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+/* 2. When loaded, run the staggered animation. `forwards` is removed so it doesn't block transitions. */
+/* The animation's `to` state matches the base .mobile-nav-btn state, so there's no "snap" when it ends. */
 #app-wrapper.loaded .mobile-nav-btn {
-    animation: nav-btn-slide-up 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    animation: nav-btn-slide-up 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 /* 3. Stagger the animation delays. */
 #app-wrapper.loaded .mobile-nav-btn:nth-child(1) { animation-delay: 0.3s; }
