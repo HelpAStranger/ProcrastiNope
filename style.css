@@ -1504,11 +1504,12 @@ BUTTONS & CONTROLS
 
 /* NEW: Style for the options button when its actions are visible */
 .btn.is-active-trigger {
-    opacity: 0.4;
+    opacity: 0.08; /* 20% of its previous 0.4 opacity */
     cursor: pointer; /* Remains clickable to close the menu */
     /* Mimic the :active state to look "pressed" or "locked" */
     transform: translate(2px, 2px);
     box-shadow: 2px 2px 0 var(--shadow-color);
+    z-index: 4; /* Lower than the overlay's z-index of 5 to appear behind it */
 }
 
 #settings-btn {
