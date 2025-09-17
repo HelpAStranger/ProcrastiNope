@@ -630,13 +630,16 @@ FRIENDS FEATURE & MOBILE NAV
     height: 100%;
     gap: 0.5rem;
     padding: 0.5rem;
-    /* Prepare for load animation */
+    /* Prepare for load animation using transitions */
+    transform: translateY(100%);
     opacity: 0;
+    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.8s, opacity 0.6s ease 0.8s;
 }
 
 /* NEW: Trigger load animation */
 #app-wrapper.loaded .mobile-nav-content {
-    animation: slide-up-nav 0.6s cubic-bezier(0.25, 1, 0.5, 1) 0.8s forwards;
+    transform: translateY(0);
+    opacity: 1;
 }
 
 .mobile-nav-btn {
@@ -2273,18 +2276,6 @@ ANIMATIONS
     from {
         opacity: 0;
         transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* NEW: Keyframe for mobile nav load animation */
-@keyframes slide-up-nav {
-    from {
-        opacity: 0;
-        transform: translateY(100%);
     }
     to {
         opacity: 1;
