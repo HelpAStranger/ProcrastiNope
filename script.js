@@ -1119,6 +1119,7 @@ async function initializeAppLogic(initialUser) {
 
         const ul = document.createElement('ul');
         ul.className = 'task-list-group shared-quest-list';
+        ul.dataset.sharedGroupId = group.id;
         group.tasks.forEach(task => {
             ul.appendChild(createSharedTaskElement(task, group));
         });
@@ -1735,6 +1736,17 @@ async function initializeAppLogic(initialUser) {
         } catch (error) {
             console.error("Error completing shared group task:", getCoolErrorMessage(error));
             showConfirm("Error", "Could not update task status. Please try again.", () => {});
+        }
+    };
+    const updateSharedGroupTaskOrder = async (groupId, newTasks) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        try {
+            // The listener will pick up the change and re-render, so we just update the document.
+            await updateDoc(groupRef, { tasks: newTasks });
+            audioManager.playSound('toggle');
+        } catch (error) {
+            console.error("Error updating shared group task order:", getCoolErrorMessage(error));
+            showConfirm("Error", "Could not reorder tasks. The list may revert.", () => {});
         }
     };
     const revertSharedQuest = (originalTaskId) => {

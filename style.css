@@ -1324,7 +1324,7 @@ SHARED QUESTS
 /* NEW: Styles for tasks within a shared group */
 .task-item.shared-group-task {
     padding: 0.75rem 1rem;
-    cursor: pointer;
+    cursor: grab; /* Allow dragging */
     flex-wrap: nowrap; /* Prevent wrapping */
     transition: background-color var(--transition-speed) ease;
     /* Use a simpler border to distinguish from standalone quests */
