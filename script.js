@@ -4011,11 +4011,12 @@ async function initializeAppLogic(initialUser) {
             console.warn("Attempted to share an already shared group.");
             return;
         }
-        const tasksToShare = groupToShare.tasks.filter(t => !t.isShared);
+        const tasksToShare = (groupToShare.tasks || []).filter(t => !t.isShared);
 
-        if (tasksToShare.length === 0) {
-            console.warn("Attempted to share a group with no non-shared tasks.");
-            showConfirm("Cannot Share", "This group has no tasks that can be shared.", () => {});
+        // Block sharing only if the group is not empty but contains no shareable tasks.
+        if (groupToShare.tasks && groupToShare.tasks.length > 0 && tasksToShare.length === 0) {
+            console.warn("Attempted to share a group with only already-shared tasks.");
+            showConfirm("Cannot Share", "This group contains only tasks that are already shared individually.", () => {});
             return;
         }
 
