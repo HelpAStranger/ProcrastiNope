@@ -34,7 +34,8 @@ import {
     initializeFirestore,
     persistentLocalCache,
     memoryLocalCache,
-    persistentMultipleTabManager
+    persistentMultipleTabManager,
+    runTransaction
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
@@ -3555,17 +3556,6 @@ async function initializeAppLogic(initialUser) {
                         deleteDoc(doc(db, "sharedQuests", newQuest.id));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
-                    }
-
-                    // ROBUSTNESS FIX: The listener is the source of truth for completion.
-                    // If a quest is fully completed but not yet marked, the owner is responsible for updating the status.
-                    if (newQuest.ownerCompleted && newQuest.friendCompleted && newQuest.status !== 'completed') {
-                        if (user && user.uid === newQuest.ownerUid) {
-                            // This update will trigger another snapshot, which will then call finishSharedQuestAnimation.
-                            // This prevents race conditions and handles offline scenarios correctly.
-                            updateDoc(doc(db, "sharedQuests", newQuest.id), { status: 'completed' });
-                        }
-                        // The friend's client does nothing here, it just waits for the owner to update the status.
                     }
 
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
