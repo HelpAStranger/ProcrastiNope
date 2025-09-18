@@ -1065,14 +1065,26 @@ async function initializeAppLogic(initialUser) {
         if (group.isExpanded) groupEl.classList.add('expanded');
         groupEl.dataset.sharedGroupId = group.id;
     
-        const allCompleted = group.tasks.every(t => t.ownerCompleted && t.friendCompleted);
-        const optionsBtnDisabled = allCompleted ? 'disabled' : '';
-        if (allCompleted) {
+        const totalTasks = group.tasks.length;
+        const completedTasks = group.tasks.filter(t => t.ownerCompleted && t.friendCompleted).length;
+        const allTasksCompleted = totalTasks > 0 && completedTasks === totalTasks;
+
+        const optionsBtnDisabled = allTasksCompleted ? 'disabled' : '';
+        if (allTasksCompleted) {
             groupEl.classList.add('all-completed');
         }
     
         const isOwner = user.uid === group.ownerUid;
         const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
+
+        const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+        const progressBarHTML = totalTasks > 0 ? `
+            <div class="shared-group-progress-bar-container" title="${completedTasks} of ${totalTasks} tasks fully completed">
+                <div class="shared-group-progress-bar" style="width: ${progressPercent}%;"></div>
+                <span class="shared-group-progress-text">${completedTasks} / ${totalTasks}</span>
+            </div>
+        ` : '';
 
         const editBtnHTML = isOwner ? `<button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>` : '';
         const addTaskBtnHTML = `<button class="btn icon-btn add-task-to-group-btn" aria-label="Add task"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>`;
@@ -1083,9 +1095,12 @@ async function initializeAppLogic(initialUser) {
             <header class="main-quest-group-header">
                 <div class="group-title-container">
                     <svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
-                    <div class="group-title-and-subtitle">
-                        <h3>${group.name}</h3>
-                        <span class="shared-with-tag">with ${otherPlayerUsername}</span>
+                    <div class="group-title-and-progress">
+                        <div class="group-title-and-subtitle">
+                            <h3>${group.name}</h3>
+                            <span class="shared-with-tag">with ${otherPlayerUsername}</span>
+                        </div>
+                        ${progressBarHTML}
                     </div>
                 </div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
                     ${editBtnHTML}
