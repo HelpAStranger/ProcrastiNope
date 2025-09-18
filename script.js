@@ -194,6 +194,7 @@ let zIndexCounter = 1000; // Base z-index for modals
 const audioManager = {
     audioCtx: null,
     isInitialized: false,
+    masterGain: null, // NEW: Master gain node for global volume control
 
     // The soundBank defines how each sound is generated. Each entry is a function
     // that returns an oscillator, its duration, and a volume multiplier.
@@ -206,6 +207,7 @@ const audioManager = {
         'delete': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.2, vol: 1 }; },
         'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; },
         'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(800, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08); return { oscillator: o, duration: 0.1, vol: 0.8 }; },
+        'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; }, 'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.12, vol: 0.8 }; },
         'open': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(250, ctx.currentTime); o.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
         'close': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
         'share': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(659.25, ctx.currentTime + 0.15); return { oscillator: o, duration: 0.2, vol: 1 }; },
@@ -220,10 +222,24 @@ const audioManager = {
         if (this.isInitialized || this.audioCtx) return;
         try {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.audioCtx.createGain();
+            this.masterGain.connect(this.audioCtx.destination);
+            this.setVolume(settings.volume);
             this.isInitialized = true;
             console.log('Audio system initialized.');
         } catch (e) {
             console.error("Web Audio API not supported or could not be created.", e);
+        }
+    },
+
+    /**
+     * Sets the global volume for all sounds.
+     * @param {number} volume A value between 0.0 and 1.0.
+     */
+    setVolume(volume) {
+        if (this.isInitialized && this.masterGain) {
+            // Use a ramp to avoid clicks when changing volume.
+            this.masterGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), this.audioCtx.currentTime + 0.05);
         }
     },
 
@@ -253,11 +269,13 @@ const audioManager = {
         const now = this.audioCtx.currentTime;
         const gainNode = this.audioCtx.createGain();
         gainNode.connect(this.audioCtx.destination);
+        gainNode.connect(this.masterGain);
 
         const { oscillator, duration, vol } = soundGenerator(this.audioCtx);
         oscillator.connect(gainNode);
 
         const finalVolume = settings.volume * (vol || 1);
+        const finalVolume = (vol || 1);
 
         gainNode.gain.setValueAtTime(0, now);
         gainNode.gain.linearRampToValueAtTime(finalVolume, now + 0.01);
@@ -2479,6 +2497,8 @@ async function initializeAppLogic(initialUser) {
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
         if(typeof settings.volume === 'undefined') settings.volume = 0.3;
         volumeSlider.value = settings.volume;
+        if(typeof settings.volume === 'undefined') settings.volume = 0.3; audioManager.setVolume(settings.volume);
+        volumeSlider.value = settings.volume; 
         document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
         const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
         if(s) s.classList.add('selected');
@@ -2517,6 +2537,7 @@ async function initializeAppLogic(initialUser) {
     themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(e); audioManager.playSound('toggle'); } });
     colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
     volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
+    volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); audioManager.setVolume(settings.volume); });
     volumeSlider.addEventListener('change', () => audioManager.playSound('toggle'));
     
     function updateGoalDisplay(slider, display) {
