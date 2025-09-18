@@ -3830,46 +3830,47 @@ async function initializeAppLogic(initialUser) {
         renderAllLists(); // Re-render to show the original task as 'isShared'
     }
     
-    async function completeSharedQuestPart(task, uncompleting = false) {
+    async function completeSharedQuestPart(task, uncompleting = false) { // REFACTORED for robustness
         const questId = task.questId;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
-        
+
         const currentSharedQuestSnap = await getDoc(sharedQuestRef);
         if (!currentSharedQuestSnap.exists()) {
             console.error("Shared quest not found:", questId);
             return;
         }
         const currentSharedQuestData = currentSharedQuestSnap.data();
-
+    
         const updateData = {};
+        let willBeCompleted = false;
+
         if (isOwner) {
-            // Only proceed if the state is actually changing
-            if (!uncompleting && currentSharedQuestData.ownerCompleted) return;
-            if (uncompleting && !currentSharedQuestData.ownerCompleted) return;
+            if ((!uncompleting && currentSharedQuestData.ownerCompleted) || (uncompleting && !currentSharedQuestData.ownerCompleted)) return; // No change
             updateData.ownerCompleted = !uncompleting;
+            if (!uncompleting && currentSharedQuestData.friendCompleted) {
+                willBeCompleted = true;
+            }
         } else {
-            // Only proceed if the state is actually changing
-            if (!uncompleting && currentSharedQuestData.friendCompleted) return;
-            if (uncompleting && !currentSharedQuestData.friendCompleted) return;
+            if ((!uncompleting && currentSharedQuestData.friendCompleted) || (uncompleting && !currentSharedQuestData.friendCompleted)) return; // No change
             updateData.friendCompleted = !uncompleting;
+            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
+                willBeCompleted = true;
+            }
         }
-        
+
+        if (willBeCompleted) {
+            updateData.status = 'completed';
+        }
+
         await updateDoc(sharedQuestRef, updateData);
-        
+
         if (!uncompleting) {
             audioManager.playSound('complete');
             addXp(XP_PER_SHARED_QUEST / 2);
         } else {
             audioManager.playSound('delete');
             addXp(-(XP_PER_SHARED_QUEST / 2));
-        }
-
-        // Fetch the updated document to check if both are completed
-        const updatedDoc = await getDoc(sharedQuestRef);
-        if (updatedDoc.exists() && updatedDoc.data().ownerCompleted && updatedDoc.data().friendCompleted) {
-            // Now, just update the status. The onSnapshot listener will handle the animation.
-            await updateDoc(sharedQuestRef, { status: 'completed' });
         }
     }
     
