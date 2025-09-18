@@ -1077,6 +1077,8 @@ async function initializeAppLogic(initialUser) {
         const isOwner = user.uid === group.ownerUid;
         const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
 
+        const ownerIconHTML = `<svg class="owner-indicator-icon" title="Owned by ${isOwner ? 'You' : group.ownerUsername}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>`;
+
         const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
         const progressBarHTML = totalTasks > 0 ? `
@@ -1097,7 +1099,10 @@ async function initializeAppLogic(initialUser) {
                     <svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
                     <div class="group-title-and-progress">
                         <div class="group-title-and-subtitle">
-                            <h3>${group.name}</h3>
+                            <div class="group-title-with-icon">
+                                <h3>${group.name}</h3>
+                                ${ownerIconHTML}
+                            </div>
                             <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                         </div>
                         ${progressBarHTML}
