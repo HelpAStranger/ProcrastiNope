@@ -205,8 +205,6 @@ const audioManager = {
         'add': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
         'addGroup': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
         'delete': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.2, vol: 1 }; },
-        'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; },
-        'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(800, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08); return { oscillator: o, duration: 0.1, vol: 0.8 }; },
         'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; }, 'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.12, vol: 0.8 }; },
         'open': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(250, ctx.currentTime); o.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
         'close': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
@@ -268,13 +266,11 @@ const audioManager = {
 
         const now = this.audioCtx.currentTime;
         const gainNode = this.audioCtx.createGain();
-        gainNode.connect(this.audioCtx.destination);
         gainNode.connect(this.masterGain);
 
         const { oscillator, duration, vol } = soundGenerator(this.audioCtx);
         oscillator.connect(gainNode);
 
-        const finalVolume = settings.volume * (vol || 1);
         const finalVolume = (vol || 1);
 
         gainNode.gain.setValueAtTime(0, now);
@@ -2495,8 +2491,6 @@ async function initializeAppLogic(initialUser) {
         // Apply non-theme settings immediately
         document.documentElement.style.setProperty('--accent', settings.accentColor);
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
-        if(typeof settings.volume === 'undefined') settings.volume = 0.3;
-        volumeSlider.value = settings.volume;
         if(typeof settings.volume === 'undefined') settings.volume = 0.3; audioManager.setVolume(settings.volume);
         volumeSlider.value = settings.volume; 
         document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
@@ -2536,7 +2530,6 @@ async function initializeAppLogic(initialUser) {
     };
     themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(e); audioManager.playSound('toggle'); } });
     colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
-    volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); });
     volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); audioManager.setVolume(settings.volume); });
     volumeSlider.addEventListener('change', () => audioManager.playSound('toggle'));
     
