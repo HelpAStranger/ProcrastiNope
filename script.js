@@ -3558,11 +3558,7 @@ async function initializeAppLogic(initialUser) {
                         return; // Stop processing this change
                     }
 
-<<<<<<< HEAD
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
-=======
-                    // NEW: If a quest is newly marked as 'completed', trigger the finish animation for both users.
->>>>>>> parent of b954fc4 (Update script.js)
                     if (newQuest.status === 'completed') {
                         const oldQuest = questsMap.get(change.doc.id);
                         if (!oldQuest || oldQuest.status !== 'completed') {
