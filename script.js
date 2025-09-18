@@ -3925,8 +3925,9 @@ async function initializeAppLogic(initialUser) {
             return;
         }
 
-        if (!group || !group.tasks || group.tasks.filter(t => !t.isShared).length === 0) {
-            showConfirm("Cannot Share Group", "This group has no non-shared tasks to share.", () => {});
+        // Allow sharing empty groups, but block sharing groups that only contain already-shared tasks.
+        if (!group || (group.tasks && group.tasks.length > 0 && group.tasks.filter(t => !t.isShared).length === 0)) {
+            showConfirm("Cannot Share Group", "This group contains only tasks that are already shared individually. Add a new task to this group to share it.", () => {});
             return;
         }
 
