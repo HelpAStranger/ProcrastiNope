@@ -3537,7 +3537,18 @@ async function initializeAppLogic(initialUser) {
             // Process changes to update the map
             querySnapshot.docChanges().forEach((change) => {
                 if (change.type === 'removed') {
+                    const removedQuestData = questsMap.get(change.doc.id);
                     questsMap.delete(change.doc.id);
+
+                    // When a shared quest is deleted (e.g., after completion),
+                    // find and remove the original placeholder task from the owner's list.
+                    if (removedQuestData && removedQuestData.originalTaskId) {
+                        const { list } = findTaskAndContext(removedQuestData.originalTaskId);
+                        if (list) {
+                            const index = list.findIndex(t => t.id === removedQuestData.originalTaskId);
+                            if (index > -1) list.splice(index, 1);
+                        }
+                    }
                 } else { // 'added' or 'modified'
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
@@ -3616,7 +3627,17 @@ async function initializeAppLogic(initialUser) {
         unsubscribeFromSharedGroups = onSnapshot(q, (snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'removed') {
+                    const removedGroupData = groupsMap.get(change.doc.id);
                     groupsMap.delete(change.doc.id);
+
+                    // When a shared group is deleted (e.g., after completion),
+                    // find and remove the original placeholder group from the owner's list.
+                    if (removedGroupData && removedGroupData.originalGroupId) {
+                        const index = generalTaskGroups.findIndex(g => g.id === removedGroupData.originalGroupId);
+                        if (index > -1) {
+                            generalTaskGroups.splice(index, 1);
+                        }
+                    }
                 } else {
                     const newGroup = { ...change.doc.data(), id: change.doc.id };
 
