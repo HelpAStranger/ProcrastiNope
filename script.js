@@ -2240,12 +2240,13 @@ async function initializeAppLogic(initialUser) {
                     toggleTaskActions(taskItem);
                 } else if (e.target.closest('.task-buttons-wrapper')) {
                     // Clicks inside the actions menu
-                } else if (e.target.closest('.delete-btn')) {
-                    deleteSharedTask(sharedGroupId, id);
-                } else if (e.target.closest('.edit-btn')) {
-                    openEditSharedTaskModal(sharedGroupId, id);
-                } else if (e.target.closest('.timer-clock-btn')) {
-                    showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => {});
+                    if (e.target.closest('.delete-btn')) {
+                        deleteSharedTask(sharedGroupId, id);
+                    } else if (e.target.closest('.edit-btn')) {
+                        openEditSharedTaskModal(sharedGroupId, id);
+                    } else if (e.target.closest('.timer-clock-btn')) {
+                        showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => {});
+                    }
                 } else if (!e.target.closest('button')) {
                     // Click on body to complete
                     const isOwner = user.uid === group.ownerUid;
@@ -2430,10 +2431,23 @@ async function initializeAppLogic(initialUser) {
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
     timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); audioManager.playSound('toggle'); } });
-    addGroupForm.addEventListener('submit', (e) => { // eslint-disable-line
+    addGroupForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const name = newGroupInput.value.trim();
-        if (name) { if (currentEditingGroupId) { const isShared = sharedGroups.some(g => g.id === currentEditingGroupId); if (isShared) { editSharedGroupName(currentEditingGroupId, name); } else { editGroup(currentEditingGroupId, name); } } else { addGroup(name); } newGroupInput.value = ''; closeModal(addGroupModal); }
+        if (name) {
+            if (currentEditingGroupId) {
+                const isShared = sharedGroups.some(g => g.id === currentEditingGroupId);
+                if (isShared) {
+                    editSharedGroupName(currentEditingGroupId, name);
+                } else {
+                    editGroup(currentEditingGroupId, name);
+                }
+            } else {
+                addGroup(name);
+            }
+            newGroupInput.value = '';
+            closeModal(addGroupModal);
+        }
     });
     
     addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
