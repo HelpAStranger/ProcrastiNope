@@ -1678,38 +1678,20 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not edit task.", () => {});
         }
     };
-    const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => { // REFACTORED
     const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
-            const groupDoc = await getDoc(groupRef);
-            if (!groupDoc.exists()) return;
-    
-            const groupData = groupDoc.data();
-            const tasks = groupData.tasks;
-            const taskIndex = groupData.tasks.findIndex(t => t.id === taskId);
-            if (taskIndex === -1) return;
-    
-            const taskToUpdate = groupData.tasks[taskIndex];
-            const isOwner = user.uid === groupData.ownerUid;
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
                 if (!groupDoc.exists()) {
                     throw "Document does not exist!";
                 }
 
-            const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
-            if (taskToUpdate[myCompletionFlag] === !uncompleting) return; // State is already what we want
                 const groupData = groupDoc.data();
                 // Create a deep copy to modify, as Firestore data is immutable.
                 const tasks = groupData.tasks.map(t => ({ ...t }));
                 const taskIndex = tasks.findIndex(t => t.id === taskId);
 
-            taskToUpdate[myCompletionFlag] = !uncompleting;
-    
-            // The listener will detect when both are complete and handle deletion.
-            await updateDoc(groupRef, { tasks: tasks });
-    
                 if (taskIndex === -1) return; // Task not found, maybe already deleted.
 
                 const taskToUpdate = tasks[taskIndex];
@@ -3699,16 +3681,9 @@ async function initializeAppLogic(initialUser) {
                                     taskEl.classList.add('shared-quest-finished');
                                     createConfetti(taskEl);
                                     taskEl.addEventListener('animationend', async () => {
-                                        // Owner is responsible for removing the task from the array.
                                         // Owner is responsible for removing the task from the array to prevent race conditions.
                                         if (user.uid === newGroup.ownerUid) {
                                             const groupRef = doc(db, "sharedGroups", newGroup.id);
-                                            const currentGroupDoc = await getDoc(groupRef);
-                                            if (currentGroupDoc.exists()) {
-                                                const updatedTasks = currentGroupDoc.data().tasks.filter(t => t.id !== newTask.id);
-                                                // If this was the last task, delete the group doc entirely.
-                                                if (updatedTasks.length === 0) await deleteDoc(groupRef);
-                                                else await updateDoc(groupRef, { tasks: updatedTasks });
                                             try {
                                                 // We need to get the exact task object from Firestore to use arrayRemove.
                                                 const groupDoc = await getDoc(groupRef);
