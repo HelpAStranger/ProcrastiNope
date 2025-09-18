@@ -1677,30 +1677,27 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not edit task.", () => {});
         }
     };
-    const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
+    const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => { // REFACTORED
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
             const groupDoc = await getDoc(groupRef);
             if (!groupDoc.exists()) return;
     
             const groupData = groupDoc.data();
+            const tasks = groupData.tasks;
             const taskIndex = groupData.tasks.findIndex(t => t.id === taskId);
             if (taskIndex === -1) return;
     
             const taskToUpdate = groupData.tasks[taskIndex];
             const isOwner = user.uid === groupData.ownerUid;
+
+            const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
+            if (taskToUpdate[myCompletionFlag] === !uncompleting) return; // State is already what we want
+
+            taskToUpdate[myCompletionFlag] = !uncompleting;
     
-            if (isOwner) taskToUpdate.ownerCompleted = !uncompleting;
-            else taskToUpdate.friendCompleted = !uncompleting;
-    
-            const allTasksCompleted = groupData.tasks.every(t => t.ownerCompleted && t.friendCompleted);
-            
-            const updatePayload = { tasks: groupData.tasks };
-            if (allTasksCompleted) {
-                updatePayload.status = 'completed';
-            }
-    
-            await updateDoc(groupRef, updatePayload);
+            // The listener will detect when both are complete and handle deletion.
+            await updateDoc(groupRef, { tasks: tasks });
     
             if (!uncompleting) {
                 audioManager.playSound('complete');
@@ -3645,6 +3642,39 @@ async function initializeAppLogic(initialUser) {
                     const oldGroup = groupsMap.get(change.doc.id);
                     if (oldGroup && oldGroup.isExpanded) {
                         newGroup.isExpanded = true;
+                    }
+
+                    // NEW: Check for newly completed tasks within the group to animate and delete them.
+                    if (oldGroup && change.type === 'modified' && newGroup.tasks && oldGroup.tasks) {
+                        newGroup.tasks.forEach(newTask => {
+                            const oldTask = oldGroup.tasks.find(t => t.id === newTask.id);
+                            if (!oldTask) return; // Task is new, not modified.
+
+                            const wasCompleted = oldTask.ownerCompleted && oldTask.friendCompleted;
+                            const isNowCompleted = newTask.ownerCompleted && newTask.friendCompleted;
+
+                            if (isNowCompleted && !wasCompleted) {
+                                const taskEl = document.querySelector(`.task-item[data-id="${newTask.id}"][data-shared-group-id="${newGroup.id}"]`);
+                                if (taskEl) {
+                                    audioManager.playSound('sharedQuestFinish');
+                                    taskEl.classList.add('shared-quest-finished');
+                                    createConfetti(taskEl);
+                                    taskEl.addEventListener('animationend', async () => {
+                                        // Owner is responsible for removing the task from the array.
+                                        if (user.uid === newGroup.ownerUid) {
+                                            const groupRef = doc(db, "sharedGroups", newGroup.id);
+                                            const currentGroupDoc = await getDoc(groupRef);
+                                            if (currentGroupDoc.exists()) {
+                                                const updatedTasks = currentGroupDoc.data().tasks.filter(t => t.id !== newTask.id);
+                                                // If this was the last task, delete the group doc entirely.
+                                                if (updatedTasks.length === 0) await deleteDoc(groupRef);
+                                                else await updateDoc(groupRef, { tasks: updatedTasks });
+                                            }
+                                        }
+                                    }, { once: true });
+                                }
+                            }
+                        });
                     }
 
                     // Handle when a friend rejects or abandons a group share
