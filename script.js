@@ -475,9 +475,9 @@ async function initializeAppLogic(initialUser) {
 
     let user = initialUser;
 
-    let lastSection = 'daily';
+    let lastSection = 'daily', standaloneDailyQuests = [], dailyTaskGroups = [];
 
-    let dailyTasks = [], standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
+    let standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let isMultiSelectModeActive = false;
     let selectedQuestIds = new Set();
     let sharedGroups = [];
@@ -498,7 +498,8 @@ async function initializeAppLogic(initialUser) {
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
     
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
-    const dailyTaskListContainer = document.getElementById('daily-task-list');
+    const dailyStandaloneTaskListContainer = document.getElementById('daily-standalone-task-list');
+    const dailyGroupListContainer = document.getElementById('daily-group-list-container');
     const standaloneTaskListContainer = document.getElementById('standalone-task-list');
     const generalTaskListContainer = document.getElementById('general-task-list-container');
     const playerLevelEl = document.getElementById('player-level');
@@ -507,6 +508,7 @@ async function initializeAppLogic(initialUser) {
     const xpTextEl = document.getElementById('xp-text');
     const levelDisplayEl = document.querySelector('.level-display');
     const addTaskTriggerBtnDaily = document.querySelector('.add-task-trigger-btn[data-list="daily"]');
+    const addDailyGroupBtn = document.getElementById('add-daily-group-btn');
     const addStandaloneTaskBtn = document.getElementById('add-standalone-task-btn');
     const addGroupBtn = document.getElementById('add-group-btn');
     
@@ -736,14 +738,19 @@ async function initializeAppLogic(initialUser) {
 
     const saveState = () => {
         // Create a version of generalTaskGroups without the isExpanded property for saving
-        const groupsToSave = generalTaskGroups
+        const mainGroupsToSave = generalTaskGroups
             .filter(g => g) // Filter out any undefined or null items before mapping
             .map(({ isExpanded, ...rest }) => rest);
 
+        const dailyGroupsToSave = dailyTaskGroups
+            .filter(g => g)
+            .map(({ isExpanded, ...rest }) => rest);
+
         const data = { 
-            dailyTasks, 
+            standaloneDailyQuests, 
+            dailyTaskGroups: dailyGroupsToSave,
             standaloneMainQuests, 
-            generalTaskGroups: groupsToSave, // Use the cleaned version
+            generalTaskGroups: mainGroupsToSave, // Use the cleaned version
             playerData, 
             settings
         };
@@ -765,15 +772,16 @@ async function initializeAppLogic(initialUser) {
         // Store the current expanded state of groups before loading new data
         const expandedGroupIds = new Set();
         if (Array.isArray(generalTaskGroups)) {
-            generalTaskGroups.forEach(g => {
-                if (g.isExpanded) {
-                    expandedGroupIds.add(g.id);
-                }
-            });
+            generalTaskGroups.forEach(g => { if (g && g.isExpanded) expandedGroupIds.add(g.id); });
+        }
+        if (Array.isArray(dailyTaskGroups)) {
+            dailyTaskGroups.forEach(g => { if (g && g.isExpanded) expandedGroupIds.add(g.id); });
         }
     
         // Load persisted data
-        dailyTasks = data.dailyTasks || [];
+        // For backwards compatibility, if standaloneDailyQuests doesn't exist, use the old dailyTasks array.
+        standaloneDailyQuests = data.standaloneDailyQuests || data.dailyTasks || [];
+        dailyTaskGroups = data.dailyTaskGroups || [];
         standaloneMainQuests = data.standaloneMainQuests || [];
         generalTaskGroups = data.generalTaskGroups || [];
         playerData = data.playerData || { level: 1, xp: 0 };
@@ -782,6 +790,15 @@ async function initializeAppLogic(initialUser) {
         localDataTimestamp = data.lastModified || 0;
         
         // Re-apply the transient state to the newly loaded data
+        dailyTaskGroups.forEach(group => {
+            if (group) { // Guard against undefined/null items
+                if (expandedGroupIds.has(group.id)) {
+                    group.isExpanded = true;
+                } else {
+                    group.isExpanded = false;
+                }
+            }
+        });
         generalTaskGroups.forEach(group => {
             if (group) { // Guard against undefined/null items
                 if (expandedGroupIds.has(group.id)) {
@@ -892,7 +909,8 @@ async function initializeAppLogic(initialUser) {
         const lastVisit = localStorage.getItem('lastVisitDate');
         if (today !== lastVisit) {
             const yesterday = new Date(Date.now() - 86400000).toDateString();
-            dailyTasks.forEach(task => {
+            const allDailies = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || [])];
+            allDailies.forEach(task => {
                 // Only reset non-shared tasks automatically
                 if(task.isShared) return; 
                 if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
@@ -941,8 +959,9 @@ async function initializeAppLogic(initialUser) {
         xpBarEl.style.width = `${progressPercent}%`;
     }
     function checkAllTasksCompleted() {
+        const allDailyTasks = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || [])];
         // Only consider non-shared tasks for "all tasks completed" logic
-        const allDailiesDone = dailyTasks.length > 0 && dailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
+        const allDailiesDone = allDailyTasks.length > 0 && allDailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
         const noStandaloneQuests = standaloneMainQuests.filter(t => !t.isShared).length === 0;
         const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.filter(t => !t.isShared).length === 0);
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
@@ -950,10 +969,11 @@ async function initializeAppLogic(initialUser) {
     
     // FIX: Updated rendering functions to correctly display tasks based on data
     const renderDailyTasks = () => { 
-        dailyTaskListContainer.innerHTML = '';
+        dailyStandaloneTaskListContainer.innerHTML = '';
+        dailyGroupListContainer.innerHTML = '';
 
-        // Get local daily tasks (placeholders for pending shares, and normal tasks)
-        const localDailyTasks = dailyTasks.filter(task => {
+        // Get standalone daily tasks (placeholders for pending shares, and normal tasks)
+        const localStandaloneDailyTasks = standaloneDailyQuests.filter(task => {
             if (!task.isShared) return true; // Render normal tasks
             // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
@@ -962,12 +982,18 @@ async function initializeAppLogic(initialUser) {
         // Get active/completed shared quests that originated from a daily quest
         const remoteDailySharedQuests = sharedQuests.filter(sq => sq.originalTaskType === 'daily');
 
-        // Render them
-        localDailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily')));
-        remoteDailySharedQuests.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'shared')));
+        // Render standalone dailies and their associated shared quests
+        localStandaloneDailyTasks.forEach(task => dailyStandaloneTaskListContainer.appendChild(createTaskElement(task, 'daily')));
+        remoteDailySharedQuests.forEach(task => dailyStandaloneTaskListContainer.appendChild(createTaskElement(task, 'shared')));
+
+        // Render daily groups
+        dailyTaskGroups.forEach(group => {
+            const el = createGroupElement(group);
+            dailyGroupListContainer.appendChild(el);
+        });
         
         // Update empty message
-        const totalDailies = localDailyTasks.length + remoteDailySharedQuests.length;
+        const totalDailies = localStandaloneDailyTasks.length + remoteDailySharedQuests.length + dailyTaskGroups.length;
         noDailyTasksMessage.style.display = totalDailies === 0 ? 'block' : 'none';
     };
     const renderStandaloneTasks = () => { 
@@ -1058,13 +1084,15 @@ async function initializeAppLogic(initialUser) {
             return el;
         }
 
-        el.innerHTML = `<header class="main-quest-group-header"><div class="multi-select-checkbox"></div><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions"><button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button><button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
+        const shareBtnHTML = group.type !== 'daily' ? `<button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>` : '';
+
+        el.innerHTML = `<header class="main-quest-group-header"><div class="multi-select-checkbox"></div><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">${shareBtnHTML}<button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
         const ul = el.querySelector('ul'); 
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
         });
-        tasksToRender.forEach(task => ul.appendChild(createTaskElement(task, 'group')));
+        tasksToRender.forEach(task => ul.appendChild(createTaskElement(task, group.type === 'daily' ? 'daily' : 'group')));
         return el;
     };
     const createSharedGroupElement = (group) => {
@@ -1173,6 +1201,10 @@ async function initializeAppLogic(initialUser) {
             li.classList.add('shared-quest');
             if (allCompleted) {
                 li.classList.add('all-completed');
+            }
+            // NEW: Check for the transient finishing flag to apply animation
+            if (task.isFinishing) {
+                li.classList.add('shared-quest-finished');
             }
             li.dataset.id = task.questId; // Use questId for shared quests
 
@@ -1291,20 +1323,29 @@ async function initializeAppLogic(initialUser) {
 
         if (list === 'daily') {
             newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
-            dailyTasks.push(newTask);
+            standaloneDailyQuests.push(newTask);
             taskType = 'daily';
-            container = dailyTaskListContainer;
+            container = dailyStandaloneTaskListContainer;
         } else if (list === 'standalone') {
             newTask = { ...common, isShared: false };
             standaloneMainQuests.push(newTask);
             taskType = 'standalone';
             container = standaloneTaskListContainer;
         } else {
-            const group = generalTaskGroups.find(g => g.id === list);
-            if (group) {
-                if (!group.tasks) group.tasks = [];
+            const dailyGroup = dailyTaskGroups.find(g => g.id === list);
+            const mainGroup = generalTaskGroups.find(g => g.id === list);
+
+            if (dailyGroup) {
+                if (!dailyGroup.tasks) dailyGroup.tasks = [];
+                // Create a daily task, but goal is 0 as it's not set when adding to group
+                newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
+                dailyGroup.tasks.push(newTask);
+                taskType = 'daily'; // Use 'daily' so createTaskElement renders it correctly
+                container = document.querySelector(`.task-list-group[data-group-id="${list}"]`);
+            } else if (mainGroup) {
+                if (!mainGroup.tasks) mainGroup.tasks = [];
                 newTask = { ...common, isShared: false };
-                group.tasks.push(newTask);
+                mainGroup.tasks.push(newTask);
                 taskType = 'group';
                 container = document.querySelector(`.task-list-group[data-group-id="${list}"]`);
             }
@@ -1325,13 +1366,21 @@ async function initializeAppLogic(initialUser) {
         saveState(); 
         audioManager.playSound('add');
     };
-    const addGroup = (name) => { 
-        const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false };
-        generalTaskGroups.push(newGroup);
+    const addGroup = (name, type) => { 
+        const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false, type };
+        let container;
+
+        if (type === 'daily') {
+            dailyTaskGroups.push(newGroup);
+            container = dailyGroupListContainer;
+        } else { // 'main'
+            generalTaskGroups.push(newGroup);
+            container = generalTaskListContainer;
+        }
 
         const groupEl = createGroupElement(newGroup);
         groupEl.classList.add('adding');
-        generalTaskListContainer.appendChild(groupEl);
+        container.appendChild(groupEl);
         groupEl.addEventListener('animationend', () => groupEl.classList.remove('adding'), { once: true });
         noGeneralTasksMessage.style.display = 'none';
 
@@ -1339,7 +1388,7 @@ async function initializeAppLogic(initialUser) {
         audioManager.playSound('addGroup'); 
     };
     const editGroup = (id, newName) => {
-        const group = generalTaskGroups.find(g => g.id === id);
+        const group = generalTaskGroups.find(g => g.id === id) || dailyTaskGroups.find(g => g.id === id);
         if (group) {
             group.name = newName;
             saveState();
@@ -1373,12 +1422,30 @@ async function initializeAppLogic(initialUser) {
             saveState(); // Save the state to persist the undo.
         }
     };
-    const deleteGroup = (id) => { const name = generalTaskGroups.find(g => g.id === id)?.name || 'this group'; showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => { generalTaskGroups = generalTaskGroups.filter(g => g.id !== id); renderAllLists(); saveState(); audioManager.playSound('delete'); }); };
+    const deleteGroup = (id) => {
+        const mainGroup = generalTaskGroups.find(g => g.id === id);
+        const dailyGroup = dailyTaskGroups.find(g => g.id === id);
+        const group = mainGroup || dailyGroup;
+        const name = group?.name || 'this group';
+        showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => {
+            if (mainGroup) {
+                generalTaskGroups = generalTaskGroups.filter(g => g.id !== id);
+            } else if (dailyGroup) {
+                dailyTaskGroups = dailyTaskGroups.filter(g => g.id !== id);
+            }
+            renderAllLists();
+            saveState();
+            audioManager.playSound('delete');
+        });
+    };
     const findTaskAndContext = (id) => {
-        let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
+        let task = standaloneDailyQuests.find(t => t && t.id === id); if (task) return { task, list: standaloneDailyQuests, type: 'daily' };
+        for (const g of dailyTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'daily' }; } }
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
         for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } }
 
+        const dailyGroup = dailyTaskGroups.find(g => g && g.id === id);
+        if (dailyGroup) return { group: dailyGroup, type: 'daily-group-header' };
         // If no task was found, check if the ID matches a general group ID.
         const generalGroup = generalTaskGroups.find(g => g && g.id === id);
         if (generalGroup) return { group: generalGroup, type: 'group-header' };
@@ -1812,7 +1879,7 @@ async function initializeAppLogic(initialUser) {
                     console.log("Share to cancel not found, it was likely already handled.");
                     // Revert the local task just in case the listener is slow or failed
                     let originalTask;
-                    [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                    [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || []), ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
                         if (t && t.sharedQuestId === sharedQuestId) originalTask = t;
                     });
                     if (originalTask) revertSharedQuest(originalTask.id);
@@ -1978,7 +2045,7 @@ async function initializeAppLogic(initialUser) {
         activeTimers.clear();
 
         let needsSaveAndRender = false;
-        const allTasks = [...dailyTasks, ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
+        const allTasks = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || []), ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
         
         allTasks.forEach(t => {
             const isCompleted = t.completedToday || t.pendingDeletion;
@@ -2482,7 +2549,11 @@ async function initializeAppLogic(initialUser) {
                     editGroup(currentEditingGroupId, name);
                 }
             } else {
-                addGroup(name);
+                if (currentListToAdd === 'daily-group') {
+                    addGroup(name, 'daily');
+                } else {
+                    addGroup(name, 'main');
+                }
             }
             newGroupInput.value = '';
             closeModal(addGroupModal);
@@ -2490,9 +2561,19 @@ async function initializeAppLogic(initialUser) {
     });
     
     addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
+    addDailyGroupBtn.addEventListener('click', () => {
+        currentEditingGroupId = null;
+        currentListToAdd = 'daily-group'; // Use this to differentiate
+        addGroupModal.querySelector('h2').textContent = 'Create New Daily Group';
+        addGroupModal.querySelector('.modal-submit-btn').textContent = 'Create';
+        newGroupInput.value = '';
+        openModal(addGroupModal);
+        focusOnDesktop(newGroupInput);
+    });
     addStandaloneTaskBtn.addEventListener('click', () => { currentListToAdd = 'standalone'; weeklyGoalContainer.style.display = 'none'; addTaskModalTitle.textContent = 'Add Main Quest'; openModal(addTaskModal); focusOnDesktop(newTaskInput); });
     addGroupBtn.addEventListener('click', () => {
         currentEditingGroupId = null;
+        currentListToAdd = 'main-group'; // Differentiate
         addGroupModal.querySelector('h2').textContent = 'Create New Group';
         addGroupModal.querySelector('.modal-submit-btn').textContent = 'Create';
         newGroupInput.value = '';
@@ -2595,7 +2676,7 @@ async function initializeAppLogic(initialUser) {
     weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
     editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
     
-    if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyTasks = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
+    if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; standaloneDailyQuests = []; dailyTaskGroups = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
     if (exportDataBtn) exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
     if (resetCloudDataBtn) {
         resetCloudDataBtn.addEventListener('click', () => {
@@ -2604,6 +2685,7 @@ async function initializeAppLogic(initialUser) {
                 dailyTasks = [];
                 standaloneMainQuests = [];
                 generalTaskGroups = [];
+                dailyTaskGroups = []; // Also reset daily groups
                 renderAllLists();
                 saveState(); // This will save the empty state to Firestore because `user` is not null
                 audioManager.playSound('delete');
@@ -2823,8 +2905,9 @@ async function initializeAppLogic(initialUser) {
             // restricted by group, this is a minor visual trade-off for smoothness.
         }
 
-        const commonTaskOptions = {
+        const commonTaskOptions = (groupName) => ({
             animation: 250, // Smoother animation
+            group: groupName,
             delay: 150, // PERF: Reduced delay for a more responsive feel.
             delayOnTouchOnly: true, // PERF: Start drag immediately on desktop.
             onStart: (evt) => {
@@ -2841,13 +2924,39 @@ async function initializeAppLogic(initialUser) {
                 // PERF: Removed adding a class to body to prevent expensive global animations.
             },
             onEnd: (evt) => { document.body.classList.remove('is-dragging'); onTaskDrop(evt); }
-        };
-
-        new Sortable(dailyTaskListContainer, { ...commonTaskOptions, group: 'dailyQuests' });
-        new Sortable(standaloneTaskListContainer, { ...commonTaskOptions, group: 'mainQuests' });
-        document.querySelectorAll('.task-list-group').forEach(listEl => {
-            new Sortable(listEl, { ...commonTaskOptions, group: 'mainQuests' });
         });
+
+        new Sortable(dailyStandaloneTaskListContainer, commonTaskOptions('dailyQuests'));
+        new Sortable(standaloneTaskListContainer, commonTaskOptions('mainQuests'));
+
+        document.querySelectorAll('.task-list-group').forEach(listEl => {
+            const groupId = listEl.dataset.groupId;
+            if (!groupId) return; // Skip shared group lists which don't have this
+
+            const { group } = findTaskAndContext(groupId);
+            if (group && group.type) { // group.type will be 'daily' or 'main'
+                const sortableGroupName = group.type === 'daily' ? 'dailyQuests' : 'mainQuests';
+                new Sortable(listEl, commonTaskOptions(sortableGroupName));
+            }
+        });
+
+        new Sortable(dailyGroupListContainer, {
+            animation: 250,
+            handle: '.main-quest-group-header',
+            delay: 150,
+            delayOnTouchOnly: true,
+            onStart: (evt) => {
+                document.body.classList.add('is-dragging');
+                evt.item.classList.remove('adding', 'removing');
+            },
+            onEnd: (e) => {
+                document.body.classList.remove('is-dragging');
+                const [item] = dailyTaskGroups.splice(e.oldIndex, 1);
+                dailyTaskGroups.splice(e.newIndex, 0, item);
+                saveState();
+            }
+        });
+
         new Sortable(generalTaskListContainer, {
             animation: 250, // Smoother animation
             handle: '.main-quest-group-header',
@@ -3629,6 +3738,8 @@ async function initializeAppLogic(initialUser) {
                     if (newQuest.status === 'completed') {
                         const oldQuest = questsMap.get(change.doc.id);
                         if (!oldQuest || oldQuest.status !== 'completed') {
+                            // Add a transient flag to ensure the animation class is applied even after a re-render.
+                            newQuest.isFinishing = true;
                             finishSharedQuestAnimation(newQuest);
                         }
                     }
@@ -3887,7 +3998,7 @@ async function initializeAppLogic(initialUser) {
 
         // Step 3: Save the updated local state to Firestore
         const dataToSave = { 
-            dailyTasks: dailyTasks, 
+            standaloneDailyQuests: standaloneDailyQuests, 
             standaloneMainQuests: standaloneMainQuests, 
             generalTaskGroups: generalTaskGroups.map(({ isExpanded, ...rest }) => rest),
             playerData: playerData, 
@@ -3948,33 +4059,31 @@ async function initializeAppLogic(initialUser) {
         audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
         
+        // The animation class is now added by createTaskElement during the re-render.
+        // We just need to trigger the confetti.
         if (taskEl) {
-            taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
-            taskEl.addEventListener('animationend', async () => {
-                // Only the owner deletes the document to prevent race conditions.
-                const isOwner = user && questData.ownerUid === user.uid;
-                if (isOwner) {
-                    const sharedQuestRef = doc(db, "sharedQuests", questData.id);
-                    await deleteDoc(sharedQuestRef).catch(err => {
-                        if (err.code !== 'not-found') {
-                            console.error("Error deleting shared quest:", getCoolErrorMessage(err));
-                        }
-                    });
-                }
-            }, { once: true });
-        } else {
-            // If element not found (e.g., user on different screen), owner still cleans up.
+        }
+
+        // Use a timeout that matches the animation duration. This is more robust
+        // than relying on the animationend event, which can be cancelled if the
+        // element is removed from the DOM by a re-render.
+        setTimeout(async () => {
             const isOwner = user && questData.ownerUid === user.uid;
             if (isOwner) {
                 const sharedQuestRef = doc(db, "sharedQuests", questData.id);
-                await deleteDoc(sharedQuestRef).catch(err => {
-                    if (err.code !== 'not-found') {
-                        console.error("Error deleting shared quest:", getCoolErrorMessage(err));
+                try {
+                    // Check if the document still exists. This handles race conditions
+                    // where both clients might try to delete the quest.
+                    const docSnap = await getDoc(sharedQuestRef);
+                    if (docSnap.exists()) {
+                        await deleteDoc(sharedQuestRef);
                     }
-                });
+                } catch (err) {
+                        console.error("Error deleting shared quest:", getCoolErrorMessage(err));
+                }
             }
-        }
+        }, 1500); // Matches the 1.5s animation duration in style.css
     }
 
     async function openShareGroupModal(groupId) {
