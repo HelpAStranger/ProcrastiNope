@@ -1359,7 +1359,7 @@ body:not(.is-dragging) .task-item.shared-group-task:not(.my-part-completed):hove
 }
 
 .status-indicator.completed {
-    background-color: var(--accent-green);
+    background-color: var(--accent);
 }
 
 .status-indicator.completed::after {
