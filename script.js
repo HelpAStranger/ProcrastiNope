@@ -1818,8 +1818,23 @@ async function initializeAppLogic(initialUser) {
         
         // 3. Apply the optimistic state to the local data model and re-render for instant feedback (e.g., strikethrough).
         group.tasks[taskIndex] = task;
-        renderAllLists();
-
+        
+        // 4. Update just the specific task element for instant feedback, avoiding a full re-render.
+        const taskEl = document.querySelector(`.task-item[data-id="${taskId}"][data-shared-group-id="${groupId}"]`);
+        if (taskEl) {
+            if (uncompleting) {
+                taskEl.classList.remove('my-part-completed');
+            } else {
+                // If it's not the final completion, just add the strikethrough class.
+                // If it IS the final completion, the animation function will handle the visuals.
+                if (!task.status || task.status !== 'completed') {
+                    taskEl.classList.add('my-part-completed');
+                }
+            }
+        } else {
+            // Fallback if the element isn't found.
+            renderAllLists();
+        }
         // --- Database Synchronization ---
         // 4. Run a transaction to persist the change.
         const groupRef = doc(db, "sharedGroups", groupId);
@@ -4139,6 +4154,7 @@ async function initializeAppLogic(initialUser) {
 
         const taskEl = document.querySelector(`.task-item[data-id="${task.id}"][data-shared-group-id="${group.id}"]`);
         if (taskEl) {
+            taskEl.classList.add('my-part-completed'); // Add strikethrough for consistency
             taskEl.classList.add('shared-quest-finished'); // Reuse the same animation
             createConfetti(taskEl);
 
