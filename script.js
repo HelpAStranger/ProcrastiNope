@@ -944,69 +944,62 @@ async function initializeAppLogic(initialUser) {
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
     }
     
-    const renderSharedItems = () => {
-        sharedQuestsContainer.innerHTML = '';
-        
-        // 1. Render Shared Groups
-        sharedGroups.forEach(group => {
-            const groupEl = createSharedGroupElement(group);
-            sharedQuestsContainer.appendChild(groupEl);
-        });
-    
-        // 2. Render Individual Shared Quests
-        const individualQuests = sharedQuests.filter(q => !q.sharedGroupName);
-        if (individualQuests.length > 0) {
-            const groupEl = document.createElement('div');
-            groupEl.className = 'shared-quest-group';
-            groupEl.innerHTML = `<h3 class="shared-group-title">Individual Shared Quests</h3>`;
-            const ul = document.createElement('ul');
-            ul.className = 'shared-quest-list';
-            individualQuests.forEach(task => ul.appendChild(createTaskElement(task, 'shared')));
-            groupEl.appendChild(ul);
-            sharedQuestsContainer.appendChild(groupEl);
-        }
-    };
-    
     // FIX: Updated rendering functions to correctly display tasks based on data
     const renderDailyTasks = () => { 
         dailyTaskListContainer.innerHTML = '';
-        // Only render daily tasks that are NOT associated with an active or completed shared quest.
-        // The placeholder for pending shares should still be rendered.
-        const tasksToRender = dailyTasks.filter(task => {
+
+        // Get local daily tasks (placeholders for pending shares, and normal tasks)
+        const localDailyTasks = dailyTasks.filter(task => {
             if (!task.isShared) return true; // Render normal tasks
             // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
         });
 
-        tasksToRender.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily')));
-        noDailyTasksMessage.style.display = tasksToRender.length === 0 ? 'block' : 'none';
+        // Get active/completed shared quests that originated from a daily quest
+        const remoteDailySharedQuests = sharedQuests.filter(sq => sq.originalTaskType === 'daily');
+
+        // Render them
+        localDailyTasks.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'daily')));
+        remoteDailySharedQuests.forEach(task => dailyTaskListContainer.appendChild(createTaskElement(task, 'shared')));
+        
+        // Update empty message
+        const totalDailies = localDailyTasks.length + remoteDailySharedQuests.length;
+        noDailyTasksMessage.style.display = totalDailies === 0 ? 'block' : 'none';
     };
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = '';
-        const tasksToRender = standaloneMainQuests.filter(task => {
+
+        // Get local standalone tasks
+        const localStandaloneTasks = standaloneMainQuests.filter(task => {
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
         });
-        tasksToRender.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone')));
+
+        // Get remote shared quests that were standalone OR from a group
+        const remoteMainSharedQuests = sharedQuests.filter(sq => sq.originalTaskType === 'standalone' || sq.originalTaskType === 'group');
+
+        // Render
+        localStandaloneTasks.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'standalone')));
+        remoteMainSharedQuests.forEach(task => standaloneTaskListContainer.appendChild(createTaskElement(task, 'shared')));
     };
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
+
+        // Render normal groups
         generalTaskGroups.forEach(group => {
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
         });
 
-        const hasVisibleStandalone = standaloneMainQuests.some(task => {
-            if (!task.isShared) return true;
-            return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        // Render shared groups
+        sharedGroups.forEach(group => {
+            const groupEl = createSharedGroupElement(group);
+            generalTaskListContainer.appendChild(groupEl);
         });
 
-        const hasVisibleGrouped = generalTaskGroups.some(g =>
-            g.tasks && g.tasks.some(task => {
-                if (!task.isShared) return true;
-                return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
-            })
-        );
+        // Update empty message based on the content of both standalone and grouped lists
+        const hasVisibleStandalone = standaloneTaskListContainer.children.length > 0;
+        const hasVisibleGrouped = generalTaskListContainer.children.length > 0;
 
         noGeneralTasksMessage.style.display = (hasVisibleStandalone || hasVisibleGrouped) ? 'none' : 'block';
     };
@@ -2862,7 +2855,7 @@ async function initializeAppLogic(initialUser) {
         }
         if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
     }
-    const renderAllLists = () => { renderSharedItems(); renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingItems(); initSortable(); resumeTimers(); };
+    const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingItems(); initSortable(); resumeTimers(); };
     
     function setInitialActiveTab() {
         // The animation for the nav buttons is the longest, finishing around 0.4s (delay) + 0.4s (duration) = 0.8s.
