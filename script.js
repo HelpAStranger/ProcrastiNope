@@ -488,6 +488,7 @@ async function initializeAppLogic(initialUser) {
     let currentListToAdd = null, currentEditingTaskId = null, currentEditingGroupId = null;
     // PERF: Refactored timers to use CSS transitions instead of a JS loop.
     const lastClickTimes = new Map();
+    let sortableInstances = [];
     const CLICK_DEBOUNCE_TIME = 250; // ms, to prevent double-clicks
     let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
     let undoTimeoutMap = new Map();
@@ -2919,6 +2920,10 @@ async function initializeAppLogic(initialUser) {
     }
     
     function initSortable() {
+        // Destroy any existing Sortable instances to prevent memory leaks and errors.
+        sortableInstances.forEach(s => s.destroy());
+        sortableInstances = [];
+
         function onTaskDrop(evt) {
             // The onStart handler prevents shared tasks from being dragged.
             // By removing renderAllLists(), we get a smooth animation.
@@ -2941,8 +2946,8 @@ async function initializeAppLogic(initialUser) {
             const toGroupId = toListEl.dataset.groupId;
             let destListArray;
 
-            if (toListId === 'daily-task-list') {
-                destListArray = dailyTasks;
+            if (toListId === 'daily-standalone-task-list') {
+                destListArray = standaloneDailyQuests;
             } else if (toListId === 'standalone-task-list') {
                 destListArray = standaloneMainQuests;
             } else if (toGroupId) {
@@ -2988,8 +2993,8 @@ async function initializeAppLogic(initialUser) {
             onEnd: (evt) => { document.body.classList.remove('is-dragging'); onTaskDrop(evt); }
         });
 
-        new Sortable(dailyStandaloneTaskListContainer, commonTaskOptions('dailyQuests'));
-        new Sortable(standaloneTaskListContainer, commonTaskOptions('mainQuests'));
+        sortableInstances.push(new Sortable(dailyStandaloneTaskListContainer, commonTaskOptions('dailyQuests')));
+        sortableInstances.push(new Sortable(standaloneTaskListContainer, commonTaskOptions('mainQuests')));
 
         document.querySelectorAll('.task-list-group').forEach(listEl => {
             const groupId = listEl.dataset.groupId;
@@ -2998,11 +3003,11 @@ async function initializeAppLogic(initialUser) {
             const { group } = findTaskAndContext(groupId);
             if (group && group.type) { // group.type will be 'daily' or 'main'
                 const sortableGroupName = group.type === 'daily' ? 'dailyQuests' : 'mainQuests';
-                new Sortable(listEl, commonTaskOptions(sortableGroupName));
+                sortableInstances.push(new Sortable(listEl, commonTaskOptions(sortableGroupName)));
             }
         });
 
-        new Sortable(dailyGroupListContainer, {
+        sortableInstances.push(new Sortable(dailyGroupListContainer, {
             animation: 250,
             handle: '.main-quest-group-header',
             delay: 150,
@@ -3017,9 +3022,9 @@ async function initializeAppLogic(initialUser) {
                 dailyTaskGroups.splice(e.newIndex, 0, item);
                 saveState();
             }
-        });
+        }));
 
-        new Sortable(generalTaskListContainer, {
+        sortableInstances.push(new Sortable(generalTaskListContainer, {
             animation: 250, // Smoother animation
             handle: '.main-quest-group-header',
             delay: 150, // PERF: Reduced delay.
@@ -3035,7 +3040,7 @@ async function initializeAppLogic(initialUser) {
                 generalTaskGroups.splice(e.newIndex, 0, item);
                 saveState();
             }
-        });
+        }));
     }
 
     function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
