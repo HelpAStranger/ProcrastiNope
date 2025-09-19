@@ -3595,11 +3595,15 @@ async function initializeAppLogic(initialUser) {
                     const removedQuestData = questsMap.get(change.doc.id);
                     questsMap.delete(change.doc.id);
 
-                    // When a shared quest is deleted (e.g., after completion),
-                    // find and remove the original placeholder task from the owner's list.
-                    if (removedQuestData && removedQuestData.originalTaskId) {
+                    // When a shared quest is deleted, we need to clean up the original placeholder task.
+                    // This should ONLY happen for quests that were successfully completed.
+                    // For quests that were unshared, abandoned, or rejected, the 'revertSharedQuest'
+                    // function has already turned the placeholder back into a normal quest.
+                    // Deleting it here would incorrectly remove the user's reverted quest.
+                    if (removedQuestData && removedQuestData.originalTaskId && removedQuestData.status === 'completed') {
                         const { list } = findTaskAndContext(removedQuestData.originalTaskId);
                         if (list) {
+                            // Find and remove the original placeholder task from the owner's list.
                             const index = list.findIndex(t => t.id === removedQuestData.originalTaskId);
                             if (index > -1) list.splice(index, 1);
                         }
