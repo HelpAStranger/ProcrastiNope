@@ -2932,11 +2932,13 @@ async function initializeAppLogic(initialUser) {
                 confirmedFriendUIDs = userData.friends || [];
                 debouncedRenderFriends();
             }
+        }, (error) => {
+            console.error("Error listening to user document for friends list:", getCoolErrorMessage(error));
         }));
 
         // Listener for ALL friend requests (incoming and outgoing)
         const allRequestsQuery = query(collection(db, "friendRequests"), where("participants", "array-contains", user.uid));
-        listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => {
+        listeners.push(onSnapshot(allRequestsQuery, async (snapshot) => { // REFACTOR: Added error handling
             // REFACTOR: This logic is now split. The recipient initiates 'accept' or 'decline' by updating
             // the request status. The sender's client finalizes the action upon seeing the status change.
             for (const change of snapshot.docChanges()) {
@@ -2987,11 +2989,13 @@ async function initializeAppLogic(initialUser) {
 
             // Trigger a debounced render to update the list with new pending requests
             debouncedRenderFriends();
+        }, (error) => {
+            console.error("Error listening to friend requests:", getCoolErrorMessage(error));
         }));
 
         // NEW: Listener for friend removals initiated by other users.
         const removalsQuery = query(collection(db, "friendRemovals"), where("removeeUid", "==", user.uid));
-        listeners.push(onSnapshot(removalsQuery, async (snapshot) => {
+        listeners.push(onSnapshot(removalsQuery, async (snapshot) => { // REFACTOR: Added error handling
             if (snapshot.empty) return;
 
             // Use a write batch to handle all Firestore changes atomically for this snapshot.
@@ -3062,6 +3066,8 @@ async function initializeAppLogic(initialUser) {
                 saveState();
                 renderAllLists();
             }
+        }, (error) => {
+            console.error("Error listening for friend removals:", getCoolErrorMessage(error));
         }));
 
         unsubscribeFromFriendsAndShares = () => listeners.forEach(unsub => unsub());
