@@ -736,7 +736,9 @@ async function initializeAppLogic(initialUser) {
 
     const saveState = () => {
         // Create a version of generalTaskGroups without the isExpanded property for saving
-        const groupsToSave = generalTaskGroups.map(({ isExpanded, ...rest }) => rest);
+        const groupsToSave = generalTaskGroups
+            .filter(g => g) // Filter out any undefined or null items before mapping
+            .map(({ isExpanded, ...rest }) => rest);
 
         const data = { 
             dailyTasks, 
@@ -781,10 +783,12 @@ async function initializeAppLogic(initialUser) {
         
         // Re-apply the transient state to the newly loaded data
         generalTaskGroups.forEach(group => {
-            if (expandedGroupIds.has(group.id)) {
-                group.isExpanded = true;
-            } else {
-                group.isExpanded = false;
+            if (group) { // Guard against undefined/null items
+                if (expandedGroupIds.has(group.id)) {
+                    group.isExpanded = true;
+                } else {
+                    group.isExpanded = false;
+                }
             }
         });
         
@@ -1004,6 +1008,10 @@ async function initializeAppLogic(initialUser) {
         noGeneralTasksMessage.style.display = (hasVisibleStandalone || hasVisibleGrouped) ? 'none' : 'block';
     };
     const createGroupElement = (group) => {
+        if (!group) {
+            console.warn("Attempted to create a group element for an undefined group.");
+            return document.createDocumentFragment(); // Return an empty, non-rendering element
+        }
         const el = document.createElement('div'); el.className = 'main-quest-group'; if (group.isExpanded) el.classList.add('expanded'); el.dataset.groupId = group.id;
         if (selectedQuestIds.has(group.id)) {
             el.classList.add('multi-select-selected');
