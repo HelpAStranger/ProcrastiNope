@@ -3743,7 +3743,6 @@ async function initializeAppLogic(initialUser) {
                         if (list) {
                             // Find and remove the original placeholder task from the owner's list.
                             const index = list.findIndex(t => t.id === removedQuestData.originalTaskId);
-                            if (index > -1) list.splice(index, 1);
                             if (index > -1) {
                                 list.splice(index, 1);
                                 // Persist the removal of the placeholder task.
