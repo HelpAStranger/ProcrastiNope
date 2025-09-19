@@ -476,8 +476,12 @@ async function initializeAppLogic(initialUser) {
     let user = initialUser;
 
     let lastSection = 'daily', standaloneDailyQuests = [], dailyTaskGroups = [];
+    // REFACTOR: Consolidated data model for sortable items.
+    let dailyItems = [];
+    let mainItems = [];
 
     let standaloneMainQuests = [], generalTaskGroups = [], sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
+    let lastSection = 'daily', sharedQuests = [], incomingSharedItems = [], incomingFriendRequests = [], outgoingFriendRequests = [];
     let isMultiSelectModeActive = false;
     let selectedQuestIds = new Set();
     let sharedGroups = [];
@@ -504,6 +508,8 @@ async function initializeAppLogic(initialUser) {
     const dailyGroupListContainer = document.getElementById('daily-group-list-container');
     const standaloneTaskListContainer = document.getElementById('standalone-task-list');
     const generalTaskListContainer = document.getElementById('general-task-list-container');
+    const dailyCombinedListContainer = document.getElementById('daily-combined-list-container');
+    const mainCombinedListContainer = document.getElementById('main-combined-list-container');
     const playerLevelEl = document.getElementById('player-level');
     const questsLayout = document.querySelector('.quests-layout');
     const xpBarEl = document.getElementById('xp-bar');
@@ -743,16 +749,32 @@ async function initializeAppLogic(initialUser) {
         const mainGroupsToSave = generalTaskGroups
             .filter(g => g) // Filter out any undefined or null items before mapping
             .map(({ isExpanded, ...rest }) => rest);
+        const dailyItemsToSave = dailyItems.map(item => {
+            if (item && item.tasks) { // It's a group
+                const { isExpanded, ...rest } = item;
+                return rest;
+            }
+            return item;
+        }).filter(Boolean);
 
         const dailyGroupsToSave = dailyTaskGroups
             .filter(g => g)
             .map(({ isExpanded, ...rest }) => rest);
+        const mainItemsToSave = mainItems.map(item => {
+            if (item && item.tasks) { // It's a group
+                const { isExpanded, ...rest } = item;
+                return rest;
+            }
+            return item;
+        }).filter(Boolean);
 
         const data = { 
             standaloneDailyQuests, 
             dailyTaskGroups: dailyGroupsToSave,
             standaloneMainQuests, 
             generalTaskGroups: mainGroupsToSave, // Use the cleaned version
+            dailyItems: dailyItemsToSave,
+            mainItems: mainItemsToSave,
             playerData, 
             settings
         };
@@ -779,6 +801,11 @@ async function initializeAppLogic(initialUser) {
         if (Array.isArray(dailyTaskGroups)) {
             dailyTaskGroups.forEach(g => { if (g && g.isExpanded) expandedGroupIds.add(g.id); });
         }
+        [...dailyItems, ...mainItems].forEach(item => {
+            if (item && item.tasks && item.isExpanded) {
+                expandedGroupIds.add(item.id);
+            }
+        });
     
         // Load persisted data
         // For backwards compatibility, if standaloneDailyQuests doesn't exist, use the old dailyTasks array.
@@ -786,6 +813,15 @@ async function initializeAppLogic(initialUser) {
         dailyTaskGroups = data.dailyTaskGroups || [];
         standaloneMainQuests = data.standaloneMainQuests || [];
         generalTaskGroups = data.generalTaskGroups || [];
+        // For backwards compatibility, migrate old data structure to the new one.
+        const oldStandaloneDaily = data.standaloneDailyQuests || data.dailyTasks || [];
+        const oldDailyGroups = data.dailyTaskGroups || [];
+        const oldStandaloneMain = data.standaloneMainQuests || [];
+        const oldGeneralGroups = data.generalTaskGroups || [];
+
+        dailyItems = data.dailyItems || [...oldStandaloneDaily, ...oldDailyGroups];
+        mainItems = data.mainItems || [...oldStandaloneMain, ...oldGeneralGroups];
+
         playerData = data.playerData || { level: 1, xp: 0 };
         settings = { ...settings, ...(data.settings || {}) }; 
         // Store the timestamp of the data we're loading.
@@ -794,6 +830,8 @@ async function initializeAppLogic(initialUser) {
         // Re-apply the transient state to the newly loaded data
         dailyTaskGroups.forEach(group => {
             if (group) { // Guard against undefined/null items
+        [...dailyItems, ...mainItems].forEach(item => {
+            if (item && item.tasks) { // It's a group
                 if (expandedGroupIds.has(group.id)) {
                     group.isExpanded = true;
                 } else {
@@ -912,6 +950,9 @@ async function initializeAppLogic(initialUser) {
         if (today !== lastVisit) {
             const yesterday = new Date(Date.now() - 86400000).toDateString();
             const allDailies = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || [])];
+        if (today !== lastVisit) { // eslint-disable-line
+            const yesterday = new Date(Date.now() - 86400000).toDateString(); // eslint-disable-line
+            const allDailies = dailyItems.flatMap(item => item.tasks ? item.tasks : item);
             allDailies.forEach(task => {
                 // Only reset non-shared tasks automatically
                 if(task.isShared) return; 
@@ -962,23 +1003,36 @@ async function initializeAppLogic(initialUser) {
     }
     function checkAllTasksCompleted() {
         const allDailyTasks = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || [])];
+        const allDailyTasks = dailyItems.flatMap(item => item.tasks ? item.tasks : item);
         // Only consider non-shared tasks for "all tasks completed" logic
         const allDailiesDone = allDailyTasks.length > 0 && allDailyTasks.filter(t => !t.isShared).every(t => t.completedToday);
         const noStandaloneQuests = standaloneMainQuests.filter(t => !t.isShared).length === 0;
         const noGroupedQuests = generalTaskGroups.every(g => !g.tasks || g.tasks.filter(t => !t.isShared).length === 0);
         return { allDailiesDone, allTasksDone: allDailiesDone && noStandaloneQuests && noGroupedQuests };
+        const allMainItems = mainItems.flatMap(item => item.tasks ? item.tasks : item);
+        const allMainTasksDone = allMainItems.filter(t => !t.isShared).length === 0;
+        return { allDailiesDone, allTasksDone: allDailiesDone && allMainTasksDone };
     }
     
     // FIX: Updated rendering functions to correctly display tasks based on data
     const renderDailyTasks = () => { 
         dailyStandaloneTaskListContainer.innerHTML = '';
         dailyGroupListContainer.innerHTML = '';
+    const renderDailyItems = () => { 
+        dailyCombinedListContainer.innerHTML = '';
 
         // Get standalone daily tasks (placeholders for pending shares, and normal tasks)
         const localStandaloneDailyTasks = standaloneDailyQuests.filter(task => {
             if (!task.isShared) return true; // Render normal tasks
             // If shared, only render if it's still pending (i.e., not in the active/completed `sharedQuests` list)
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        // Filter out original items that are now active/completed shared items
+        const localDailyItems = dailyItems.filter(item => {
+            if (!item.isShared) return true; // Render normal items
+            // If it's a shared placeholder, check if it's active
+            const collection = item.tasks ? sharedGroups : sharedQuests;
+            const sharedId = item.tasks ? item.sharedGroupId : item.sharedQuestId;
+            return !collection.some(s_item => s_item.id === sharedId);
         });
 
         // Get active/completed shared quests that originated from a daily quest
@@ -987,6 +1041,11 @@ async function initializeAppLogic(initialUser) {
         // Render standalone dailies and their associated shared quests
         localStandaloneDailyTasks.forEach(task => dailyStandaloneTaskListContainer.appendChild(createTaskElement(task, 'daily')));
         remoteDailySharedQuests.forEach(task => dailyStandaloneTaskListContainer.appendChild(createTaskElement(task, 'shared')));
+        // Render local items (quests and groups)
+        localDailyItems.forEach(item => {
+            const el = item.tasks ? createGroupElement(item) : createTaskElement(item, 'daily');
+            dailyCombinedListContainer.appendChild(el);
+        });
 
         // Render daily groups
         dailyTaskGroups.forEach(group => {
@@ -994,17 +1053,29 @@ async function initializeAppLogic(initialUser) {
             dailyGroupListContainer.appendChild(el);
         });
         
+        // Render remote shared quests
+        remoteDailySharedQuests.forEach(task => dailyCombinedListContainer.appendChild(createTaskElement(task, 'shared')));
+
         // Update empty message
         const totalDailies = localStandaloneDailyTasks.length + remoteDailySharedQuests.length + dailyTaskGroups.length;
+        const totalDailies = dailyCombinedListContainer.children.length;
         noDailyTasksMessage.style.display = totalDailies === 0 ? 'block' : 'none';
     };
     const renderStandaloneTasks = () => { 
         standaloneTaskListContainer.innerHTML = '';
+    const renderMainItems = () => { 
+        mainCombinedListContainer.innerHTML = '';
 
         // Get local standalone tasks
         const localStandaloneTasks = standaloneMainQuests.filter(task => {
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
+        // Filter out original items that are now active/completed shared items
+        const localMainItems = mainItems.filter(item => {
+            if (!item.isShared) return true;
+            const collection = item.tasks ? sharedGroups : sharedQuests;
+            const sharedId = item.tasks ? item.sharedGroupId : item.sharedQuestId;
+            return !collection.some(s_item => s_item.id === sharedId);
         });
 
         // Get remote shared quests that were standalone OR from a group
@@ -1023,6 +1094,9 @@ async function initializeAppLogic(initialUser) {
             // If shared, only render if it's still pending.
             // `sharedGroups` contains active/completed shared groups.
             return !sharedGroups.some(sg => sg && sg.id === group.sharedGroupId);
+        localMainItems.forEach(item => {
+            const el = item.tasks ? createGroupElement(item) : createTaskElement(item, 'standalone');
+            mainCombinedListContainer.appendChild(el);
         });
 
         // Render normal groups and pending shared groups
@@ -1030,11 +1104,15 @@ async function initializeAppLogic(initialUser) {
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
         });
+        // Render remote shared quests
+        remoteMainSharedQuests.forEach(task => mainCombinedListContainer.appendChild(createTaskElement(task, 'shared')));
 
         // Render shared groups
+        // Render active shared groups
         sharedGroups.forEach(group => {
             const groupEl = createSharedGroupElement(group);
             generalTaskListContainer.appendChild(groupEl);
+            mainCombinedListContainer.appendChild(groupEl);
         });
 
         // Update empty message based on the content of both standalone and grouped lists
@@ -1042,6 +1120,7 @@ async function initializeAppLogic(initialUser) {
         const hasVisibleGrouped = generalTaskListContainer.children.length > 0;
 
         noGeneralTasksMessage.style.display = (hasVisibleStandalone || hasVisibleGrouped) ? 'none' : 'block';
+        noGeneralTasksMessage.style.display = mainCombinedListContainer.children.length === 0 ? 'block' : 'none';
     };
     const createGroupElement = (group) => {
         if (!group) {
@@ -1056,6 +1135,7 @@ async function initializeAppLogic(initialUser) {
         if (group.isShared) {
             const sharedGroupData = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
             const otherParticipant = sharedGroupData ? sharedGroupData.participants.find(p => p !== user.uid) : null;
+            const otherParticipant = sharedGroupData ? sharedGroupData.participants.find(p => user && p !== user.uid) : null;
             const isOrphan = !sharedGroupData || (otherParticipant && !confirmedFriendUIDs.includes(otherParticipant));
 
             if (isOrphan) {
@@ -1326,16 +1406,21 @@ async function initializeAppLogic(initialUser) {
         if (list === 'daily') {
             newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: goal || 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
             standaloneDailyQuests.push(newTask);
+            dailyItems.push(newTask);
             taskType = 'daily';
             container = dailyStandaloneTaskListContainer;
+            container = dailyCombinedListContainer;
         } else if (list === 'standalone') {
             newTask = { ...common, isShared: false };
             standaloneMainQuests.push(newTask);
+            mainItems.push(newTask);
             taskType = 'standalone';
             container = standaloneTaskListContainer;
+            container = mainCombinedListContainer;
         } else {
             const dailyGroup = dailyTaskGroups.find(g => g.id === list);
             const mainGroup = generalTaskGroups.find(g => g.id === list);
+            const group = [...dailyItems, ...mainItems].find(item => item.id === list && item.tasks);
 
             if (dailyGroup) {
                 if (!dailyGroup.tasks) dailyGroup.tasks = [];
@@ -1343,6 +1428,16 @@ async function initializeAppLogic(initialUser) {
                 newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
                 dailyGroup.tasks.push(newTask);
                 taskType = 'daily'; // Use 'daily' so createTaskElement renders it correctly
+            if (group) {
+                if (!group.tasks) group.tasks = [];
+                if (group.type === 'daily') {
+                    newTask = { ...common, completedToday: false, lastCompleted: null, streak: 0, weeklyGoal: 0, weeklyCompletions: 0, weekStartDate: getStartOfWeek(new Date()), isShared: false };
+                    taskType = 'daily';
+                } else {
+                    newTask = { ...common, isShared: false };
+                    taskType = 'group';
+                }
+                group.tasks.push(newTask);
                 container = document.querySelector(`.task-list-group[data-group-id="${list}"]`);
             } else if (mainGroup) {
                 if (!mainGroup.tasks) mainGroup.tasks = [];
@@ -1375,9 +1470,13 @@ async function initializeAppLogic(initialUser) {
         if (type === 'daily') {
             dailyTaskGroups.push(newGroup);
             container = dailyGroupListContainer;
+            dailyItems.push(newGroup);
+            container = dailyCombinedListContainer;
         } else { // 'main'
             generalTaskGroups.push(newGroup);
             container = generalTaskListContainer;
+            mainItems.push(newGroup);
+            container = mainCombinedListContainer;
         }
 
         const groupEl = createGroupElement(newGroup);
@@ -1391,6 +1490,7 @@ async function initializeAppLogic(initialUser) {
     };
     const editGroup = (id, newName) => {
         const group = generalTaskGroups.find(g => g.id === id) || dailyTaskGroups.find(g => g.id === id);
+        const { group } = findTaskAndContext(id);
         if (group) {
             group.name = newName;
             saveState();
@@ -1428,12 +1528,17 @@ async function initializeAppLogic(initialUser) {
         const mainGroup = generalTaskGroups.find(g => g.id === id);
         const dailyGroup = dailyTaskGroups.find(g => g.id === id);
         const group = mainGroup || dailyGroup;
+        const { group } = findTaskAndContext(id);
         const name = group?.name || 'this group';
         showConfirm(`Delete "${name}"?`, 'All tasks will be deleted.', () => {
             if (mainGroup) {
                 generalTaskGroups = generalTaskGroups.filter(g => g.id !== id);
             } else if (dailyGroup) {
                 dailyTaskGroups = dailyTaskGroups.filter(g => g.id !== id);
+            if (group.type === 'daily') {
+                dailyItems = dailyItems.filter(item => item.id !== id);
+            } else {
+                mainItems = mainItems.filter(item => item.id !== id);
             }
             renderAllLists();
             saveState();
@@ -1445,6 +1550,14 @@ async function initializeAppLogic(initialUser) {
         for (const g of dailyTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'daily' }; } }
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
         for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } }
+        for (const item of dailyItems) {
+            if (item.id === id) return item.tasks ? { group: item, type: 'daily-group-header' } : { task: item, list: dailyItems, type: 'daily' };
+            if (item.tasks) { const i = item.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: item.tasks[i], list: item.tasks, group: item, type: 'daily' }; }
+        }
+        for (const item of mainItems) {
+            if (item.id === id) return item.tasks ? { group: item, type: 'group-header' } : { task: item, list: mainItems, type: 'standalone' };
+            if (item.tasks) { const i = item.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: item.tasks[i], list: item.tasks, group: item, type: 'group' }; }
+        }
 
         const dailyGroup = dailyTaskGroups.find(g => g && g.id === id);
         if (dailyGroup) return { group: dailyGroup, type: 'daily-group-header' };
@@ -1468,6 +1581,7 @@ async function initializeAppLogic(initialUser) {
             // An orphan is a quest where the share doc doesn't exist,
             // OR the share doc exists but the other participant is no longer a friend.
             const otherParticipant = sharedQuestData ? sharedQuestData.participants.find(p => p !== user.uid) : null;
+            const otherParticipant = sharedQuestData ? sharedQuestData.participants.find(p => user && p !== user.uid) : null;
             const isOrphan = !sharedQuestData || (otherParticipant && !confirmedFriendUIDs.includes(otherParticipant));
 
             if (isOrphan) {
@@ -1585,6 +1699,9 @@ async function initializeAppLogic(initialUser) {
                 if (list) {
                     const i = list.findIndex(t => t.id === id);
                     if (i > -1) list.splice(i, 1);
+                if (list) { // This handles standalone quests
+                    const i = list.findIndex(item => item.id === id);
+                    if (i > -1) list.splice(i, 1); // This mutates dailyItems or mainItems
                 }
                 if (group && (!group.tasks || group.tasks.length === 0)) {
                     const i = generalTaskGroups.findIndex(g => g.id === group.id);
@@ -1739,6 +1856,7 @@ async function initializeAppLogic(initialUser) {
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
                 if (!groupDoc.exists()) {
+                    if (!groupDoc.exists()) { // eslint-disable-line
                     throw "Group not found!";
                 }
                 const tasks = groupDoc.data().tasks.map(t => ({...t}));
@@ -1944,6 +2062,7 @@ async function initializeAppLogic(initialUser) {
                     // Revert the local task just in case the listener is slow or failed
                     let originalTask;
                     [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || []), ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])].forEach(t => {
+                    [...dailyItems, ...mainItems].flatMap(i => i.tasks || i).forEach(t => {
                         if (t && t.sharedQuestId === sharedQuestId) originalTask = t;
                     });
                     if (originalTask) revertSharedQuest(originalTask.id);
@@ -1986,6 +2105,7 @@ async function initializeAppLogic(initialUser) {
                     console.log("Group share to cancel not found, it was likely already handled.");
                     const originalGroup = generalTaskGroups.find(g => g.sharedGroupId === sharedGroupId);
                     if (originalGroup) {
+                    if (originalGroup) { // eslint-disable-line
                         delete originalGroup.isShared;
                         delete originalGroup.sharedGroupId;
                         renderAllLists();
@@ -2013,6 +2133,7 @@ async function initializeAppLogic(initialUser) {
                 const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
                 if (originalGroup) {
                     delete originalGroup.isShared;
+                    delete originalGroup.isShared; // eslint-disable-line
                     delete originalGroup.sharedGroupId;
                 }
                 
@@ -2110,6 +2231,7 @@ async function initializeAppLogic(initialUser) {
 
         let needsSaveAndRender = false;
         const allTasks = [...standaloneDailyQuests, ...dailyTaskGroups.flatMap(g => g.tasks || []), ...standaloneMainQuests, ...generalTaskGroups.flatMap(g => g.tasks || [])];
+        const allTasks = [...dailyItems, ...mainItems].flatMap(item => item.tasks ? item.tasks : item);
         
         allTasks.forEach(t => {
             const isCompleted = t.completedToday || t.pendingDeletion;
@@ -2326,6 +2448,7 @@ async function initializeAppLogic(initialUser) {
                 if (isShareClick) {
                     if (!user) {
                         showConfirm("Login Required", "You must be logged in to share groups.", () => {
+                        showConfirm("Login Required", "You must be logged in to share groups.", () => { // eslint-disable-line
                             closeModal(shareGroupModal);
                             openModal(accountModal);
                         });
@@ -2346,6 +2469,7 @@ async function initializeAppLogic(initialUser) {
                         "Clean Up Orphaned Group?",
                         "This will convert the group back to a normal, editable group in your list.",
                         () => {
+                        () => { // eslint-disable-line
                             // Revert local state
                             const localGroup = generalTaskGroups.find(g => g.id === groupId);
                             if (localGroup) {
@@ -2746,6 +2870,8 @@ async function initializeAppLogic(initialUser) {
         resetCloudDataBtn.addEventListener('click', () => {
             showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => {
                 playerData = { level: 1, xp: 0 };
+            showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => { // eslint-disable-line
+                playerData = { level: 1, xp: 0 }; // eslint-disable-line
                 dailyTasks = [];
                 standaloneMainQuests = [];
                 generalTaskGroups = [];
@@ -2759,6 +2885,7 @@ async function initializeAppLogic(initialUser) {
     if (importDataBtn) importDataBtn.addEventListener('click', () => importFileInput.click());
     if (importFileInput) importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
     document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .complete-btn, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; audioManager.playSound('hover'); });
+    document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .completion-indicator, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; audioManager.playSound('hover'); });
     
     if (manageAccountBtn) {
         manageAccountBtn.addEventListener('click', () => {
@@ -2931,8 +3058,26 @@ async function initializeAppLogic(initialUser) {
             // The data model is updated, and the DOM is handled by SortableJS.
             const taskId = evt.item.dataset.id;
             if (!taskId) return;
+        function onSortEnd(evt) {
+            const fromListEl = evt.from;
+            const toListEl = evt.to;
+            const itemEl = evt.item;
+            const itemId = itemEl.dataset.id || itemEl.dataset.groupId;
 
             const { task, list: sourceListArray } = findTaskAndContext(taskId);
+            // Case 1: Reordering top-level items (groups or standalone tasks)
+            if (fromListEl === toListEl && (fromListEl.id === 'daily-combined-list-container' || fromListEl.id === 'main-combined-list-container')) {
+                const listArray = fromListEl.id === 'daily-combined-list-container' ? dailyItems : mainItems;
+                const [item] = listArray.splice(evt.oldIndex, 1);
+                listArray.splice(evt.newIndex, 0, item);
+                saveState();
+                return;
+            }
+
+            // Case 2: Moving tasks around (in/out/between groups)
+            if (!itemId || !itemEl.classList.contains('task-item')) return;
+
+            const { task, list: sourceListArray } = findTaskAndContext(itemId);
             if (!task || !sourceListArray) return;
 
             const originalIndex = sourceListArray.findIndex(t => t.id === taskId);
@@ -2941,6 +3086,9 @@ async function initializeAppLogic(initialUser) {
             } else {
                 return; // Should not happen if findTaskAndContext is correct
             }
+            const originalIndex = sourceListArray.findIndex(t => t.id === itemId);
+            if (originalIndex > -1) sourceListArray.splice(originalIndex, 1);
+            else return;
 
             const toListEl = evt.to;
             const toListId = toListEl.id;
@@ -2957,14 +3105,22 @@ async function initializeAppLogic(initialUser) {
                     if (!group.tasks) group.tasks = [];
                     destListArray = group.tasks;
                 }
+            if (toListEl.id === 'daily-combined-list-container') destListArray = dailyItems;
+            else if (toListEl.id === 'main-combined-list-container') destListArray = mainItems;
+            else if (toListEl.dataset.groupId) {
+                const { group } = findTaskAndContext(toListEl.dataset.groupId);
+                if (group && group.tasks) destListArray = group.tasks;
             }
 
             if (!destListArray) {
                 // Dragged to an invalid location, put it back.
+            if (!destListArray) { // Invalid drop, revert
                 sourceListArray.splice(originalIndex, 0, task);
+                renderAllLists();
                 return;
             }
             
+
             destListArray.splice(evt.newIndex, 0, task);
             saveState();
             // NOTE: renderAllLists() was removed to allow for smooth animations.
@@ -2974,8 +3130,21 @@ async function initializeAppLogic(initialUser) {
         }
 
         const commonTaskOptions = (groupName) => ({
+        const commonOptions = (groupName) => ({
             animation: 250, // Smoother animation
             group: groupName,
+            group: {
+                name: groupName,
+                pull: true,
+                put: (to, from, dragEl) => {
+                    // Prevent groups from being dropped inside other groups' task lists.
+                    if (to.el.classList.contains('task-list-group') && dragEl.classList.contains('main-quest-group')) {
+                        return false;
+                    }
+                    return true;
+                }
+            },
+            handle: '.main-quest-group-header, .task-item', // Allow dragging both groups and tasks
             delay: 150, // PERF: Reduced delay for a more responsive feel.
             delayOnTouchOnly: true, // PERF: Start drag immediately on desktop.
             onStart: (evt) => {
@@ -2983,6 +3152,10 @@ async function initializeAppLogic(initialUser) {
                 const taskId = evt.item.dataset.id;
                 const { task } = findTaskAndContext(taskId);
                 if (task && task.isShared) {
+                const itemId = evt.item.dataset.id || evt.item.dataset.groupId;
+                const { task, group } = findTaskAndContext(itemId);
+                const item = task || group;
+                if (item && item.isShared) {
                     evt.cancel = true;
                     document.body.classList.remove('is-dragging');
                     return;
@@ -2992,11 +3165,16 @@ async function initializeAppLogic(initialUser) {
                 // PERF: Removed adding a class to body to prevent expensive global animations.
             },
             onEnd: (evt) => { document.body.classList.remove('is-dragging'); onTaskDrop(evt); }
+            onEnd: (evt) => { document.body.classList.remove('is-dragging'); onSortEnd(evt); }
         });
 
         sortableInstances.push(new Sortable(dailyStandaloneTaskListContainer, commonTaskOptions('dailyQuests')));
         sortableInstances.push(new Sortable(standaloneTaskListContainer, commonTaskOptions('mainQuests')));
+        // Make the main containers sortable
+        sortableInstances.push(new Sortable(dailyCombinedListContainer, commonOptions('dailyQuests')));
+        sortableInstances.push(new Sortable(mainCombinedListContainer, commonOptions('mainQuests')));
 
+        // Make the inner group lists sortable and connect them
         document.querySelectorAll('.task-list-group').forEach(listEl => {
             const groupId = listEl.dataset.groupId;
             if (!groupId) return; // Skip shared group lists which don't have this
@@ -3005,6 +3183,7 @@ async function initializeAppLogic(initialUser) {
             if (group && group.type) { // group.type will be 'daily' or 'main'
                 const sortableGroupName = group.type === 'daily' ? 'dailyQuests' : 'mainQuests';
                 sortableInstances.push(new Sortable(listEl, commonTaskOptions(sortableGroupName)));
+                sortableInstances.push(new Sortable(listEl, commonOptions(sortableGroupName)));
             }
         });
 
@@ -3057,6 +3236,7 @@ async function initializeAppLogic(initialUser) {
         if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
     }
     const renderAllLists = () => { renderDailyTasks(); renderStandaloneTasks(); renderGeneralTasks(); renderIncomingItems(); initSortable(); resumeTimers(); };
+    const renderAllLists = () => { renderDailyItems(); renderMainItems(); renderIncomingItems(); initSortable(); resumeTimers(); };
     
     function setInitialActiveTab() {
         // The animation for the nav buttons is the longest, finishing around 0.4s (delay) + 0.4s (duration) = 0.8s.
@@ -3207,6 +3387,7 @@ async function initializeAppLogic(initialUser) {
                 if (sharedGroupsData.length > 0) {
                     for (const groupData of sharedGroupsData) {
                         if (groupData.ownerUid === user.uid) {
+                        if (user && groupData.ownerUid === user.uid) {
                             const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
                             if (originalGroup) {
                                 delete originalGroup.isShared;
@@ -3581,6 +3762,7 @@ async function initializeAppLogic(initialUser) {
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
             try {
                 // Re-create the group in the owner's local list.
+                // Re-create the group in the owner's local list. // eslint-disable-line
                 const newLocalGroup = { id: group.originalGroupId, name: group.name, tasks: group.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false };
                 generalTaskGroups.push(newLocalGroup);
                 saveState();
@@ -4072,6 +4254,7 @@ async function initializeAppLogic(initialUser) {
             playerData: playerData, 
             settings: settings
         };
+        const dataToSave = { dailyItems, mainItems, playerData, settings };
         batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
         
         await batch.commit();
@@ -4232,6 +4415,7 @@ async function initializeAppLogic(initialUser) {
         if (groupIndex === -1) return;
 
         const groupToShare = generalTaskGroups[groupIndex]; // Get the group by index
+        const groupToShare = mainItems.find(item => item.id === groupId);
         if (groupToShare.isShared) {
             console.warn("Attempted to share an already shared group.");
             return;
@@ -4399,8 +4583,10 @@ async function initializeAppLogic(initialUser) {
             let hasGroup = false;
             let hasActiveShared = false;
 
+    
             for (const id of selectedQuestIds) {
                 const { task, group } = findTaskAndContext(id);
+                    const { task, group } = findTaskAndContext(id); // eslint-disable-line
                 const item = task || group;
 
                 if (!item) {
@@ -4563,8 +4749,10 @@ async function initializeAppLogic(initialUser) {
                     const { task, list, group } = findTaskAndContext(id);
                     if ((task && !task.isShared) || (group && !group.isShared)) {
                         if (task) {
+                        if (task) { // eslint-disable-line
                             stopTimer(id, false);
                             const i = list.findIndex(t => t.id === id);
+                            const i = list.findIndex(t => t.id === id); // eslint-disable-line
                             if (i > -1) { list.splice(i, 1); needsSave = true; }
                         } else if (group) {
                             const i = generalTaskGroups.findIndex(g => g.id === id);
