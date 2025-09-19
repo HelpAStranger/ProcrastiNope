@@ -1799,13 +1799,18 @@ async function initializeAppLogic(initialUser) {
                 if (uncompleting) {
                     if (!taskToUpdate[myCompletionFlag]) return;
                     taskToUpdate[myCompletionFlag] = false;
+                    // If we are uncompleting, the task is no longer fully completed, so remove the status.
+                    delete taskToUpdate.status;
                     tasks[taskIndex] = taskToUpdate;
                 } else {
                     if (taskToUpdate[myCompletionFlag]) return;
                     taskToUpdate[myCompletionFlag] = true;
                     if (taskToUpdate[friendCompletionFlag]) {
                         wasFullyCompleted = true;
-                        tasks.splice(taskIndex, 1);
+                        // Instead of removing the task, mark it for completion.
+                        // The listener will handle the animation and subsequent removal.
+                        taskToUpdate.status = 'completed';
+                        tasks[taskIndex] = taskToUpdate;
                     } else {
                         tasks[taskIndex] = taskToUpdate;
                     }
@@ -1815,8 +1820,7 @@ async function initializeAppLogic(initialUser) {
 
             // Post-transaction effects
             if (wasFullyCompleted) {
-                audioManager.playSound('sharedQuestFinish');
-                addXp(XP_PER_TASK); // Full XP for completing the whole task.
+                // Sound and XP are now handled by the listener after the animation.
             } else if (!uncompleting) {
                 audioManager.playSound('complete');
                 addXp(XP_PER_TASK / 2);
@@ -3872,6 +3876,11 @@ async function initializeAppLogic(initialUser) {
                                     audioManager.playSound('friendComplete');
                                 }
                             }
+
+                            // NEW: Check for tasks that were just fully completed to trigger animation.
+                            if (newTask.status === 'completed' && oldTask.status !== 'completed') {
+                                finishSharedGroupTaskAnimation(newGroup, newTask);
+                            }
                         });
                     }
 
@@ -4096,6 +4105,38 @@ async function initializeAppLogic(initialUser) {
                 }
             }
         }, 1500); // Matches the 1.5s animation duration in style.css
+    }
+
+    async function finishSharedGroupTaskAnimation(group, task) {
+        audioManager.playSound('sharedQuestFinish');
+        addXp(XP_PER_TASK); // Give full XP now
+
+        const taskEl = document.querySelector(`.task-item[data-id="${task.id}"][data-shared-group-id="${group.id}"]`);
+        if (taskEl) {
+            taskEl.classList.add('shared-quest-finished'); // Reuse the same animation
+            createConfetti(taskEl);
+
+            // Use a timeout to remove the task from Firestore after the animation.
+            setTimeout(async () => {
+                // Only one client needs to do this. Let's say the owner.
+                if (user && user.uid === group.ownerUid) {
+                    const groupRef = doc(db, "sharedGroups", group.id);
+                    try {
+                        // Use a transaction to safely remove the task from the array.
+                        await runTransaction(db, async (transaction) => {
+                            const groupDoc = await transaction.get(groupRef);
+                            if (!groupDoc.exists()) return;
+
+                            const currentTasks = groupDoc.data().tasks || [];
+                            const updatedTasks = currentTasks.filter(t => t.id !== task.id);
+                            transaction.update(groupRef, { tasks: updatedTasks });
+                        });
+                    } catch (err) {
+                        console.error("Error removing completed shared group task:", getCoolErrorMessage(err));
+                    }
+                }
+            }, 1500); // Matches animation duration
+        }
     }
 
     async function openShareGroupModal(groupId) {
