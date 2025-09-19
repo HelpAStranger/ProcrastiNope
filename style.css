@@ -1258,10 +1258,8 @@ SHARED QUESTS
 .task-item.shared-quest {
     border-style: double;
     border-width: 4px;
-    padding: 0.75rem 1rem; /* More compact padding */
-    flex-wrap: nowrap; /* Ensure single line */
-    align-items: center;
-    gap: 0.75rem; /* Space between elements */
+    padding: 1rem 1.5rem; /* Use standard padding for more height */
+    align-items: center; /* Vertically center multi-line content with buttons */
 }
 
 /* NEW: Styles for tasks within a shared group */
@@ -1324,12 +1322,29 @@ body:not(.is-dragging) .task-item.shared-group-task:not(.my-part-completed):hove
     border-color: var(--accent-green-dark);
 }
 
-.task-item.shared-quest > .completion-indicator,
-.task-item.shared-quest > .multi-select-checkbox {
-    margin-right: 0;
+.shared-with-tag {
+    font-weight: 700;
+    opacity: 0.8;
+    margin-left: auto; /* Push it after the growing task content */
+    flex-shrink: 0; /* Prevent it from shrinking */
 }
-.task-item.shared-quest > .shared-status-indicators {
+
+.task-title-and-subtitle .task-text {
+    display: block;
+}
+
+.task-title-and-subtitle .shared-with-tag {
     margin-left: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9em;
+    margin-top: 0.25rem;
+}
+
+.shared-with-tag .friend-icon {
+    width: 1em;
+    height: 1em;
 }
 
 .shared-status-indicators {
