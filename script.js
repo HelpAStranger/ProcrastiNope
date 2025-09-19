@@ -1730,48 +1730,55 @@ async function initializeAppLogic(initialUser) {
             showConfirm("Error", "Could not edit group name.", () => {});
         }
     };
+    const editSharedTask = async (groupId, taskId, newText) => {
+        const groupRef = doc(db, "sharedGroups", groupId);
+        try {
+            // FIX: Use a transaction to prevent race conditions when editing.
+            await runTransaction(db, async (transaction) => {
+                const groupDoc = await transaction.get(groupRef);
+                if (!groupDoc.exists()) {
+                    throw "Group not found!";
+                }
+                const tasks = groupDoc.data().tasks.map(t => ({...t}));
+                const taskIndex = tasks.findIndex(t => t.id === taskId);
+                if (taskIndex > -1) {
+                    tasks[taskIndex].text = newText;
+                    transaction.update(groupRef, { tasks: tasks });
+                }
+            });
+            audioManager.playSound('toggle');
+        } catch (error) {
+            console.error("Error editing shared task:", getCoolErrorMessage(error));
+            showConfirm("Error", "Could not edit task.", () => {});
+        }
+    };
     const deleteSharedTask = async (groupId, taskId) => {
         const groupRef = doc(db, "sharedGroups", groupId);
         showConfirm("Delete Task?", "This will delete the task for both you and your friend.", async () => {
             try {
-                const groupDoc = await getDoc(groupRef);
-                if (groupDoc.exists()) {
-                    const groupData = groupDoc.data();
-                    const taskToRemove = groupData.tasks.find(t => t.id === taskId);
-                    if (taskToRemove) {
-                        await updateDoc(groupRef, {
-                            tasks: arrayRemove(taskToRemove)
-                        });
-                        audioManager.playSound('delete');
-                    }
-                }
+                // FIX: Use a transaction to safely delete.
+                await runTransaction(db, async (transaction) => {
+                    const groupDoc = await transaction.get(groupRef);
+                    if (!groupDoc.exists()) return; // Group is already gone.
+
+                    const tasks = groupDoc.data().tasks;
+                    const updatedTasks = tasks.filter(t => t.id !== taskId);
+                    transaction.update(groupRef, { tasks: updatedTasks });
+                });
+                audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error deleting shared task:", getCoolErrorMessage(error));
                 showConfirm("Error", "Could not delete task.", () => {});
             }
         });
     };
-    const editSharedTask = async (groupId, taskId, newText) => {
-        const groupRef = doc(db, "sharedGroups", groupId);
-        try {
-            const groupDoc = await getDoc(groupRef);
-            if (groupDoc.exists()) {
-                const tasks = groupDoc.data().tasks;
-                const taskIndex = tasks.findIndex(t => t.id === taskId);
-                if (taskIndex > -1) {
-                    tasks[taskIndex].text = newText;
-                    await updateDoc(groupRef, { tasks: tasks });
-                    audioManager.playSound('toggle');
-                }
-            }
-        } catch (error) {
-            console.error("Error editing shared task:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not edit task.", () => {});
-        }
-    };
     const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
+        // REFACTOR: This function is now fully transactional to prevent race conditions.
+        // It handles updating completion status and removing the task if both users are done.
         const groupRef = doc(db, "sharedGroups", groupId);
         try {
+            let wasFullyCompleted = false;
+
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
                 if (!groupDoc.exists()) {
@@ -1779,8 +1786,7 @@ async function initializeAppLogic(initialUser) {
                 }
 
                 const groupData = groupDoc.data();
-                // Create a deep copy to modify, as Firestore data is immutable.
-                const tasks = groupData.tasks.map(t => ({ ...t }));
+                let tasks = [...groupData.tasks];
                 const taskIndex = tasks.findIndex(t => t.id === taskId);
 
                 if (taskIndex === -1) return; // Task not found, maybe already deleted.
@@ -1788,15 +1794,30 @@ async function initializeAppLogic(initialUser) {
                 const taskToUpdate = tasks[taskIndex];
                 const isOwner = user.uid === groupData.ownerUid;
                 const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
+                const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
 
-                if (taskToUpdate[myCompletionFlag] === !uncompleting) return; // State is already what we want
-
-                taskToUpdate[myCompletionFlag] = !uncompleting;
+                if (uncompleting) {
+                    if (!taskToUpdate[myCompletionFlag]) return;
+                    taskToUpdate[myCompletionFlag] = false;
+                    tasks[taskIndex] = taskToUpdate;
+                } else {
+                    if (taskToUpdate[myCompletionFlag]) return;
+                    taskToUpdate[myCompletionFlag] = true;
+                    if (taskToUpdate[friendCompletionFlag]) {
+                        wasFullyCompleted = true;
+                        tasks.splice(taskIndex, 1);
+                    } else {
+                        tasks[taskIndex] = taskToUpdate;
+                    }
+                }
                 transaction.update(groupRef, { tasks: tasks });
             });
 
-            // Play sounds and update XP outside the transaction
-            if (!uncompleting) {
+            // Post-transaction effects
+            if (wasFullyCompleted) {
+                audioManager.playSound('sharedQuestFinish');
+                addXp(XP_PER_TASK); // Full XP for completing the whole task.
+            } else if (!uncompleting) {
                 audioManager.playSound('complete');
                 addXp(XP_PER_TASK / 2);
             } else {
@@ -3825,41 +3846,24 @@ async function initializeAppLogic(initialUser) {
                         newGroup.isExpanded = true;
                     }
 
-                    // NEW: Check for newly completed tasks within the group to animate and delete them.
+                    // REFACTOR: This listener is now read-only. It only checks for a friend's
+                    // completion to trigger a UI pulse, it does not write to the database.
+                    // This removes the race condition with the `completeSharedGroupTask` function.
                     if (oldGroup && change.type === 'modified' && newGroup.tasks && oldGroup.tasks) {
                         newGroup.tasks.forEach(newTask => {
                             const oldTask = oldGroup.tasks.find(t => t.id === newTask.id);
                             if (!oldTask) return; // Task is new, not modified.
 
-                            const wasCompleted = oldTask.ownerCompleted && oldTask.friendCompleted;
-                            const isNowCompleted = newTask.ownerCompleted && newTask.friendCompleted;
+                            const isOwner = newGroup.ownerUid === user.uid;
+                            const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
 
-                            if (isNowCompleted && !wasCompleted) {
+                            // Check if the friend's status changed from false to true.
+                            if (newTask[friendCompletionFlag] && !oldTask[friendCompletionFlag]) {
                                 const taskEl = document.querySelector(`.task-item[data-id="${newTask.id}"][data-shared-group-id="${newGroup.id}"]`);
                                 if (taskEl) {
-                                    audioManager.playSound('sharedQuestFinish');
-                                    taskEl.classList.add('shared-quest-finished');
-                                    createConfetti(taskEl);
-                                    taskEl.addEventListener('animationend', async () => {
-                                        // Owner is responsible for removing the task from the array to prevent race conditions.
-                                        if (user.uid === newGroup.ownerUid) {
-                                            const groupRef = doc(db, "sharedGroups", newGroup.id);
-                                            try {
-                                                // We need to get the exact task object from Firestore to use arrayRemove.
-                                                const groupDoc = await getDoc(groupRef);
-                                                if (groupDoc.exists()) {
-                                                    const taskToRemove = groupDoc.data().tasks.find(t => t.id === newTask.id);
-                                                    if (taskToRemove) {
-                                                        await updateDoc(groupRef, {
-                                                            tasks: arrayRemove(taskToRemove)
-                                                        });
-                                                    }
-                                                }
-                                            } catch (error) {
-                                                console.error("Error removing completed shared task:", getCoolErrorMessage(error));
-                                            }
-                                        }
-                                    }, { once: true });
+                                    taskEl.classList.add('friend-completed-pulse');
+                                    taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), { once: true });
+                                    audioManager.playSound('friendComplete');
                                 }
                             }
                         });
