@@ -492,6 +492,7 @@ async function initializeAppLogic(initialUser) {
     let activeTimers = new Map(); // Map<taskId, timeoutId> to manage timer completion.
     let undoTimeoutMap = new Map();
     let shiftHoverItem = null; // To track items whose actions are shown via shift-hover
+    let locallyAnimatingTasks = new Set(); // To prevent double-animation from local action + listener
 
     let lastPotentialShiftHoverItem = null; // To track the item under the mouse for shift-hover
 
@@ -1820,7 +1821,22 @@ async function initializeAppLogic(initialUser) {
 
             // Post-transaction effects
             if (wasFullyCompleted) {
-                // Sound and XP are now handled by the listener after the animation.
+                // Find the group and task data locally to trigger the animation immediately
+                // for the user who performed the action. This makes completion feel instant.
+                const group = sharedGroups.find(g => g.id === groupId);
+                if (group) {
+                    const task = group.tasks.find(t => t.id === taskId);
+                    if (task) {
+                        const uniqueId = `${groupId}_${taskId}`;
+                        locallyAnimatingTasks.add(uniqueId);
+                        // Clean up the flag after a few seconds, just in case the listener is slow or fails.
+                        setTimeout(() => locallyAnimatingTasks.delete(uniqueId), 3000);
+
+                        // We need to ensure the local task object has the 'completed' status
+                        // before passing it to the animation function, as the listener hasn't run yet.
+                        finishSharedGroupTaskAnimation(group, { ...task, status: 'completed' });
+                    }
+                }
             } else if (!uncompleting) {
                 audioManager.playSound('complete');
                 addXp(XP_PER_TASK / 2);
@@ -3878,8 +3894,14 @@ async function initializeAppLogic(initialUser) {
                             }
 
                             // NEW: Check for tasks that were just fully completed to trigger animation.
-                            if (newTask.status === 'completed' && oldTask.status !== 'completed') {
-                                finishSharedGroupTaskAnimation(newGroup, newTask);
+                            if (newTask.status === 'completed' && (!oldTask || oldTask.status !== 'completed')) {
+                                const uniqueId = `${newGroup.id}_${newTask.id}`;
+                                if (locallyAnimatingTasks.has(uniqueId)) {
+                                    // Animation was triggered locally, so we do nothing here.
+                                    // The flag will be removed by its own timeout.
+                                } else {
+                                    finishSharedGroupTaskAnimation(newGroup, newTask);
+                                }
                             }
                         });
                     }
