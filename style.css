@@ -1354,6 +1354,18 @@ SHARED QUESTS
     opacity: 0.7;
 }
 
+/* NEW: Reorder shared task actions */
+.task-item.shared-group-task .shared-status-indicators {
+    /* Use flex order to visually place indicators before the options button */
+    order: 1;
+}
+
+.task-item.shared-group-task .task-actions-container {
+    /* Place the options button after the indicators */
+    order: 2;
+    margin-left: 0.75rem; /* Override the global 'auto' margin to create space */
+}
+
 .task-item.shared-group-task:not(.my-part-completed):hover {
     background-color: rgba(var(--surface-rgb), 0.5);
 }
