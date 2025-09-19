@@ -1077,17 +1077,6 @@ async function initializeAppLogic(initialUser) {
         const isOwner = user.uid === group.ownerUid;
         const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
 
-        const ownerIconHTML = `<svg class="owner-indicator-icon" title="Owned by ${isOwner ? 'You' : group.ownerUsername}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>`;
-
-        const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-
-        const progressBarHTML = totalTasks > 0 ? `
-            <div class="shared-group-progress-bar-container" title="${completedTasks} of ${totalTasks} tasks fully completed">
-                <div class="shared-group-progress-bar" style="width: ${progressPercent}%;"></div>
-                <span class="shared-group-progress-text">${completedTasks} / ${totalTasks}</span>
-            </div>
-        ` : '';
-
         const editBtnHTML = isOwner ? `<button class="btn icon-btn edit-group-btn" aria-label="Edit group name"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>` : '';
         const addTaskBtnHTML = `<button class="btn icon-btn add-task-to-group-btn" aria-label="Add task"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>`;
         const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-group-btn" data-shared-group-id="${group.id}" aria-label="Unshare Group" title="Unshare Group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
@@ -1097,15 +1086,9 @@ async function initializeAppLogic(initialUser) {
             <header class="main-quest-group-header">
                 <div class="group-title-container">
                     <svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
-                    <div class="group-title-and-progress">
-                        <div class="group-title-and-subtitle">
-                            <div class="group-title-with-icon">
-                                <h3>${group.name}</h3>
-                                ${ownerIconHTML}
-                            </div>
-                            <span class="shared-with-tag">with ${otherPlayerUsername}</span>
-                        </div>
-                        ${progressBarHTML}
+                    <div class="group-title-and-subtitle">
+                        <h3>${group.name}</h3>
+                        <span class="shared-with-tag">with ${otherPlayerUsername}</span>
                     </div>
                 </div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">
                     ${editBtnHTML}

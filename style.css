@@ -1249,60 +1249,6 @@ SHARED QUESTS
     margin-bottom: 2rem;
 }
 
-/* NEW: Shared Group Progress Bar */
-.group-title-and-progress {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem; /* Space between title and bar */
-    flex-grow: 1;
-    min-width: 0; /* Prevent overflow */
-}
-
-.shared-group-progress-bar-container {
-    /* Re-use xp-bar-container styles */
-    background-color: var(--bg);
-    border: var(--border-width) solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.25rem;
-    position: relative;
-    height: 20px; /* A bit smaller than main XP bar */
-}
-
-.shared-group-progress-bar {
-    /* Re-use xp-bar styles */
-    width: 0%;
-    height: 100%; /* Fill container */
-    background-color: var(--accent-green); /* Use green for completion */
-    border-radius: calc(var(--radius) / 2);
-    transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-.shared-group-progress-text {
-    /* Re-use xp-text styles */
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-weight: 700;
-    font-size: 0.8rem;
-    color: var(--text-on-accent);
-}
-
-/* NEW: Owner icon for shared groups */
-.group-title-with-icon {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.owner-indicator-icon {
-    width: 16px;
-    height: 16px;
-    stroke: var(--accent);
-    stroke-width: 2.5px;
-    flex-shrink: 0;
-    opacity: 0.8;
-}
 .shared-group-title {
     font-size: 1.3rem;
     font-weight: 900;
