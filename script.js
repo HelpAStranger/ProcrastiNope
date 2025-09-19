@@ -989,8 +989,16 @@ async function initializeAppLogic(initialUser) {
     const renderGeneralTasks = () => { 
         generalTaskListContainer.innerHTML = ''; 
 
-        // Render normal groups
-        generalTaskGroups.forEach(group => {
+        // Filter out original groups that are now active/completed shared groups
+        const localGroupsToRender = generalTaskGroups.filter(group => {
+            if (!group || !group.isShared) return true; // Render normal groups and guard against undefined
+            // If shared, only render if it's still pending.
+            // `sharedGroups` contains active/completed shared groups.
+            return !sharedGroups.some(sg => sg && sg.id === group.sharedGroupId);
+        });
+
+        // Render normal groups and pending shared groups
+        localGroupsToRender.forEach(group => {
             const el = createGroupElement(group);
             generalTaskListContainer.appendChild(el);
         });
