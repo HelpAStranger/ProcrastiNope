@@ -1244,11 +1244,6 @@ SHARED QUESTS
     margin-bottom: 1rem;
 }
 
-/* NEW: Styles for shared quest groups */
-.shared-quest-group {
-    margin-bottom: 2rem;
-}
-
 .shared-group-title {
     font-size: 1.3rem;
     font-weight: 900;
