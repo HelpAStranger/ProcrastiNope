@@ -1843,11 +1843,12 @@ async function initializeAppLogic(initialUser) {
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
                 if (!groupDoc.exists()) throw "Document does not exist!";
-
-                let serverTasks = groupDoc.data().tasks || [];
+                
+                // FIX: Create a deep copy of the tasks array to avoid mutating the document snapshot from the transaction.
+                let serverTasks = JSON.parse(JSON.stringify(groupDoc.data().tasks || []));
                 const serverTaskIndex = serverTasks.findIndex(t => t.id === taskId);
                 if (serverTaskIndex === -1) return; // Task already removed by other user.
-
+                
                 const serverTaskToUpdate = serverTasks[serverTaskIndex];
                 
                 // Apply the change
