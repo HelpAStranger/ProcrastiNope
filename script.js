@@ -1611,7 +1611,9 @@ async function initializeAppLogic(initialUser) {
             const newTaskEl = createTaskElement(task, type);
             oldTaskEl.replaceWith(newTaskEl);
             if (type !== 'daily') { // Main quest completion
-                createConfetti(newTaskEl);
+                // FIX: Defer confetti creation to a separate frame to avoid blocking the UI thread
+                // during the click event. This makes the completion feel instantaneous.
+                requestAnimationFrame(() => createConfetti(newTaskEl));
             }
         } else {
             renderAllLists(); // Fallback if element not found
