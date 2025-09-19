@@ -3744,6 +3744,11 @@ async function initializeAppLogic(initialUser) {
                             // Find and remove the original placeholder task from the owner's list.
                             const index = list.findIndex(t => t.id === removedQuestData.originalTaskId);
                             if (index > -1) list.splice(index, 1);
+                            if (index > -1) {
+                                list.splice(index, 1);
+                                // Persist the removal of the placeholder task.
+                                saveState();
+                            }
                         }
                     }
                 } else { // 'added' or 'modified'
@@ -3835,6 +3840,8 @@ async function initializeAppLogic(initialUser) {
                         const index = generalTaskGroups.findIndex(g => g.id === removedGroupData.originalGroupId);
                         if (index > -1) {
                             generalTaskGroups.splice(index, 1);
+                            // Persist the removal of the placeholder group.
+                            saveState();
                         }
                     }
                 } else {
