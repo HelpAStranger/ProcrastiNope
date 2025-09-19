@@ -1138,10 +1138,11 @@ async function initializeAppLogic(initialUser) {
             <div class="task-content">
                 <span class="task-text">${task.text}</span>
             </div>
-            <div class="task-buttons-wrapper">${buttonsHTML}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
-            <div class="shared-status-indicators" title="${group.ownerUsername} | ${group.friendUsername}">
-                <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}"></div>
-                <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}"></div>
+            <div class="task-buttons-wrapper">${buttonsHTML}</div>
+            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
+            <div class="shared-status-indicators">
+                <div class="status-indicator ${task.ownerCompleted ? 'completed' : ''}" title="${group.ownerUsername}"></div>
+                <div class="status-indicator ${task.friendCompleted ? 'completed' : ''}" title="${group.friendUsername}"></div>
             </div>`;
         
         if (myPartCompleted) {
@@ -1172,9 +1173,6 @@ async function initializeAppLogic(initialUser) {
             }
             li.dataset.id = task.questId; // Use questId for shared quests
 
-            const selfIdentifier = isOwner ? 'You' : otherPlayerUsername;
-            const otherIdentifier = isOwner ? otherPlayerUsername : task.ownerUsername; // Corrected: should be owner's username if current user is friend
-
             const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-active-btn" aria-label="Unshare Quest" title="Unshare Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
             const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-quest-btn" aria-label="Abandon Quest" title="Abandon Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
 
@@ -1189,14 +1187,13 @@ async function initializeAppLogic(initialUser) {
             li.innerHTML = `
                 <div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
                 <div class="task-content"><span class="task-text">${task.text}</span></div>
-                <div class="task-buttons-wrapper">${buttonsHTML}</div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
-                <div class="shared-quest-info">
-                    <span class="shared-with-tag">with ${otherPlayerUsername}</span>
-                    <div class="shared-status-indicators" title="${selfIdentifier} | ${otherIdentifier}">
-                        <div class="status-indicator ${ownerCompleted ? 'completed' : ''}"></div>
-                        <div class="status-indicator ${friendCompleted ? 'completed' : ''}"></div>
-                    </div>
-                </div>`;
+                <div class="task-buttons-wrapper">${buttonsHTML}</div>
+                <span class="shared-with-tag">with ${otherPlayerUsername}</span>
+                <div class="shared-status-indicators">
+                    <div class="status-indicator ${ownerCompleted ? 'completed' : ''}" title="${task.ownerUsername}"></div>
+                    <div class="status-indicator ${friendCompleted ? 'completed' : ''}" title="${task.friendUsername}"></div>
+                </div>
+                <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
 
             if (myPartCompleted) {
                  li.classList.add('my-part-completed'); // New class for my part completion
