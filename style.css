@@ -242,7 +242,7 @@ main.container {
     }
 
     /* Add hover-to-peek behavior for collapsed groups on desktop */
-    .main-quest-group:not(.expanded):hover ul.task-list-group {
+    body:not(.is-dragging) .main-quest-group:not(.expanded):hover ul.task-list-group {
         max-height: 140px; /* A height that shows ~2 tasks */
         margin-top: 1rem;
         transition: max-height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), margin-top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -251,7 +251,7 @@ main.container {
     }
 
     /* NEW: Add hover effect for task completion indicator on desktop */
-    .task-item:not(.daily-completed):not(.my-part-completed):not(.is-shared-task):not(.pending-deletion):hover .completion-indicator::before {
+    body:not(.is-dragging) .task-item:not(.daily-completed):not(.my-part-completed):not(.is-shared-task):not(.pending-deletion):hover .completion-indicator::before {
         transform: translate(-50%, -50%) scale(1);
     }
 }
@@ -1258,9 +1258,8 @@ SHARED QUESTS
 .task-item.shared-quest {
     border-style: double;
     border-width: 4px;
-    padding: 0.75rem 1rem; /* Keep compact padding */
-    flex-wrap: nowrap; /* Make it single-line */
-    gap: 0.75rem; /* Add space between elements at the end */
+    padding: 1rem 1.5rem; /* Use standard padding for more height */
+    align-items: center; /* Vertically center multi-line content with buttons */
 }
 
 /* NEW: Styles for tasks within a shared group */
@@ -1306,8 +1305,7 @@ SHARED QUESTS
     order: 2;
     margin-left: 0.75rem; /* Override the global 'auto' margin to create space */
 }
-
-.task-item.shared-group-task:not(.my-part-completed):hover {
+body:not(.is-dragging) .task-item.shared-group-task:not(.my-part-completed):hover {
     background-color: rgba(var(--surface-rgb), 0.5);
 }
 
@@ -1327,9 +1325,26 @@ SHARED QUESTS
 .shared-with-tag {
     font-weight: 700;
     opacity: 0.8;
-    /* Position it correctly in the flex row */
     margin-left: auto; /* Push it after the growing task content */
     flex-shrink: 0; /* Prevent it from shrinking */
+}
+
+.task-title-and-subtitle .task-text {
+    display: block;
+}
+
+.task-title-and-subtitle .shared-with-tag {
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9em;
+    margin-top: 0.25rem;
+}
+
+.shared-with-tag .friend-icon {
+    width: 1em;
+    height: 1em;
 }
 
 .shared-status-indicators {
