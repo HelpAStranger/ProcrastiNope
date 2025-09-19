@@ -1381,7 +1381,12 @@ async function initializeAppLogic(initialUser) {
     const findTaskAndContext = (id) => {
         let task = dailyTasks.find(t => t && t.id === id); if (task) return { task, list: dailyTasks, type: 'daily' };
         task = standaloneMainQuests.find(t => t && t.id === id); if(task) return { task, list: standaloneMainQuests, type: 'standalone'};
-        for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } } 
+        for (const g of generalTaskGroups) { if (g && g.tasks) { const i = g.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: g.tasks[i], list: g.tasks, group: g, type: 'group' }; } }
+
+        // If no task was found, check if the ID matches a general group ID.
+        const generalGroup = generalTaskGroups.find(g => g && g.id === id);
+        if (generalGroup) return { group: generalGroup, type: 'group-header' };
+
         task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
         const group = sharedGroups.find(g => g && g.id === id); if (group) return { group, type: 'shared-group' };
         return {};
