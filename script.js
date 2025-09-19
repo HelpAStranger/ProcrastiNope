@@ -1774,79 +1774,83 @@ async function initializeAppLogic(initialUser) {
         });
     };
     const completeSharedGroupTask = async (groupId, taskId, uncompleting = false) => {
-        // REFACTOR: This function is now fully transactional to prevent race conditions.
-        // It handles updating completion status and removing the task if both users are done.
-        const groupRef = doc(db, "sharedGroups", groupId);
-        try {
-            let wasFullyCompleted = false;
+        // --- Optimistic Update ---
+        // 1. Find local data to determine the optimistic outcome.
+        const group = sharedGroups.find(g => g.id === groupId);
+        if (!group) return;
+        const taskIndex = group.tasks.findIndex(t => t.id === taskId);
+        if (taskIndex === -1) return;
+        
+        const task = { ...group.tasks[taskIndex] }; // Work with a copy
+        const isOwner = user.uid === group.ownerUid;
+        const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
+        const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
 
-            await runTransaction(db, async (transaction) => {
-                const groupDoc = await transaction.get(groupRef);
-                if (!groupDoc.exists()) {
-                    throw "Document does not exist!";
-                }
+        // 2. Perform optimistic UI changes based on the action.
+        if (uncompleting) {
+            if (!task[myCompletionFlag]) return; // Already uncompleted.
 
-                const groupData = groupDoc.data();
-                let tasks = [...groupData.tasks];
-                const taskIndex = tasks.findIndex(t => t.id === taskId);
+            audioManager.playSound('delete');
+            addXp(-(XP_PER_TASK / 2));
+            task[myCompletionFlag] = false;
+            delete task.status;
+        } else { // Completing
+            if (task[myCompletionFlag]) return; // Already completed.
 
-                if (taskIndex === -1) return; // Task not found, maybe already deleted.
-
-                const taskToUpdate = tasks[taskIndex];
-                const isOwner = user.uid === groupData.ownerUid;
-                const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
-                const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
-
-                if (uncompleting) {
-                    if (!taskToUpdate[myCompletionFlag]) return;
-                    taskToUpdate[myCompletionFlag] = false;
-                    // If we are uncompleting, the task is no longer fully completed, so remove the status.
-                    delete taskToUpdate.status;
-                    tasks[taskIndex] = taskToUpdate;
-                } else {
-                    if (taskToUpdate[myCompletionFlag]) return;
-                    taskToUpdate[myCompletionFlag] = true;
-                    if (taskToUpdate[friendCompletionFlag]) {
-                        wasFullyCompleted = true;
-                        // Instead of removing the task, mark it for completion.
-                        // The listener will handle the animation and subsequent removal.
-                        taskToUpdate.status = 'completed';
-                        tasks[taskIndex] = taskToUpdate;
-                    } else {
-                        tasks[taskIndex] = taskToUpdate;
-                    }
-                }
-                transaction.update(groupRef, { tasks: tasks });
-            });
-
-            // Post-transaction effects
-            if (wasFullyCompleted) {
-                // Find the group and task data locally to trigger the animation immediately
-                // for the user who performed the action. This makes completion feel instant.
-                const group = sharedGroups.find(g => g.id === groupId);
-                if (group) {
-                    const task = group.tasks.find(t => t.id === taskId);
-                    if (task) {
-                        const uniqueId = `${groupId}_${taskId}`;
-                        locallyAnimatingTasks.add(uniqueId);
-                        // Clean up the flag after a few seconds, just in case the listener is slow or fails.
-                        setTimeout(() => locallyAnimatingTasks.delete(uniqueId), 3000);
-
-                        // We need to ensure the local task object has the 'completed' status
-                        // before passing it to the animation function, as the listener hasn't run yet.
-                        finishSharedGroupTaskAnimation(group, { ...task, status: 'completed' });
-                    }
-                }
-            } else if (!uncompleting) {
+            if (task[friendCompletionFlag]) {
+                // This is the final completion, trigger the big animation immediately.
+                const uniqueId = `${groupId}_${taskId}`;
+                locallyAnimatingTasks.add(uniqueId);
+                setTimeout(() => locallyAnimatingTasks.delete(uniqueId), 3000);
+                
+                // The animation function handles sound and XP for full completion.
+                finishSharedGroupTaskAnimation(group, { ...task, status: 'completed' });
+                
+                task[myCompletionFlag] = true;
+                task.status = 'completed';
+            } else {
+                // Just completing my part.
                 audioManager.playSound('complete');
                 addXp(XP_PER_TASK / 2);
-            } else {
-                audioManager.playSound('delete');
-                addXp(-(XP_PER_TASK / 2));
+                task[myCompletionFlag] = true;
             }
+        }
+        
+        // 3. Apply the optimistic state to the local data model and re-render for instant feedback (e.g., strikethrough).
+        group.tasks[taskIndex] = task;
+        renderAllLists();
+
+        // --- Database Synchronization ---
+        // 4. Run a transaction to persist the change.
+        const groupRef = doc(db, "sharedGroups", groupId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const groupDoc = await transaction.get(groupRef);
+                if (!groupDoc.exists()) throw "Document does not exist!";
+
+                let serverTasks = groupDoc.data().tasks || [];
+                const serverTaskIndex = serverTasks.findIndex(t => t.id === taskId);
+                if (serverTaskIndex === -1) return; // Task already removed by other user.
+
+                const serverTaskToUpdate = serverTasks[serverTaskIndex];
+                
+                // Apply the change
+                serverTaskToUpdate[myCompletionFlag] = !uncompleting;
+
+                // Re-evaluate status based on server state + our change
+                if (uncompleting) {
+                    delete serverTaskToUpdate.status;
+                } else if (serverTaskToUpdate[friendCompletionFlag]) {
+                    serverTaskToUpdate.status = 'completed';
+                }
+                
+                transaction.update(groupRef, { tasks: serverTasks });
+            });
         } catch (error) {
             console.error("Error completing shared group task:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not update task status. Please try again.", () => {});
+            showConfirm("Error", "Could not save task status. The UI will revert.", () => {
+                window.location.reload(); // Safest way to resync after optimistic update failure.
+            });
         }
     };
     const updateSharedGroupTaskOrder = async (groupId, newTasks) => {
