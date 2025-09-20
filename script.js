@@ -1432,7 +1432,7 @@ async function initializeAppLogic(initialUser) {
             if (item.tasks) { const i = item.tasks.findIndex(t => t && t.id === id); if (i !== -1) return { task: item.tasks[i], list: item.tasks, group: item, type: 'group' }; }
         }
 
-        task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
+        let task = sharedQuests.find(t => t && t.questId === id); if (task) return { task, list: sharedQuests, type: 'shared' };
         const group = sharedGroups.find(g => g && g.id === id); if (group) return { group, type: 'shared-group' };
         return {};
     };
