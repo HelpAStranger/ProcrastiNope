@@ -803,10 +803,10 @@ async function initializeAppLogic(initialUser) {
         // Re-apply the transient state to the newly loaded data
         [...dailyItems, ...mainItems].forEach(item => {
             if (item && item.tasks) { // It's a group
-                if (expandedGroupIds.has(group.id)) {
-                    group.isExpanded = true;
+                if (expandedGroupIds.has(item.id)) {
+                    item.isExpanded = true;
                 } else {
-                    group.isExpanded = false;
+                    item.isExpanded = false;
                 }
             }
         });
