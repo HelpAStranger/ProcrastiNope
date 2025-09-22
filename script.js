@@ -1567,8 +1567,8 @@ async function initializeAppLogic(initialUser) {
                     if (i > -1) list.splice(i, 1); // This mutates dailyItems or mainItems
                 }
                 if (group && (!group.tasks || group.tasks.length === 0)) {
-                    const i = generalTaskGroups.findIndex(g => g.id === group.id);
-                    if (i > -1) generalTaskGroups.splice(i, 1);
+                    const i = mainItems.findIndex(g => g.id === group.id);
+                    if (i > -1) mainItems.splice(i, 1);
                 }
                 undoTimeoutMap.delete(id);
                 saveState();
@@ -1964,7 +1964,7 @@ async function initializeAppLogic(initialUser) {
 
                 if (!sharedGroupSnap.exists()) {
                     console.log("Group share to cancel not found, it was likely already handled.");
-                    const originalGroup = generalTaskGroups.find(g => g.sharedGroupId === sharedGroupId);
+                    const originalGroup = mainItems.find(g => g.tasks && g.sharedGroupId === sharedGroupId);
                     if (originalGroup) { // eslint-disable-line
                         delete originalGroup.isShared;
                         delete originalGroup.sharedGroupId;
@@ -1990,7 +1990,7 @@ async function initializeAppLogic(initialUser) {
                 await deleteDoc(sharedGroupRef);
 
                 // Revert the original group in local state for responsiveness.
-                const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
+                const originalGroup = mainItems.find(g => g.tasks && g.id === groupData.originalGroupId);
                 if (originalGroup) {
                     delete originalGroup.isShared; // eslint-disable-line
                     delete originalGroup.sharedGroupId;
@@ -2264,7 +2264,7 @@ async function initializeAppLogic(initialUser) {
 
             // It's a normal group header.
             const groupId = parentEl.dataset.groupId;
-            const g = generalTaskGroups.find(g => g.id === groupId);
+            const g = [...dailyItems, ...mainItems].find(item => item.id === groupId && item.tasks);
 
             if (e.target.closest('.options-btn')) {
                 shiftHoverItem = null; // A click on options button takes precedence
@@ -2720,16 +2720,14 @@ async function initializeAppLogic(initialUser) {
     weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
     editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
     
-    if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; standaloneDailyQuests = []; dailyTaskGroups = []; standaloneMainQuests = []; generalTaskGroups = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
+    if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyItems = []; mainItems = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
     if (exportDataBtn) exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
     if (resetCloudDataBtn) {
         resetCloudDataBtn.addEventListener('click', () => {
             showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => { // eslint-disable-line
                 playerData = { level: 1, xp: 0 }; // eslint-disable-line
-                dailyTasks = [];
-                standaloneMainQuests = [];
-                generalTaskGroups = [];
-                dailyTaskGroups = []; // Also reset daily groups
+                dailyItems = [];
+                mainItems = [];
                 renderAllLists();
                 saveState(); // This will save the empty state to Firestore because `user` is not null
                 audioManager.playSound('delete');
@@ -3160,8 +3158,8 @@ async function initializeAppLogic(initialUser) {
                 // NEW: Revert any groups owned by the current user (the one being removed)
                 if (sharedGroupsData.length > 0) {
                     for (const groupData of sharedGroupsData) {
-                        if (user && groupData.ownerUid === user.uid) {
-                            const originalGroup = generalTaskGroups.find(g => g.id === groupData.originalGroupId);
+                    if (user && groupData.ownerUid === user.uid) { // eslint-disable-line
+                        const originalGroup = mainItems.find(g => g.tasks && g.id === groupData.originalGroupId);
                             if (originalGroup) {
                                 delete originalGroup.isShared;
                                 delete originalGroup.sharedGroupId;
@@ -3534,9 +3532,9 @@ async function initializeAppLogic(initialUser) {
 
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
             try {
-                // Re-create the group in the owner's local list. // eslint-disable-line
-                const newLocalGroup = { id: group.originalGroupId, name: group.name, tasks: group.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false };
-                generalTaskGroups.push(newLocalGroup);
+                // Re-create the group in the owner's local list.
+                const newLocalGroup = { id: group.originalGroupId, name: group.name, tasks: group.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false, type: 'main' };
+                mainItems.push(newLocalGroup);
                 saveState();
 
                 await deleteDoc(doc(db, "sharedGroups", groupId));
@@ -3835,9 +3833,9 @@ async function initializeAppLogic(initialUser) {
                     // When a shared group is deleted (e.g., after completion),
                     // find and remove the original placeholder group from the owner's list.
                     if (removedGroupData && removedGroupData.originalGroupId) {
-                        const index = generalTaskGroups.findIndex(g => g.id === removedGroupData.originalGroupId);
+                        const index = mainItems.findIndex(g => g.tasks && g.id === removedGroupData.originalGroupId);
                         if (index > -1) {
-                            generalTaskGroups.splice(index, 1);
+                            mainItems.splice(index, 1);
                             // Persist the removal of the placeholder group.
                             saveState();
                         }
@@ -3888,8 +3886,8 @@ async function initializeAppLogic(initialUser) {
                     // Handle when a friend rejects or abandons a group share
                     if ((newGroup.status === 'rejected' || newGroup.status === 'abandoned') && newGroup.ownerUid === user.uid) {
                         // Re-create the group locally for the owner.
-                        const newLocalGroup = { id: newGroup.originalGroupId, name: newGroup.name, tasks: newGroup.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false };
-                        generalTaskGroups.push(newLocalGroup);
+                        const newLocalGroup = { id: newGroup.originalGroupId, name: newGroup.name, tasks: newGroup.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false, type: 'main' };
+                        mainItems.push(newLocalGroup);
                         saveState();
 
                         deleteDoc(doc(db, "sharedGroups", newGroup.id));
@@ -4176,8 +4174,8 @@ async function initializeAppLogic(initialUser) {
     async function shareGroup(groupId, friendUid, friendUsername) {
         if (!user) return;
 
-        const groupIndex = generalTaskGroups.findIndex(g => g.id === groupId);
-        if (groupIndex === -1) return;
+        const groupIndex = mainItems.findIndex(item => item.id === groupId && item.tasks);
+        if (groupIndex === -1) return; // Not found or not a group
 
         const groupToShare = mainItems.find(item => item.id === groupId);
         if (groupToShare.isShared) {
@@ -4515,8 +4513,14 @@ async function initializeAppLogic(initialUser) {
                             const i = list.findIndex(t => t.id === id); // eslint-disable-line
                             if (i > -1) { list.splice(i, 1); needsSave = true; }
                         } else if (group) {
-                            const i = generalTaskGroups.findIndex(g => g.id === id);
-                            if (i > -1) { generalTaskGroups.splice(i, 1); needsSave = true; }
+                            // It's a group
+                            if (group.type === 'daily') {
+                                const i = dailyItems.findIndex(g => g.id === id);
+                                if (i > -1) { dailyItems.splice(i, 1); needsSave = true; }
+                            } else { // 'main'
+                                const i = mainItems.findIndex(g => g.id === id);
+                                if (i > -1) { mainItems.splice(i, 1); needsSave = true; }
+                            }
                         }
                     }
                 });
