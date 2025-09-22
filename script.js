@@ -3764,7 +3764,7 @@ async function initializeAppLogic(initialUser) {
                         if (!oldQuest || oldQuest.status !== 'completed') {
                             // Add a transient flag to ensure the animation class is applied even after a re-render.
                             newQuest.isFinishing = true;
-                            finishSharedQuestAnimation(newQuest);
+                            finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid);
                         }
                     }
 
@@ -4069,23 +4069,23 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
-    async function finishSharedQuestAnimation(questData) {
+    async function finishSharedQuestAnimation(questId, ownerUid) {
         audioManager.playSound('sharedQuestFinish');
-        const taskEl = document.querySelector(`.task-item[data-id="${questData.id}"]`);
+        const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
         // The animation class is now added by createTaskElement during the re-render.
         // We just need to trigger the confetti.
         if (taskEl) {
             createConfetti(taskEl);
         }
-
+    
         // Use a timeout that matches the animation duration. This is more robust
         // than relying on the animationend event, which can be cancelled if the
         // element is removed from the DOM by a re-render.
         setTimeout(async () => {
-            const isOwner = user && questData.ownerUid === user.uid;
+            const isOwner = user && ownerUid === user.uid;
             if (isOwner) {
-                const sharedQuestRef = doc(db, "sharedQuests", questData.id);
+                const sharedQuestRef = doc(db, "sharedQuests", questId);
                 try {
                     // Check if the document still exists. This handles race conditions
                     // where both clients might try to delete the quest.
@@ -4094,7 +4094,7 @@ async function initializeAppLogic(initialUser) {
                         await deleteDoc(sharedQuestRef);
                     }
                 } catch (err) {
-                        console.error("Error deleting shared quest:", getCoolErrorMessage(err));
+                    console.error("Error deleting shared quest:", getCoolErrorMessage(err));
                 }
             }
         }, 1500); // Matches the 1.5s animation duration in style.css
