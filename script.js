@@ -3903,11 +3903,21 @@ async function initializeAppLogic(initialUser) {
                             if (groupEl) {
                                 groupEl.classList.add('shared-quest-finished');
                                 createConfetti(groupEl);
-                                groupEl.addEventListener('animationend', async () => {
+                                // Use a timeout instead of animationend for reliability
+                                setTimeout(async () => {
                                     if (user.uid === newGroup.ownerUid) {
-                                        await deleteDoc(doc(db, "sharedGroups", newGroup.id));
+                                        try {
+                                            const groupRef = doc(db, "sharedGroups", newGroup.id);
+                                            // Check if it exists before deleting to handle race conditions
+                                            const docSnap = await getDoc(groupRef);
+                                            if (docSnap.exists()) {
+                                                await deleteDoc(groupRef);
+                                            }
+                                        } catch (err) {
+                                            console.error("Error deleting completed shared group:", getCoolErrorMessage(err));
+                                        }
                                     }
-                                }, { once: true });
+                                }, 1500); // Matches animation duration
                             }
                         }
                     }
@@ -4123,7 +4133,13 @@ async function initializeAppLogic(initialUser) {
 
                             const currentTasks = groupDoc.data().tasks || [];
                             const updatedTasks = currentTasks.filter(t => t.id !== task.id);
-                            transaction.update(groupRef, { tasks: updatedTasks });
+                            
+                            if (updatedTasks.length === 0) {
+                                // This was the last task, mark the group as completed.
+                                transaction.update(groupRef, { tasks: updatedTasks, status: 'completed' });
+                            } else {
+                                transaction.update(groupRef, { tasks: updatedTasks });
+                            }
                         });
                     } catch (err) {
                         console.error("Error removing completed shared group task:", getCoolErrorMessage(err));

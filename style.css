@@ -1371,7 +1371,8 @@ body:not(.is-dragging) .task-item.shared-group-task:not(.my-part-completed):hove
     animation: friendCompletedPulse 0.8s ease-in-out;
 }
 
-.task-item.shared-quest-finished {
+.task-item.shared-quest-finished,
+.shared-quest-group.shared-quest-finished {
     animation: sharedQuestFinish 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
