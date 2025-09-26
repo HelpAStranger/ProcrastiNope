@@ -3759,13 +3759,28 @@ async function initializeAppLogic(initialUser) {
 
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
                     if (newQuest.status === 'completed') {
-                        const oldQuest = questsMap.get(change.doc.id);
-                        // Only trigger the animation if the status just changed from non-completed to completed.
-                        if (oldQuest && oldQuest.status !== 'completed') {
+                        const oldQuest = questsMap.get(change.doc.id); // Get previous state from our map
+                        const justCompleted = oldQuest && oldQuest.status !== 'completed';
+
+                        if (justCompleted) {
                             // Add a transient flag to ensure the animation class is applied even after a re-render.
                             // This flag is what the rendering function will use to add the animation class.
                             newQuest.isFinishing = true;
                             finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid);
+
+                            // NEW: The owner is responsible for deleting the quest from Firestore after a delay.
+                            // This is more reliable than doing it inside the animation function.
+                            if (user && newQuest.ownerUid === user.uid) {
+                                setTimeout(async () => {
+                                    try {
+                                        const sharedQuestRef = doc(db, "sharedQuests", newQuest.id);
+                                        await deleteDoc(sharedQuestRef);
+                                        // The 'removed' case in this listener will handle cleaning up the owner's placeholder task.
+                                    } catch (err) {
+                                        console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
+                                    }
+                                }, 1500); // Delay matches animation duration
+                            }
                         }
                     }
 
@@ -4082,40 +4097,11 @@ async function initializeAppLogic(initialUser) {
     
     async function finishSharedQuestAnimation(questId, ownerUid) {
         audioManager.playSound('sharedQuestFinish');
-        // The animation class is now added by createTaskElement during the re-render based on the `isFinishing` flag.
-        // We just need to trigger the confetti.
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
-        // After the animation plays, we need to remove the transient `isFinishing` flag.
-        const questInMemory = questsMap.get(questId);
         if (taskEl) {
             createConfetti(taskEl);
         }
-    
-        // Use a timeout that matches the animation duration. This is more robust
-        // than relying on the animationend event, which can be cancelled if the
-        // element is removed from the DOM by a re-render.
-        setTimeout(async () => {
-            const isOwner = user && ownerUid === user.uid;
-            // Remove the transient flag to prevent re-animation on the next render.
-            if (questInMemory) {
-                delete questInMemory.isFinishing;
-            }
-
-            if (isOwner) {
-                const sharedQuestRef = doc(db, "sharedQuests", questId);
-                try {
-                    // Check if the document still exists. This handles race conditions
-                    // where both clients might try to delete the quest.
-                    const docSnap = await getDoc(sharedQuestRef);
-                    if (docSnap.exists()) {
-                        await deleteDoc(sharedQuestRef);
-                    }
-                } catch (err) {
-                    console.error("Error deleting shared quest:", getCoolErrorMessage(err));
-                }
-            }
-        }, 1500); // Matches the 1.5s animation duration in style.css
     }
 
     async function finishSharedGroupTaskAnimation(group, task) {
