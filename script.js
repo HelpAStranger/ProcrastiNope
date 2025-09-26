@@ -1220,112 +1220,132 @@ async function initializeAppLogic(initialUser) {
                 ${abandonBtnHTML}
                 <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-            </div>
-            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${allCompleted ? 'disabled' : ''}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
+            </div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${allCompleted ? 'disabled' : ''}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
     };
 
     /**
-     * Populates a task list item with content for a task pending deletion (undo state).
-     * @param {HTMLElement} li - The list item element.
+     * REFACTORED: Builds an array of CSS classes for a task element based on its state.
      * @param {object} task - The task data object.
-     * @param {string} goalHTML - The pre-generated HTML for the weekly goal tag.
+     * @param {string} type - The type of task ('daily', 'standalone', 'group', 'shared').
+     * @returns {string[]} An array of class names.
      */
-    const buildPendingDeletionContent = (li, task, goalHTML) => {
-        li.classList.add('pending-deletion');
-        li.innerHTML = `
-            <div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
-            <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
-            <div class="task-buttons-wrapper">
-                <button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>
-            </div>`;
-    };
-
-    /**
-     * Populates a task list item with content for a regular task.
-     * @param {HTMLElement} li - The list item element.
-     * @param {object} task - The task data object.
-     * @param {string} goalHTML - The pre-generated HTML for the weekly goal tag.
-     */
-    const buildRegularTaskContent = (li, task, goalHTML) => {
-        const isCompleted = task.completedToday || task.pendingDeletion;
-        li.innerHTML = `
-            <div class="multi-select-checkbox"></div><div class="completion-indicator"></div>
-            <div class="task-content"><span class="task-text">${task.text}</span>${goalHTML}</div>
-            <div class="task-buttons-wrapper">${buildTaskActions()}</div>
-            <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${isCompleted ? 'disabled' : ''}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>`;
-    };
-
-    const createTaskElement = (task, type) => {
-        const li = document.createElement('li');
-        li.className = 'task-item';
-        li.dataset.id = task.id;
-
-        if (type === 'standalone') li.classList.add('standalone-quest');
-        if (selectedQuestIds.has(task.id)) {
-            li.classList.add('multi-select-selected');
-        }
-
+    const buildTaskClasses = (task, type) => {
+        const classes = ['task-item'];
+        if (type === 'standalone') classes.push('standalone-quest');
         if (type === 'shared') {
-            buildSharedTaskContent(li, task);
-            return li;
+            classes.push('shared-quest');
+            if (task.isFinishing) classes.push('shared-quest-finished');
+            if (task.ownerCompleted && task.friendCompleted) classes.push('all-completed');
+            const isOwner = user && task.ownerUid === user.uid;
+            if (isOwner ? task.ownerCompleted : task.friendCompleted) classes.push('my-part-completed');
+        } else {
+            if (task.pendingDeletion) classes.push('pending-deletion');
+            if (task.completedToday) classes.push('daily-completed');
+            if (task.timerFinished && !task.completedToday && !task.pendingDeletion) classes.push('timer-finished');
+            if (task.weeklyGoal > 0 && task.weeklyCompletions >= task.weeklyGoal) classes.push('weekly-goal-met');
+            if (task.isShared) {
+                classes.push('is-shared-task');
+                const sharedQuest = sharedQuests.find(sq => sq.id === task.sharedQuestId);
+                if (!sharedQuest) classes.push('pending-share');
+            }
+            if (type !== 'shared' && !task.completedToday && !task.isShared && (Date.now() - task.createdAt) > 86400000) {
+                classes.push('overdue');
+            }
+            const elapsed = (Date.now() - task.timerStartTime) / 1000;
+            const remaining = Math.max(0, task.timerDuration - elapsed);
+            if (task.timerStartTime && task.timerDuration && !task.completedToday && !task.pendingDeletion && remaining > 0) {
+                classes.push('timer-active');
+            }
+        }
+        if (selectedQuestIds.has(task.id)) classes.push('multi-select-selected');
+        return classes;
+    };
+
+    /**
+     * REFACTORED: Builds the HTML for the main content area of a task.
+     * @param {object} task - The task data object.
+     * @param {string} type - The type of task.
+     * @returns {string} HTML string for the task's content.
+     */
+    const buildTaskContentHTML = (task, type) => {
+        if (type === 'shared') {
+            const isOwner = user && task.ownerUid === user.uid;
+            const otherPlayerUsername = isOwner ? task.friendUsername : task.ownerUsername;
+            const friendIsCompleted = isOwner ? task.friendCompleted : task.ownerCompleted;
+            const friendStatusIndicatorHTML = `<div class="status-indicator ${friendIsCompleted ? 'completed' : ''}" title="${otherPlayerUsername}'s status"></div>`;
+            return `<div class="task-title-and-subtitle"><span class="task-text">${task.text}</span><span class="shared-with-tag">${friendStatusIndicatorHTML} ${otherPlayerUsername}</span></div>`;
         }
 
-        // --- Regular Task Rendering ---
         let goalHTML = '';
         if (type === 'daily' && task.weeklyGoal > 0) {
             goalHTML = `<div class="weekly-goal-tag" title="Weekly goal"><span>${task.weeklyCompletions}/${task.weeklyGoal}</span></div>`;
-            if (task.weeklyCompletions >= task.weeklyGoal) {
-                li.classList.add('weekly-goal-met');
-            }
         }
+        return `<span class="task-text">${task.text}</span>${goalHTML}`;
+    };
 
+    /**
+     * REFACTORED: Builds the HTML for the action buttons inside the overlay.
+     * @param {object} task - The task data object.
+     * @param {string} type - The type of task.
+     * @returns {string} HTML string for the buttons.
+     */
+    const buildTaskActionsHTML = (task, type) => {
         if (task.pendingDeletion) {
-            buildPendingDeletionContent(li, task, goalHTML);
-        } else {
-            buildRegularTaskContent(li, task, goalHTML);
+            return `<button class="btn undo-btn">Undo<div class="undo-timer-bar"></div></button>`;
         }
 
-        // --- Apply shared state classes ---
-        if (task.completedToday) li.classList.add('daily-completed');
-
-        if (task.timerFinished && !task.completedToday && !task.pendingDeletion) {
-            li.classList.add('timer-finished');
-        }
-
-        if (task.timerStartTime && task.timerDuration && !task.completedToday && !task.pendingDeletion) {
-            const elapsed = (Date.now() - task.timerStartTime) / 1000;
-            const remaining = Math.max(0, task.timerDuration - elapsed);
-            if (remaining > 0) {
-                li.classList.add('timer-active');
-                // The `resumeTimers` function, called after render, will handle the visual state of the ring.
-                // We just need to ensure the class is present.
-            }
+        if (type === 'shared') {
+            const isOwner = user && task.ownerUid === user.uid;
+            const unshareBtnHTML = isOwner ? `<button class="btn icon-btn unshare-active-btn" aria-label="Unshare Quest" title="Unshare Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>` : '';
+            const abandonBtnHTML = !isOwner ? `<button class="btn icon-btn abandon-quest-btn" aria-label="Abandon Quest" title="Abandon Quest"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>` : '';
+            return `
+                <button class="btn icon-btn timer-clock-btn" aria-label="Set Timer" aria-haspopup="dialog" aria-controls="timer-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><svg class="progress-ring" viewBox="0 0 24 24"><circle class="progress-ring-circle" r="10" cx="12" cy="12"/></svg></button>
+                ${unshareBtnHTML}
+                ${abandonBtnHTML}
+                <button class="btn icon-btn edit-btn" aria-label="Edit Quest" aria-haspopup="dialog" aria-controls="edit-task-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="btn icon-btn delete-btn" aria-label="Delete Quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+            `;
         }
 
         if (task.isShared) {
-            li.classList.add('is-shared-task');
             const sharedQuest = sharedQuests.find(sq => sq.id === task.sharedQuestId);
-
-            // If the shared quest is not in our list of active/completed quests, it's pending.
-            if (!sharedQuest) {
-                li.classList.add('pending-share');
-                const buttonWrapper = li.querySelector('.task-buttons-wrapper');
-                if (buttonWrapper) {
-                    buttonWrapper.innerHTML = `
-                        <button class="btn icon-btn unshare-btn" data-shared-quest-id="${task.sharedQuestId}" aria-label="Cancel Share" title="Cancel Share"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>
-                    `;
-                }
-            } else { // Active or completed shared task
-                const buttonWrapper = li.querySelector('.task-buttons-wrapper');
-                if (buttonWrapper) {
-                    buttonWrapper.innerHTML = `<button class="btn view-shared-quest-btn" data-shared-quest-id="${task.sharedQuestId}">View Share</button>`;
-                }
+            if (!sharedQuest) { // Pending share
+                return `<button class="btn icon-btn unshare-btn" data-shared-quest-id="${task.sharedQuestId}" aria-label="Cancel Share" title="Cancel Share"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line><line x1="1" y1="1" x2="23" y2="23" style="stroke: var(--accent-red); stroke-width: 3px;"></line></svg></button>`;
+            } else { // Active share placeholder
+                return `<button class="btn view-shared-quest-btn" data-shared-quest-id="${task.sharedQuestId}">View Share</button>`;
             }
         }
 
-        if (type !== 'shared' && !task.completedToday && !task.isShared && (Date.now() - task.createdAt) > 86400000) {
-            li.classList.add('overdue');
-        }
+        // Default actions for a regular task
+        return buildTaskActions();
+    };
+
+    /**
+     * REFACTORED: Creates a complete task element, delegating state logic to helper functions.
+     * This function is now primarily responsible for DOM structure.
+     */
+    const createTaskElement = (task, type) => {
+        const li = document.createElement('li');
+        li.className = buildTaskClasses(task, type).join(' ');
+        li.dataset.id = type === 'shared' ? task.questId : task.id;
+
+        const contentHTML = buildTaskContentHTML(task, type);
+        const actionsHTML = buildTaskActionsHTML(task, type);
+
+        const isCompleted = task.completedToday || task.pendingDeletion || (type === 'shared' && task.ownerCompleted && task.friendCompleted);
+        const optionsBtnDisabled = isCompleted ? 'disabled' : '';
+
+        li.innerHTML = `
+            <div class="multi-select-checkbox"></div>
+            <div class="completion-indicator"></div>
+            <div class="task-content">${contentHTML}</div>
+            <div class="task-buttons-wrapper">${actionsHTML}</div>
+            <div class="task-actions-container">
+                <button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+                </button>
+            </div>
+        `;
 
         return li;
     };
