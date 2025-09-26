@@ -1186,11 +1186,6 @@ async function initializeAppLogic(initialUser) {
             const allCompleted = ownerCompleted && friendCompleted;
             const myPartCompleted = isOwner ? ownerCompleted : friendCompleted;
             optionsBtnDisabled = allCompleted ? 'disabled' : '';
-
-            li.classList.add('shared-quest');
-            if (allCompleted) {
-                li.classList.add('all-completed');
-            }
             // NEW: Check for the transient finishing flag to apply animation
             if (task.isFinishing) {
                 li.classList.add('shared-quest-finished');
@@ -1198,6 +1193,10 @@ async function initializeAppLogic(initialUser) {
             li.dataset.id = task.questId; // Use questId for shared quests
 
             // NEW: Determine friend's completion status and create the indicator
+            li.classList.add('shared-quest');
+            if (allCompleted) {
+                li.classList.add('all-completed');
+            }
             const friendIsCompleted = isOwner ? friendCompleted : ownerCompleted;
             const friendStatusIndicatorHTML = `<div class="status-indicator ${friendIsCompleted ? 'completed' : ''}" title="${otherPlayerUsername}'s status"></div>`;
 
@@ -3761,8 +3760,10 @@ async function initializeAppLogic(initialUser) {
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
                     if (newQuest.status === 'completed') {
                         const oldQuest = questsMap.get(change.doc.id);
-                        if (!oldQuest || oldQuest.status !== 'completed') {
+                        // Only trigger the animation if the status just changed from non-completed to completed.
+                        if (oldQuest && oldQuest.status !== 'completed') {
                             // Add a transient flag to ensure the animation class is applied even after a re-render.
+                            // This flag is what the rendering function will use to add the animation class.
                             newQuest.isFinishing = true;
                             finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid);
                         }
@@ -4081,10 +4082,12 @@ async function initializeAppLogic(initialUser) {
     
     async function finishSharedQuestAnimation(questId, ownerUid) {
         audioManager.playSound('sharedQuestFinish');
+        // The animation class is now added by createTaskElement during the re-render based on the `isFinishing` flag.
+        // We just need to trigger the confetti.
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
-        // The animation class is now added by createTaskElement during the re-render.
-        // We just need to trigger the confetti.
+        // After the animation plays, we need to remove the transient `isFinishing` flag.
+        const questInMemory = questsMap.get(questId);
         if (taskEl) {
             createConfetti(taskEl);
         }
@@ -4094,6 +4097,11 @@ async function initializeAppLogic(initialUser) {
         // element is removed from the DOM by a re-render.
         setTimeout(async () => {
             const isOwner = user && ownerUid === user.uid;
+            // Remove the transient flag to prevent re-animation on the next render.
+            if (questInMemory) {
+                delete questInMemory.isFinishing;
+            }
+
             if (isOwner) {
                 const sharedQuestRef = doc(db, "sharedQuests", questId);
                 try {
