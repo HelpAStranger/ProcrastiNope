@@ -3769,7 +3769,6 @@ async function initializeAppLogic(initialUser) {
 
         const handleSnapshot = (querySnapshot) => { // PERF: Combined multiple listeners into one.
             // Process changes to update the map
-            querySnapshot.docChanges().forEach((change) => {
             querySnapshot.docChanges().forEach(async (change) => {
                 if (change.type === 'removed') {
                     const removedQuestData = questsMap.get(change.doc.id);
@@ -3830,20 +3829,6 @@ async function initializeAppLogic(initialUser) {
                             // This flag is what the rendering function will use to add the animation class.
                             newQuest.isFinishing = true;
                             finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid);
-
-                            // NEW: The owner is responsible for deleting the quest from Firestore after a delay.
-                            // This is more reliable than doing it inside the animation function.
-                            if (user && newQuest.ownerUid === user.uid) {
-                                setTimeout(async () => {
-                                    try {
-                                        const sharedQuestRef = doc(db, "sharedQuests", newQuest.id);
-                                        await deleteDoc(sharedQuestRef);
-                                        // The 'removed' case in this listener will handle cleaning up the owner's placeholder task.
-                                    } catch (err) {
-                                        console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
-                                    }
-                                }, 1500); // Delay matches animation duration
-                            }
                         }
                     }
 
@@ -4120,12 +4105,10 @@ async function initializeAppLogic(initialUser) {
         const isOwner = user && task.ownerUid === user.uid;
 
         const currentSharedQuestSnap = await getDoc(sharedQuestRef);
-        if (!currentSharedQuestSnap.exists()) {
         if (!currentSharedQuestSnap.exists()) { // Quest was already deleted by the other user.
             console.error("Shared quest not found:", questId);
             return;
         }
-        const currentSharedQuestData = currentSharedQuestSnap.data();
         let currentSharedQuestData = currentSharedQuestSnap.data();
     
         const updateData = {};
@@ -4162,9 +4145,6 @@ async function initializeAppLogic(initialUser) {
         } else {
             await updateDoc(sharedQuestRef, updateData);
         }
-
-        await updateDoc(sharedQuestRef, updateData);
-
         if (!uncompleting) {
             audioManager.playSound('complete');
             addXp(XP_PER_SHARED_QUEST / 2);
