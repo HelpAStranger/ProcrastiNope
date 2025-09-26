@@ -3770,9 +3770,27 @@ async function initializeAppLogic(initialUser) {
         const handleSnapshot = (querySnapshot) => { // PERF: Combined multiple listeners into one.
             // Process changes to update the map
             querySnapshot.docChanges().forEach((change) => {
+            querySnapshot.docChanges().forEach(async (change) => {
                 if (change.type === 'removed') {
                     const removedQuestData = questsMap.get(change.doc.id);
                     questsMap.delete(change.doc.id);
+
+                    // If the quest was removed because it was just completed, play the animation before removing it from the DOM.
+                    if (removedQuestData && removedQuestData.isFinishing) {
+                        const taskEl = document.querySelector(`.task-item[data-id="${change.doc.id}"]`);
+                        if (taskEl) {
+                            // The element is about to be removed by the re-render. We "catch" it here,
+                            // play the animation, and then remove it manually.
+                            taskEl.classList.add('shared-quest-finished');
+                            createConfetti(taskEl);
+                            audioManager.playSound('sharedQuestFinish');
+                            taskEl.addEventListener('animationend', () => {
+                                taskEl.remove();
+                            }, { once: true });
+                            // Prevent the main render function from re-creating it briefly.
+                            return;
+                        }
+                    }
 
                     // When a shared quest is deleted, we need to clean up the original placeholder task.
                     // This should ONLY happen for quests that were successfully completed.
@@ -4103,10 +4121,12 @@ async function initializeAppLogic(initialUser) {
 
         const currentSharedQuestSnap = await getDoc(sharedQuestRef);
         if (!currentSharedQuestSnap.exists()) {
+        if (!currentSharedQuestSnap.exists()) { // Quest was already deleted by the other user.
             console.error("Shared quest not found:", questId);
             return;
         }
         const currentSharedQuestData = currentSharedQuestSnap.data();
+        let currentSharedQuestData = currentSharedQuestSnap.data();
     
         const updateData = {};
         let willBeCompleted = false;
@@ -4127,6 +4147,20 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
+            // The quest is now complete. The user who completes it last is responsible for deletion.
+            try {
+                // Set a transient flag on the in-memory object. The 'removed' listener will see this
+                // and know to play the animation instead of just removing the element.
+                const questInMemory = questsMap.get(questId);
+                if (questInMemory) {
+                    questInMemory.isFinishing = true;
+                }
+                await deleteDoc(sharedQuestRef);
+            } catch (err) {
+                console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
+            }
+        } else {
+            await updateDoc(sharedQuestRef, updateData);
         }
 
         await updateDoc(sharedQuestRef, updateData);
@@ -4142,11 +4176,14 @@ async function initializeAppLogic(initialUser) {
     
     async function finishSharedQuestAnimation(questId, ownerUid) {
         audioManager.playSound('sharedQuestFinish');
+        // This function is now only called for the user who did NOT complete the quest last.
+        // The quest element will still be in their DOM.
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
         if (taskEl) {
             createConfetti(taskEl);
         }
+        // No deletion logic here. The owner (whoever it is) handles deletion.
     }
 
     async function finishSharedGroupTaskAnimation(group, task) {
