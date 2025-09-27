@@ -3774,6 +3774,12 @@ async function initializeAppLogic(initialUser) {
                     const removedQuestData = questsMap.get(change.doc.id);
                     questsMap.delete(change.doc.id);
 
+                    // If the quest is being animated locally, the local animation function is responsible for removing the element.
+                    // The listener should not interfere, to prevent the element from disappearing abruptly.
+                    if (locallyAnimatingTasks.has(change.doc.id)) {
+                        return;
+                    }
+
                     // If the quest was removed because it was just completed, play the animation before removing it from the DOM.
                     if (removedQuestData && removedQuestData.isFinishing) {
                         const taskEl = document.querySelector(`.task-item[data-id="${change.doc.id}"]`);
@@ -4130,40 +4136,57 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-            // The quest is now complete. The user who completes it last is responsible for deletion.
+            // The quest is now complete. The user who completes it last triggers the animation locally
+            // and is responsible for deletion.
             try {
-                // Set a transient flag on the in-memory object. The 'removed' listener will see this
-                // and know to play the animation instead of just removing the element.
-                const questInMemory = questsMap.get(questId);
-                if (questInMemory) {
-                    questInMemory.isFinishing = true;
+                // --- OPTIMISTIC UI UPDATE ---
+                // 1. Animate the element immediately.
+                const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
+                if (taskEl) {
+                    taskEl.classList.add('shared-quest-finished');
+                    createConfetti(taskEl);
+                    audioManager.playSound('sharedQuestFinish');
+                    addXp(XP_PER_SHARED_QUEST); // Give full XP
+                    taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
                 }
+
+                // 2. Flag this task as being animated locally to prevent the listener from interfering.
+                locallyAnimatingTasks.add(questId);
+                setTimeout(() => locallyAnimatingTasks.delete(questId), 2000); // Clean up the flag after animation.
+
+                // 3. Delete the document from Firestore. The listener will see the 'removed' event but ignore it.
                 await deleteDoc(sharedQuestRef);
             } catch (err) {
                 console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
             }
         } else {
             await updateDoc(sharedQuestRef, updateData);
-        }
-        if (!uncompleting) {
-            audioManager.playSound('complete');
-            addXp(XP_PER_SHARED_QUEST / 2);
-        } else {
-            audioManager.playSound('delete');
-            addXp(-(XP_PER_SHARED_QUEST / 2));
+            if (!uncompleting) {
+                audioManager.playSound('complete');
+                addXp(XP_PER_SHARED_QUEST / 2);
+            } else {
+                audioManager.playSound('delete');
+                addXp(-(XP_PER_SHARED_QUEST / 2));
+            }
         }
     }
     
     async function finishSharedQuestAnimation(questId, ownerUid) {
         audioManager.playSound('sharedQuestFinish');
-        // This function is now only called for the user who did NOT complete the quest last.
-        // The quest element will still be in their DOM.
+        // The animation class is added by createTaskElement based on the `isFinishing` flag.
+        // We just need to trigger confetti and clean up the flag after the animation.
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
         if (taskEl) {
             createConfetti(taskEl);
         }
-        // No deletion logic here. The owner (whoever it is) handles deletion.
+        // After the animation plays (1.5s), we remove the transient flag to prevent re-animation.
+        setTimeout(async () => {
+            const questInMemory = questsMap.get(questId);
+            if (questInMemory) {
+                delete questInMemory.isFinishing;
+            }
+        }, 1500); // Matches animation duration
     }
 
     async function finishSharedGroupTaskAnimation(group, task) {
