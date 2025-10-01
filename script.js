@@ -4151,6 +4151,7 @@ async function initializeAppLogic(initialUser) {
         }
     }
     
+    async function finishSharedQuestAnimation(questId, isOwner) {
     function finishSharedQuestAnimation(questId) {
         audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
@@ -4158,6 +4159,24 @@ async function initializeAppLogic(initialUser) {
         if (taskEl) {
             taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
+            // Use a timeout instead of animationend for reliability, as the element might be removed by a re-render.
+            setTimeout(async () => {
+                if (isOwner) {
+                    try {
+                        // The owner is responsible for the final deletion after the animation.
+                        await deleteDoc(doc(db, "sharedQuests", questId));
+                    } catch (err) {
+                        console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
+                    }
+                }
+            }, 1500); // Matches the animation duration in CSS.
+        } else if (isOwner) {
+            // If the element isn't visible but this client is the owner, delete it immediately.
+            try {
+                await deleteDoc(doc(db, "sharedQuests", questId));
+            } catch (err) {
+                console.error("Error deleting completed shared quest (no element):", getCoolErrorMessage(err));
+            }
             // The Cloud Function handles deletion. The 'removed' event in the listener
             // will then remove the element from the DOM after the animation finishes.
         }
