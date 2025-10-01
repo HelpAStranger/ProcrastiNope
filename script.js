@@ -4124,6 +4124,8 @@ async function initializeAppLogic(initialUser) {
             updateData.status = 'completed';
             // The quest is now complete. The user who completes it last updates the status.
             // The owner's client will be responsible for the final deletion upon seeing this status change.
+            // The quest is now complete. Update the status to 'completed'.
+            // A Cloud Function will see this change and delete the document automatically.
             try {
                 // Both users will see the animation trigger when the status changes to 'completed'.
                 // The owner's listener will then handle the deletion.
@@ -4144,10 +4146,13 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
                 addXp(-(XP_PER_SHARED_QUEST / 2));
             }
+            audioManager.playSound(uncompleting ? 'delete' : 'complete');
+            addXp(uncompleting ? -(XP_PER_SHARED_QUEST / 2) : (XP_PER_SHARED_QUEST / 2));
         }
     }
     
     async function finishSharedQuestAnimation(questId, isOwner) {
+    function finishSharedQuestAnimation(questId) {
         audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
@@ -4172,6 +4177,8 @@ async function initializeAppLogic(initialUser) {
             } catch (err) {
                 console.error("Error deleting completed shared quest (no element):", getCoolErrorMessage(err));
             }
+            // The Cloud Function handles deletion. The 'removed' event in the listener
+            // will then remove the element from the DOM after the animation finishes.
         }
     }
 
