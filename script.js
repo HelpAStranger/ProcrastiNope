@@ -1668,10 +1668,7 @@ async function initializeAppLogic(initialUser) {
         if (task.completedToday) {
             task.completedToday = false;
             stopTimer(id, false); // Centralize timer state clearing
-            if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
-                task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
-            }
-            addXp(-XP_PER_TASK);
+            addXp(-XP_PER_TASK); // Correct XP for regular daily task
             audioManager.playSound('delete');
             saveState();
 
@@ -4121,9 +4118,9 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-            // The quest is now complete. Update the status to 'completed'.
-            // A Cloud Function will see this change and delete the document automatically.
             try {
+                // The quest is now complete. Update the status to 'completed'.
+                // A Cloud Function will see this change and delete the document automatically.
                 await updateDoc(sharedQuestRef, updateData);
                 audioManager.playSound('sharedQuestFinish');
                 addXp(XP_PER_SHARED_QUEST); // Give full XP
@@ -4133,8 +4130,14 @@ async function initializeAppLogic(initialUser) {
             }
         } else {
             await updateDoc(sharedQuestRef, updateData);
-            audioManager.playSound(uncompleting ? 'delete' : 'complete');
-            addXp(uncompleting ? -(XP_PER_SHARED_QUEST / 2) : (XP_PER_SHARED_QUEST / 2));
+            // FIX: Correctly add/remove XP for partial completion/uncompletion
+            if (!uncompleting) {
+                audioManager.playSound('complete');
+                addXp(XP_PER_SHARED_QUEST / 2);
+            } else {
+                audioManager.playSound('delete');
+                addXp(-(XP_PER_SHARED_QUEST / 2));
+            }
         }
     }
     
