@@ -3794,28 +3794,32 @@ async function initializeAppLogic(initialUser) {
                     // The quest is gone from Firestore, so we must re-render to remove it from the UI.
                     // The 'completed' status change handles the animation before this happens.
                     renderAllLists();
-                } else { // 'added' or 'modified'
+                } else { // 'added' or 'modified' a quest
                     const newQuest = { ...change.doc.data(), id: change.doc.id, questId: change.doc.id }; // questId is redundant but harmless
 
                     // Handle termination events (rejection/abandonment by friend, or unshare by owner)
                     if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'unshared') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
-                        deleteDoc(doc(db, "sharedQuests", newQuest.id));
+                        // The owner is responsible for deleting the doc after reverting their local state.
+                        // This is safe because the friend has already disengaged.
+                        deleteDoc(doc(db, "sharedQuests", newQuest.id)).catch(err => console.error("Cleanup of terminated quest failed:", err));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
                     }
 
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
                     if (newQuest.status === 'completed') {
-                        const oldQuest = questsMap.get(change.doc.id);
+                        const oldQuest = questsMap.get(change.doc.id); // Get previous state from our map
                         const justCompleted = !oldQuest || oldQuest.status !== 'completed';
 
                         if (justCompleted) {
                             // Animate and then, if owner, delete the document.
                             finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid === user.uid);
-                            // Set the quest in the map so we don't re-trigger the animation.
+                            // Set the quest in the map to prevent re-triggering the animation on the next snapshot.
                             questsMap.set(change.doc.id, newQuest);
-                            return; // Stop processing to let the animation finish before deletion.
+                            // CRITICAL FIX: Stop processing this change here. Do not let it fall through to the
+                            // render logic. This allows the animation to complete and the deletion to occur reliably.
+                            return;
                         }
                     }
 
@@ -3823,7 +3827,7 @@ async function initializeAppLogic(initialUser) {
                     if (oldQuest && change.type === 'modified') {
                          const isOwner = newQuest.ownerUid === user.uid;
                          const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
-                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
+                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted) && newQuest.status !== 'completed';
                          if (friendJustCompleted) {
                              const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
                              if(taskEl) {
