@@ -115,10 +115,11 @@ service cloud.firestore {
       allow update: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
       
-      // Only the owner can delete a shared quest (e.g., to cancel a pending share or unshare an active one).
-      // The friend must 'abandon' or 'reject' it (an update), which triggers the owner's client to delete.
+      // The owner can delete a quest they own.
+      // Any participant can delete a quest that is already marked as 'completed'.
       allow delete: if request.auth != null &&
-                      request.auth.uid == resource.data.ownerUid;
+                      (request.auth.uid == resource.data.ownerUid ||
+                       (request.auth.uid in resource.data.participants && resource.data.status == 'completed'));
 
       // Only the owner can create a shared quest
       allow create: if request.auth != null &&
@@ -147,6 +148,7 @@ service cloud.firestore {
     }
   }
 }
+
 
 Your Firebase config is meant to be public. True security is enforced
 by your Firestore Security Rules, not by hiding your API keys.
@@ -223,7 +225,6 @@ const audioManager = {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             this.masterGain = this.audioCtx.createGain();
             this.masterGain.connect(this.audioCtx.destination);
-            this.setVolume(settings.volume);
             this.isInitialized = true;
             console.log('Audio system initialized.');
         } catch (e) {
@@ -2712,7 +2713,10 @@ async function initializeAppLogic(initialUser) {
         // Apply non-theme settings immediately
         document.documentElement.style.setProperty('--accent', settings.accentColor);
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
-        if(typeof settings.volume === 'undefined') settings.volume = 0.3; audioManager.setVolume(settings.volume);
+        if(typeof settings.volume === 'undefined') settings.volume = 0.3;
+        // This is now the single source of truth for setting the volume.
+        // It runs after settings are loaded, ensuring the correct volume is applied.
+        audioManager.setVolume(settings.volume);
         volumeSlider.value = settings.volume; 
         document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
         const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
