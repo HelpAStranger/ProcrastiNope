@@ -3801,24 +3801,25 @@ async function initializeAppLogic(initialUser) {
                     // Handle termination events (rejection/abandonment by friend, or unshare by owner)
                     if ((newQuest.status === 'rejected' || newQuest.status === 'abandoned' || newQuest.status === 'unshared') && newQuest.ownerUid === user.uid) {
                         revertSharedQuest(newQuest.originalTaskId);
-                        deleteDoc(doc(db, "sharedQuests", newQuest.id));
+                        // The owner is responsible for deleting the doc after reverting their local state.
+                        // This is safe because the friend has already disengaged.
+                        deleteDoc(doc(db, "sharedQuests", newQuest.id)).catch(err => console.error("Cleanup of terminated quest failed:", err));
                         questsMap.delete(change.doc.id); // Ensure it's removed from the local map
                         return; // Stop processing this change
                     }
 
                     // If a quest is newly marked as 'completed', trigger the finish animation for both users.
                     if (newQuest.status === 'completed') {
-                        const oldQuest = questsMap.get(change.doc.id);
+                        const oldQuest = questsMap.get(change.doc.id); // Get previous state from our map
                         const justCompleted = !oldQuest || oldQuest.status !== 'completed';
 
                         if (justCompleted) {
-                            // Trigger the animation. The Cloud Function will handle the deletion.
-                            finishSharedQuestAnimation(newQuest.id);
+                            // Animate and then, if owner, delete the document.
+                            finishSharedQuestAnimation(newQuest.id, newQuest.ownerUid === user.uid);
                             // Set the quest in the map to prevent re-triggering the animation on the next snapshot.
                             questsMap.set(change.doc.id, newQuest);
-                            // CRITICAL FIX: Stop processing this change here. Do not let it fall through to the render logic.
-                            // This allows the animation to play, and we wait for the 'removed' event from the
-                            // Cloud Function's deletion to permanently remove the item from the UI.
+                            // CRITICAL FIX: Stop processing this change here. Do not let it fall through to the
+                            // render logic. This allows the animation to complete and the deletion to occur reliably.
                             return;
                         }
                     }
@@ -3827,7 +3828,7 @@ async function initializeAppLogic(initialUser) {
                     if (oldQuest && change.type === 'modified') {
                          const isOwner = newQuest.ownerUid === user.uid;
                          const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
-                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted);
+                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted) && newQuest.status !== 'completed';
                          if (friendJustCompleted) {
                              const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
                              if(taskEl) {
