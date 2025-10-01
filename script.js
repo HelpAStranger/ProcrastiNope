@@ -4122,20 +4122,20 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-            // The quest is now complete. The user who completes it last updates the status.
-            // The owner's client will be responsible for the final deletion upon seeing this status change.
-            // The quest is now complete. Update the status to 'completed'.
-            // A Cloud Function will see this change and delete the document automatically.
+            // The quest is now complete. The user who completes it last updates the status to 'completed'
+            // and then immediately deletes the document. This is more robust than relying on the owner
+            // to be online to perform the deletion.
             try {
-                // Both users will see the animation trigger when the status changes to 'completed'.
-                // The owner's listener will then handle the deletion.
-                await updateDoc(sharedQuestRef, updateData);
+                // Animate locally first for instant feedback.
+                finishSharedQuestAnimation(questId, true); // Pass true to trigger deletion.
                 audioManager.playSound('sharedQuestFinish');
                 addXp(XP_PER_SHARED_QUEST); // Give full XP
+
+                // The update is now just for other clients to see the 'completed' status briefly before it's deleted.
+                await updateDoc(sharedQuestRef, updateData);
             } catch (err) {
                 console.error("Error updating completed shared quest:", getCoolErrorMessage(err));
-                // If the update fails, we should reload to get a consistent state.
-                showConfirm("Sync Error", "Could not update the shared quest. Reloading to sync.", () => window.location.reload());
+                showConfirm("Sync Error", "Could not update the shared quest. It may be removed shortly.", () => {});
             }
         } else {
             await updateDoc(sharedQuestRef, updateData);
@@ -4146,13 +4146,10 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
                 addXp(-(XP_PER_SHARED_QUEST / 2));
             }
-            audioManager.playSound(uncompleting ? 'delete' : 'complete');
-            addXp(uncompleting ? -(XP_PER_SHARED_QUEST / 2) : (XP_PER_SHARED_QUEST / 2));
         }
     }
     
-    async function finishSharedQuestAnimation(questId, isOwner) {
-    function finishSharedQuestAnimation(questId) {
+    function finishSharedQuestAnimation(questId, shouldDelete) {
         audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
         
@@ -4161,24 +4158,18 @@ async function initializeAppLogic(initialUser) {
             createConfetti(taskEl);
             // Use a timeout instead of animationend for reliability, as the element might be removed by a re-render.
             setTimeout(async () => {
-                if (isOwner) {
+                if (shouldDelete) {
                     try {
-                        // The owner is responsible for the final deletion after the animation.
+                        // The client who finishes the quest last is responsible for deletion.
                         await deleteDoc(doc(db, "sharedQuests", questId));
                     } catch (err) {
                         console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
                     }
                 }
             }, 1500); // Matches the animation duration in CSS.
-        } else if (isOwner) {
-            // If the element isn't visible but this client is the owner, delete it immediately.
-            try {
-                await deleteDoc(doc(db, "sharedQuests", questId));
-            } catch (err) {
-                console.error("Error deleting completed shared quest (no element):", getCoolErrorMessage(err));
-            }
-            // The Cloud Function handles deletion. The 'removed' event in the listener
-            // will then remove the element from the DOM after the animation finishes.
+        } else if (shouldDelete) {
+            // If the element isn't visible but this client should delete, do it immediately.
+            deleteDoc(doc(db, "sharedQuests", questId)).catch(err => console.error("Error deleting completed shared quest (no element):", err));
         }
     }
 
