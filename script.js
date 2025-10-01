@@ -1427,17 +1427,18 @@ async function initializeAppLogic(initialUser) {
         }
     };
     const undoCompleteMainQuest = (id) => {
-        if (undoTimeoutMap.has(id)) {
-            clearTimeout(undoTimeoutMap.get(id));
-            undoTimeoutMap.delete(id);
-        }
-
         const { task, type } = findTaskAndContext(id);
         if (task && task.pendingDeletion) {
             delete task.pendingDeletion;
             stopTimer(id, false); // Centralize timer state clearing
             addXp(-XP_PER_TASK); // Revert XP gain
             audioManager.playSound('delete'); // Use the 'delete' sound for undo
+
+            // CRITICAL FIX: Clear the timeout that was set to delete this task.
+            if (undoTimeoutMap.has(id)) {
+                clearTimeout(undoTimeoutMap.get(id));
+                undoTimeoutMap.delete(id);
+            }
 
             // Instead of a full re-render, specifically replace this one element.
             // This is more efficient and guarantees the element with the animation is replaced.
