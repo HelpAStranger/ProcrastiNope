@@ -4138,16 +4138,33 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-            // The quest is now complete. The user who completes it last updates the status.
-            // The owner's client will be responsible for the final deletion upon seeing this status change.
+            // The quest is now complete.
             try {
-                // Both users will see the animation trigger when the status changes to 'completed'.
-                // The owner's listener will then handle the deletion.
-                await updateDoc(sharedQuestRef, updateData);
+                // --- OPTIMISTIC UI UPDATE ---
+                // Animate the element immediately for the user who completes it.
+                const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
+                if (taskEl) {
+                    taskEl.classList.add('shared-quest-finished');
+                    createConfetti(taskEl);
+                    taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
+                }
+                // Flag this task as being animated locally to prevent the listener from interfering.
+                locallyAnimatingTasks.add(questId);
+                setTimeout(() => locallyAnimatingTasks.delete(questId), 2000);
+
                 audioManager.playSound('sharedQuestFinish');
                 addXp(XP_PER_SHARED_QUEST); // Give full XP
+
+                if (isOwner) {
+                    // If the current user is the owner, they can delete the document directly.
+                    await deleteDoc(sharedQuestRef);
+                } else {
+                    // If the current user is the friend, they update the status.
+                    // The owner's listener will see the 'completed' status and delete the document.
+                    await updateDoc(sharedQuestRef, updateData);
+                }
             } catch (err) {
-                console.error("Error updating completed shared quest:", getCoolErrorMessage(err));
+                console.error("Error finalizing completed shared quest:", getCoolErrorMessage(err));
             }
         } else {
             await updateDoc(sharedQuestRef, updateData);
