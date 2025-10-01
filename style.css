@@ -582,13 +582,11 @@ FRIENDS FEATURE & MOBILE NAV
 }
 @media (min-width: 1024px) {
     #friends-btn-desktop {
-        display: flex; 
-        gap: 0.5rem;
+        display: flex;
         --shadow-color: var(--shadow);
     }
     #friends-btn-desktop svg {
-        width: 20px;
-        height: 20px;
+        stroke-width: var(--border-width);
     }
 }
 
