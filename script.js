@@ -3744,20 +3744,22 @@ async function initializeAppLogic(initialUser) {
         }
 
         listElement.innerHTML = '';
-        const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
-        const friendDocs = await getDocs(friendsQuery);
+        if (friendUIDs.length > 0) {
+            const friendsQuery = query(collection(db, "users"), where(documentId(), 'in', friendUIDs));
+            const friendDocs = await getDocs(friendsQuery);
 
-        friendDocs.forEach(friendDoc => {
-            const friendData = friendDoc.data();
-            const friendEl = document.createElement('div');
-            friendEl.className = 'share-friend-item';
-            friendEl.innerHTML = `
-                <button class="btn icon-btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}" aria-label="Share with ${friendData.username}"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
-                <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
-                <span class="friend-name">${friendData.username}</span>
-            `;
-            listElement.appendChild(friendEl);
-        });
+            friendDocs.forEach(friendDoc => {
+                const friendData = friendDoc.data();
+                const friendEl = document.createElement('div');
+                friendEl.className = 'share-friend-item';
+                friendEl.innerHTML = `
+                    <button class="btn icon-btn share-btn-action" data-uid="${friendDoc.id}" data-username="${friendData.username}" aria-label="Share with ${friendData.username}"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                    <div class="friend-level-display">LVL ${friendData.appData?.playerData?.level || 1}</div>
+                    <span class="friend-name">${friendData.username}</span>
+                `;
+                listElement.appendChild(friendEl);
+            });
+        }
     }
     function listenForSharedQuests() {
         if (!user) return;
@@ -4136,28 +4138,16 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-            // The quest is now complete. The user who completes it last triggers the animation locally
-            // and is responsible for deletion.
+            // The quest is now complete. The user who completes it last updates the status.
+            // The owner's client will be responsible for the final deletion upon seeing this status change.
             try {
-                // --- OPTIMISTIC UI UPDATE ---
-                // 1. Animate the element immediately.
-                const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
-                if (taskEl) {
-                    taskEl.classList.add('shared-quest-finished');
-                    createConfetti(taskEl);
-                    audioManager.playSound('sharedQuestFinish');
-                    addXp(XP_PER_SHARED_QUEST); // Give full XP
-                    taskEl.addEventListener('animationend', () => taskEl.remove(), { once: true });
-                }
-
-                // 2. Flag this task as being animated locally to prevent the listener from interfering.
-                locallyAnimatingTasks.add(questId);
-                setTimeout(() => locallyAnimatingTasks.delete(questId), 2000); // Clean up the flag after animation.
-
-                // 3. Delete the document from Firestore. The listener will see the 'removed' event but ignore it.
-                await deleteDoc(sharedQuestRef);
+                // Both users will see the animation trigger when the status changes to 'completed'.
+                // The owner's listener will then handle the deletion.
+                await updateDoc(sharedQuestRef, updateData);
+                audioManager.playSound('sharedQuestFinish');
+                addXp(XP_PER_SHARED_QUEST); // Give full XP
             } catch (err) {
-                console.error("Error deleting completed shared quest:", getCoolErrorMessage(err));
+                console.error("Error updating completed shared quest:", getCoolErrorMessage(err));
             }
         } else {
             await updateDoc(sharedQuestRef, updateData);
