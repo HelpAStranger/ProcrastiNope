@@ -4139,29 +4139,16 @@ async function initializeAppLogic(initialUser) {
 
         if (willBeCompleted) {
             updateData.status = 'completed';
-
-            // If it's a daily quest, we reset it for the next day instead of deleting it.
-            if (currentSharedQuestData.originalTaskType === 'daily') {
-                updateData.ownerCompleted = false;
-                updateData.friendCompleted = false;
-                updateData.lastCompletedDate = new Date().toDateString();
-                updateData.status = 'active'; // Set it back to active for the next day
-
-                // Animate and give XP, but don't delete.
-                finishSharedQuestAnimation(questId, false); // Pass false to prevent deletion
-                audioManager.playSound('sharedQuestFinish');
-                addXp(XP_PER_SHARED_QUEST);
-                await updateDoc(sharedQuestRef, updateData);
-                return; // Stop here for daily quests
-            }
-
-            // For non-daily quests, the user who completes it last deletes it.
+            // The quest is now complete. The user who completes it last updates the status to 'completed'
+            // and then immediately deletes the document. This is more robust than relying on the owner
+            // to be online to perform the deletion.
             try {
                 // Animate locally first for instant feedback.
                 finishSharedQuestAnimation(questId, true); // Pass true to trigger deletion.
                 audioManager.playSound('sharedQuestFinish');
                 addXp(XP_PER_SHARED_QUEST); // Give full XP
 
+                // The update is now just for other clients to see the 'completed' status briefly before it's deleted.
                 await updateDoc(sharedQuestRef, updateData);
             } catch (err) {
                 console.error("Error updating completed shared quest:", getCoolErrorMessage(err));
