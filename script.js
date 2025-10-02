@@ -4108,61 +4108,61 @@ async function initializeAppLogic(initialUser) {
         renderAllLists(); // Re-render to show the original task as 'isShared'
     }
     
-    async function completeSharedQuestPart(task, uncompleting = false) { // REFACTORED for robustness
+    async function completeSharedQuestPart(task, uncompleting = false) {
         const questId = task.questId;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
-
-        const currentSharedQuestSnap = await getDoc(sharedQuestRef);
-        if (!currentSharedQuestSnap.exists()) { // Quest was already deleted by the other user.
-            console.error("Shared quest not found:", questId);
-            return;
-        }
-        let currentSharedQuestData = currentSharedQuestSnap.data();
     
-        const updateData = {};
-        let willBeCompleted = false;
-
-        if (isOwner) {
-            if ((!uncompleting && currentSharedQuestData.ownerCompleted) || (uncompleting && !currentSharedQuestData.ownerCompleted)) return; // No change
-            updateData.ownerCompleted = !uncompleting;
-            if (!uncompleting && currentSharedQuestData.friendCompleted) {
-                willBeCompleted = true;
-            }
-        } else {
-            if ((!uncompleting && currentSharedQuestData.friendCompleted) || (uncompleting && !currentSharedQuestData.friendCompleted)) return; // No change
-            updateData.friendCompleted = !uncompleting;
-            if (!uncompleting && currentSharedQuestData.ownerCompleted) {
-                willBeCompleted = true;
-            }
+        // --- Optimistic Update ---
+        // 1. Determine the change and give immediate feedback.
+        const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
+        const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
+    
+        if ((!uncompleting && task[myCompletionFlag]) || (uncompleting && !task[myCompletionFlag])) {
+            return; // No change needed, already in the desired state.
         }
-
-        if (willBeCompleted) {
-            updateData.status = 'completed';
-            // The quest is now complete. The user who completes it last updates the status to 'completed'
-            // and then immediately deletes the document. This is more robust than relying on the owner
-            // to be online to perform the deletion.
-            try {
-                // Animate locally first for instant feedback.
-                finishSharedQuestAnimation(questId, true); // Pass true to trigger deletion.
+    
+        if (uncompleting) {
+            audioManager.playSound('delete');
+            addXp(-(XP_PER_SHARED_QUEST / 2));
+            task[myCompletionFlag] = false;
+        } else { // Completing
+            if (task[friendCompletionFlag]) {
+                // This is the final completion, which already has optimistic UI.
+                finishSharedQuestAnimation(questId, true);
                 audioManager.playSound('sharedQuestFinish');
-                addXp(XP_PER_SHARED_QUEST); // Give full XP
-
-                // The update is now just for other clients to see the 'completed' status briefly before it's deleted.
-                await updateDoc(sharedQuestRef, updateData);
-            } catch (err) {
-                console.error("Error updating completed shared quest:", getCoolErrorMessage(err));
-                showConfirm("Sync Error", "Could not update the shared quest. It may be removed shortly.", () => {});
-            }
-        } else {
-            await updateDoc(sharedQuestRef, updateData);
-            if (!uncompleting) {
+                addXp(XP_PER_SHARED_QUEST);
+            } else {
+                // Just completing my part.
                 audioManager.playSound('complete');
                 addXp(XP_PER_SHARED_QUEST / 2);
-            } else {
-                audioManager.playSound('delete');
-                addXp(-(XP_PER_SHARED_QUEST / 2));
             }
+            task[myCompletionFlag] = true;
+        }
+    
+        // 2. Re-render the UI immediately with the optimistic state.
+        renderAllLists();
+    
+        // --- Background Sync ---
+        // 3. Persist the change to Firestore.
+        const updateData = {};
+        updateData[myCompletionFlag] = !uncompleting;
+    
+        // Check if this action completes the quest for everyone.
+        const willBeCompleted = !uncompleting && task[friendCompletionFlag];
+    
+        if (willBeCompleted) {
+            updateData.status = 'completed';
+        }
+    
+        try {
+            await updateDoc(sharedQuestRef, updateData);
+        } catch (error) {
+            console.error("Error syncing shared quest completion:", getCoolErrorMessage(error));
+            // The UI is now out of sync. Inform the user and recommend a refresh.
+            showConfirm("Sync Error", "Could not save your progress. It's best to reload the app to ensure everything is up to date.", () => {
+                window.location.reload();
+            });
         }
     }
     
