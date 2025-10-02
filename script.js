@@ -1986,11 +1986,16 @@ async function initializeAppLogic(initialUser) {
                     return;
                 }
 
-                // FIX: Instead of deleting directly (which causes a permission error), we update the status.
-                // The owner's own Firestore listener will detect the 'unshared' status,
-                // revert the local task, and then delete the document. This centralizes the cleanup logic
-                // and aligns it with the pattern used for abandoning/unsharing active quests.
-                await updateDoc(sharedQuestRef, { status: 'unshared' });
+                // The owner of a pending share can cancel it by deleting the document directly.
+                // The security rules allow the owner to delete.
+                await deleteDoc(sharedQuestRef);
+
+                // Revert the local task for immediate UI feedback.
+                revertSharedQuest(questData.originalTaskId);
+
+                // The onSnapshot listener will see the deletion and remove the item from
+                // the `questsMap`, but the local revert ensures the UI is responsive.
+                audioManager.playSound('delete');
                 
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
