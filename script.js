@@ -115,11 +115,10 @@ service cloud.firestore {
       allow update: if request.auth != null &&
                       (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.friendUid);
       
-      // The owner can delete a quest they own.
-      // Any participant can delete a quest that is already marked as 'completed'.
+      // Only the owner can delete a shared quest (e.g., to cancel a pending share or unshare an active one).
+      // The friend must 'abandon' or 'reject' it (an update), which triggers the owner's client to delete.
       allow delete: if request.auth != null &&
-                      (request.auth.uid == resource.data.ownerUid ||
-                       (request.auth.uid in resource.data.participants && resource.data.status == 'completed'));
+                      request.auth.uid == resource.data.ownerUid;
 
       // Only the owner can create a shared quest
       allow create: if request.auth != null &&
@@ -148,7 +147,6 @@ service cloud.firestore {
     }
   }
 }
-
 
 Your Firebase config is meant to be public. True security is enforced
 by your Firestore Security Rules, not by hiding your API keys.
@@ -2789,6 +2787,7 @@ async function initializeAppLogic(initialUser) {
     
     if (manageAccountBtn) {
         manageAccountBtn.addEventListener('click', () => {
+            closeModal(settingsModal); // Close the settings modal first
             const reauthContainer = manageAccountModal.querySelector('#reauth-container');
             const manageFormsContainer = manageAccountModal.querySelector('#manage-forms-container');
             const isGoogleUser = currentUser && currentUser.providerData.some(p => p.providerId === 'google.com');
@@ -3077,6 +3076,7 @@ async function initializeAppLogic(initialUser) {
     settingsLoginBtn.addEventListener('click', () => {
         const accountModalContent = accountModal.querySelector('.modal-content');
         setupAuthForms(accountModalContent, () => {
+            // When auth succeeds, close both modals.
             closeModal(accountModal);
             closeModal(settingsModal);
         });
