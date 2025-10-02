@@ -3574,6 +3574,11 @@ async function initializeAppLogic(initialUser) {
         const group = sharedGroups.find(g => g.id === groupId);
         if (!group) return;
 
+        if (user.uid !== group.ownerUid) {
+            showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
+            return;
+        }
+
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
             if (user.uid !== group.ownerUid) {
                 showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
@@ -3599,6 +3604,7 @@ async function initializeAppLogic(initialUser) {
     const abandonSharedGroup = async (groupId) => {
         const group = sharedGroups.find(g => g.id === groupId);
         if (!group) return;
+        if (!group || (user && group.ownerUid === user.uid)) return;
 
         showConfirm("Abandon Group?", "This will remove the group from your list and the owner will be notified. Are you sure?", async () => {
             if (user && group.ownerUid === user.uid) return; // Friend only
