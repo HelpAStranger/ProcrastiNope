@@ -3574,12 +3574,12 @@ async function initializeAppLogic(initialUser) {
         const group = sharedGroups.find(g => g.id === groupId);
         if (!group) return;
 
-        if (user.uid !== group.ownerUid) {
-            showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
-            return;
-        }
-
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
+            if (user.uid !== group.ownerUid) {
+                showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
+                return;
+            }
+
             try {
                 // Re-create the group in the owner's local list.
                 const newLocalGroup = { id: group.originalGroupId, name: group.name, tasks: group.tasks.map(st => ({ id: st.id, text: st.text, createdAt: Date.now(), isShared: false })), isExpanded: false, type: 'main' };
@@ -3598,9 +3598,11 @@ async function initializeAppLogic(initialUser) {
 
     const abandonSharedGroup = async (groupId) => {
         const group = sharedGroups.find(g => g.id === groupId);
-        if (!group || (user && group.ownerUid === user.uid)) return;
+        if (!group) return;
 
         showConfirm("Abandon Group?", "This will remove the group from your list and the owner will be notified. Are you sure?", async () => {
+            if (user && group.ownerUid === user.uid) return; // Friend only
+
             try {
                 const sharedGroupRef = doc(db, "sharedGroups", groupId);
                 await updateDoc(sharedGroupRef, { status: 'abandoned' });
