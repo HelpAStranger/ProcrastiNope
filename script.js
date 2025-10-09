@@ -916,11 +916,6 @@ async function initializeAppLogic(initialUser) {
                 if(task.isShared) return; 
                 if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
                 else if (!task.completedToday) task.streak = 0;
-                task.completedToday = false;
-                // FIX: Only clear the timerFinished state if it exists.
-                // Previously, this was adding `timerFinished: false` to every daily quest on reset,
-                // which could cause unintended side effects in other parts of the logic.
-                if (task.hasOwnProperty('timerFinished')) task.timerFinished = false;
                 task.completedToday = false; // FIX: Only clear the timerFinished state if it exists. // Previously, this was adding `timerFinished: false` to every daily quest on reset, // which could cause unintended side effects in other parts of the logic.
                 if (task.hasOwnProperty('timerFinished')) {
                     delete task.timerFinished;
@@ -1671,8 +1666,6 @@ async function initializeAppLogic(initialUser) {
         if (task.completedToday) {
             task.completedToday = false;
             // When un-completing, we should also reset the timer's finished state
-            // to stop any "time's up" animations.
-            task.timerFinished = false;
             // to stop any "time's up" animations. // FIX: Explicitly remove the finished state on un-completion.
             delete task.timerFinished; // FIX: Explicitly remove the finished state on un-completion.
             stopTimer(id, false);
