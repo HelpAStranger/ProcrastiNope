@@ -1625,12 +1625,9 @@ async function initializeAppLogic(initialUser) {
             undoTimeoutMap.set(id, timeoutId);
         }
 
-        // FINAL BUGFIX: Explicitly clear all timer-related properties *after*
-        // setting the completion state (completedToday or pendingDeletion). This ensures
-        // that even if a race condition occurs, the state being saved is definitively clean.
-        task.timerFinished = false;
         delete task.timerStartTime;
         delete task.timerDuration;
+        delete task.timerFinished; // FIX: Explicitly remove the finished state on completion.
 
         saveState(); // Always save state to update local timestamp and persist completion.
 
@@ -1672,6 +1669,7 @@ async function initializeAppLogic(initialUser) {
             // When un-completing, we should also reset the timer's finished state
             // to stop any "time's up" animations.
             task.timerFinished = false;
+            delete task.timerFinished; // FIX: Explicitly remove the finished state on un-completion.
             stopTimer(id, false);
             if (task.weeklyGoal > 0 && task.lastCompleted === new Date().toDateString()) {
                 task.weeklyCompletions = Math.max(0, (task.weeklyCompletions || 0) - 1);
