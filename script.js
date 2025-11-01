@@ -908,19 +908,26 @@ async function initializeAppLogic(initialUser) {
     const checkDailyReset = () => {
         const today = new Date().toDateString();
         const lastVisit = localStorage.getItem('lastVisitDate');
-        if (today !== lastVisit) { // eslint-disable-line
-            const yesterday = new Date(Date.now() - 86400000).toDateString(); // eslint-disable-line
+        if (today !== lastVisit) {
+            const yesterday = new Date(Date.now() - 86400000).toDateString();
             const allDailies = dailyItems.flatMap(item => item.tasks ? item.tasks : item);
             allDailies.forEach(task => {
-                // Only reset non-shared tasks automatically
-                if(task.isShared) return; 
-                if (task.completedToday && task.lastCompleted === yesterday) task.streak = (task.streak || 0) + 1;
-                else if (!task.completedToday) task.streak = 0;
-                task.completedToday = false; // FIX: Only clear the timerFinished state if it exists. // Previously, this was adding `timerFinished: false` to every daily quest on reset, // which could cause unintended side effects in other parts of the logic.
+                if (task.isShared) return;
+
+                // Correct Streak Logic:
+                // A streak continues *only* if the task's last completion date was yesterday.
+                if (task.lastCompleted === yesterday) {
+                    task.streak = (task.streak || 0) + 1;
+                } else {
+                    // If the last completion was not yesterday (or never), the streak is broken.
+                    task.streak = 0;
+                }
+
+                // Reset for the new day
+                task.completedToday = false;
                 if (task.hasOwnProperty('timerFinished')) {
                     delete task.timerFinished;
                 }
-                // FIX: Also clear timer properties to prevent it from resuming on a new day.
                 delete task.timerStartTime;
                 delete task.timerDuration;
             });
