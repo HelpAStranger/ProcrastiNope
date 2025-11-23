@@ -1,4 +1,4 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
     getAuth,
     onAuthStateChanged,
@@ -4862,99 +4862,50 @@ const audioManager = {
                             console.error("Google Sign-In Error: ", error);
                             const errorEl = loginForm.querySelector('.login-error');
                             errorEl.textContent = getCoolErrorMessage(error);
-                            ```
-                            }
+                        } finally {
+                            closeModal(googleLoader);
                         }
-                    }
-                };
-
-                const showShiftHoverActions = (item) => {
-                    // Only proceed if we found an item and it's not the one we're already hovering
-                    if (item && item !== shiftHoverItem) {
-                        // If a menu is already open from a click (and not from a previous shift-hover), do nothing.
-                        if (activeMobileActionsItem && activeMobileActionsItem !== shiftHoverItem) {
-                            return;
-                        }
-
-                        // Hide any previously hover-opened menu.
-                        if (shiftHoverItem) {
-                            hideActiveTaskActions(); // This will nullify activeMobileActionsItem
-                            shiftHoverItem = null;
-                        }
-
-                        // --- Pre-condition checks for showing the menu ---
-                        if (item.classList.contains('timer-active')) return;
-                        const optionsBtn = item.querySelector('.options-btn');
-                        if (optionsBtn && optionsBtn.disabled) return;
-
-                        // Don't show for placeholder shared items in main/daily lists.
-                        const isPlaceholder = item.closest('.is-shared-task') && !item.closest('#shared-quests-container');
-                        if (isPlaceholder) return;
-
-                        // Show the new menu
-                        item.classList.add('actions-visible');
-                        if (optionsBtn) optionsBtn.classList.add('is-active-trigger');
-                        activeMobileActionsItem = item; // Use the global state.
-                        shiftHoverItem = item; // Mark it as hover-opened.
-                    }
-                };
-
-                document.querySelector('.quests-layout').addEventListener('mouseover', (e) => {
-                    if (document.body.classList.contains('is-dragging')) return;
-                    const item = e.target.closest('.task-item, .main-quest-group-header');
-                    lastPotentialShiftHoverItem = item;
-
-                    if (e.shiftKey) {
-                        showShiftHoverActions(item);
-                    }
-                });
-
-                document.querySelector('.quests-layout').addEventListener('mouseout', (e) => {
-                    const item = e.target.closest('.task-item, .main-quest-group-header');
-                    if (item && !item.contains(e.relatedTarget)) {
-                        lastPotentialShiftHoverItem = null;
-                        // If we are moving out of the item that has the shift-hover menu open, close it.
-                        if (shiftHoverItem === item) {
-                            hideActiveTaskActions();
-                            shiftHoverItem = null;
-                        }
-                    }
-                });
-
-                initOnce();
-                await loadUserSession();
-
-                return {
-                    isPartial: false,
-                    shutdown: () => {
-                        debouncedSaveData.cancel();
-                        activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
-                        activeTimers.clear();
-                        if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
-                        if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
-                        if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
-                    },
-                    updateUser: async (newUser) => {
-                        user = newUser;
-                        await loadUserSession();
-                    }
-                };
+                    });
+                }
             }
 
-
-    const backBtn = document.getElementById('auth-back-btn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => {
-            landingAuthContainer.style.display = 'none';
-            landingChoices.style.display = 'block';
-        });
-    }
-
-    const initOnce = () => {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySettings);
-        initSortable();
-        renderAllLists();
-        applySettings();
-    };
-
-    initOnce();
+            function mergeGuestDataWithCloud(cloudData = {}) {
+                const guestDataString = localStorage.getItem('anonymousUserData');
+                if (!guestDataString) return cloudData;
+                try {
+                    const guestData = JSON.parse(guestDataString);
+                    const mergedData = JSON.parse(JSON.stringify(cloudData));
+                    const mergeTasks = (cloudTasks = [], guestTasks = []) => {
+                        const existingTexts = new Set(cloudTasks.map(t => t.text));
+                        const newTasks = guestTasks.filter(t => !existingTexts.has(t.text));
+                        return [...cloudTasks, ...newTasks];
+                    };
+                    mergedData.dailyTasks = mergeTasks(cloudData.dailyTasks, guestData.dailyTasks);
+                    mergedData.standaloneMainQuests = mergeTasks(cloudData.standaloneMainQuests, guestData.standaloneMainQuests);
+                    if (guestData.generalTaskGroups) {
+                        if (!mergedData.generalTaskGroups) mergedData.generalTaskGroups = [];
+                        guestData.generalTaskGroups.forEach(guestGroup => {
+                            const cloudGroup = mergedData.generalTaskGroups.find(cg => cg.name === guestGroup.name);
+                            if (cloudGroup) {
+                                cloudGroup.tasks = mergeTasks(cloudGroup.tasks, guestGroup.tasks);
+                            } else {
+                                mergedData.generalTaskGroups.push(guestGroup);
+                            }
+                        });
+                    }
+                    if (guestData.playerData) {
+                        if (!mergedData.playerData) {
+                            mergedData.playerData = guestData.playerData;
+                        } else {
+                            const newXp = (mergedData.playerData.xp || 0) + (guestData.playerData.xp || 0);
+                            const newLevel = Math.max(mergedData.playerData.level || 1, guestData.playerData.level || 1);
+                            mergedData.playerData.xp = newXp;
+                            mergedData.playerData.level = newLevel;
+                        }
+                    }
+                    return mergedData;
+                } catch (error) {
+                    console.error("Failed to merge guest data:", error);
+                    return cloudData;
+                }
+            }
