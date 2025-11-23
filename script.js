@@ -186,6 +186,105 @@ const landingAuthContainer = document.getElementById('landing-auth-container');
 let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 };
 let zIndexCounter = 1000; // Base z-index for modals
 
+/**
+ * Manages all audio playback for the application.
+ * This architecture is data-driven, using a "soundBank" to define sounds,
+ * making it modular and easy to extend. It also correctly handles the
+ * AudioContext lifecycle to prevent browser autoplay issues and reduce latency.
+ */
+const audioManager = {
+    audioCtx: null,
+    isInitialized: false,
+    masterGain: null, // NEW: Master gain node for global volume control
+
+    // The soundBank defines how each sound is generated. Each entry is a function
+    // that returns an oscillator, its duration, and a volume multiplier.
+    soundBank: {
+        'complete': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'levelUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.4, vol: 1.2 }; },
+        'timerUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(880, ctx.currentTime); o.frequency.linearRampToValueAtTime(440, ctx.currentTime + 0.5); return { oscillator: o, duration: 0.5, vol: 1 }; },
+        'add': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'addGroup': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'delete': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; }, 'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.12, vol: 0.8 }; },
+        'open': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(250, ctx.currentTime); o.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'close': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'share': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(659.25, ctx.currentTime + 0.15); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'friendComplete': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(659.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.25, vol: 0.8 }; },
+        'sharedQuestFinish': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523, ctx.currentTime); o.frequency.linearRampToValueAtTime(783, ctx.currentTime + 0.15); o.frequency.linearRampToValueAtTime(1046, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.5, vol: 1.2 }; }
+    },
+
+    /**
+     * Initializes the AudioContext. Must be called after a user gesture.
+     */
+    init() {
+        if (this.isInitialized || this.audioCtx) return;
+        try {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.audioCtx.createGain();
+            this.masterGain.connect(this.audioCtx.destination);
+            this.isInitialized = true;
+            console.log('Audio system initialized.');
+        } catch (e) {
+            console.error("Web Audio API not supported or could not be created.", e);
+        }
+    },
+
+    /**
+     * Sets the global volume for all sounds.
+     * @param {number} volume A value between 0.0 and 1.0.
+     */
+    setVolume(volume) {
+        if (this.isInitialized && this.masterGain) {
+            // Use a ramp to avoid clicks when changing volume.
+            this.masterGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), this.audioCtx.currentTime + 0.05);
+        }
+    },
+
+    /**
+     * Plays a sound defined in the soundBank.
+     * @param {string} type The name of the sound to play.
+     */
+    playSound(type) {
+        if (!this.isInitialized || !this.audioCtx) {
+            return; // Audio system not ready.
+        }
+
+        // If context is suspended, try to resume it. Sound will play on the next interaction.
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+            return;
+        }
+        
+        if (settings.volume === 0) return;
+
+        const soundGenerator = this.soundBank[type];
+        if (!soundGenerator) {
+            console.warn(`Sound type "${type}" not found in sound bank.`);
+            return;
+        }
+
+        const now = this.audioCtx.currentTime;
+        const gainNode = this.audioCtx.createGain();
+        gainNode.connect(this.masterGain);
+
+        const { oscillator, duration, vol } = soundGenerator(this.audioCtx);
+        oscillator.connect(gainNode);
+
+        const finalVolume = (vol || 1);
+
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(finalVolume, now + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        oscillator.start(now);
+        oscillator.stop(now + duration);
+    }
+};
+
+// Initialize audio on the first user interaction to comply with autoplay policies.
+document.body.addEventListener('click', () => audioManager.init(), { once: true });
+document.body.addEventListener('keydown', () => audioManager.init(), { once: true });
 
 function hideActiveTaskActions() {
     if (activeMobileActionsItem) {
