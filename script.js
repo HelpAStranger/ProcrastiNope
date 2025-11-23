@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    GoogleAuthProvider, 
-    signInWithPopup, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
+import {
+    getAuth,
+    onAuthStateChanged,
+    GoogleAuthProvider,
+    signInWithPopup,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
     signOut,
     reauthenticateWithCredential,
     EmailAuthProvider,
@@ -14,10 +14,10 @@ import {
     fetchSignInMethodsForEmail,
     deleteUser
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
+import {
+    getFirestore,
+    doc,
+    getDoc,
     setDoc,
     writeBatch,
     onSnapshot,
@@ -173,7 +173,7 @@ let appController = null;
 let lastFocusedElement = null;
 let localDataTimestamp = 0; // To track the timestamp of the currently loaded data.
 
-let activeMobileActionsItem = null; 
+let activeMobileActionsItem = null;
 
 // --- DOM ELEMENTS FOR STARTUP ---
 const loaderOverlay = document.getElementById('loader-overlay');
@@ -187,6 +187,180 @@ let settings = { theme: 'system', accentColor: 'var(--accent-red)', volume: 0.3 
 let zIndexCounter = 1000; // Base z-index for modals
 
 
+/**
+ * Manages all audio playback for the application.
+ * This architecture is data-driven, using a "soundBank" to define sounds,
+ * making it modular and easy to extend. It also correctly handles the
+ * AudioContext lifecycle to prevent browser autoplay issues and reduce latency.
+ */
+const audioManager = {
+    audioCtx: null,
+    isInitialized: false,
+    masterGain: null, // NEW: Master gain node for global volume control
+    pendingVolume: null, // Store volume if set before init
+
+    // The soundBank defines how each sound is generated. Each entry is a function
+    // that returns an oscillator, its duration, and a volume multiplier.
+    soundBank: {
+        'complete': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'levelUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.4, vol: 1.2 }; },
+        'timerUp': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(880, ctx.currentTime); o.frequency.linearRampToValueAtTime(440, ctx.currentTime + 0.5); return { oscillator: o, duration: 0.5, vol: 1 }; },
+        'add': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'addGroup': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(300, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.15, vol: 1 }; },
+        'delete': (ctx) => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(200, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'hover': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(800, ctx.currentTime); return { oscillator: o, duration: 0.05, vol: 0.2 }; }, 'toggle': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.12, vol: 0.8 }; },
+        'open': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(250, ctx.currentTime); o.frequency.linearRampToValueAtTime(500, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'close': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(500, ctx.currentTime); o.frequency.linearRampToValueAtTime(250, ctx.currentTime + 0.1); return { oscillator: o, duration: 0.1, vol: 1 }; },
+        'share': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(659.25, ctx.currentTime + 0.15); return { oscillator: o, duration: 0.2, vol: 1 }; },
+        'friendComplete': (ctx) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(659.25, ctx.currentTime); o.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.2); return { oscillator: o, duration: 0.25, vol: 0.8 }; },
+        'sharedQuestFinish': (ctx) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(523, ctx.currentTime); o.frequency.linearRampToValueAtTime(783, ctx.currentTime + 0.15); o.frequency.linearRampToValueAtTime(1046, ctx.currentTime + 0.4); return { oscillator: o, duration: 0.5, vol: 1.2 }; }
+    },
+
+    /**
+     * Initializes the AudioContext. Must be called after a user gesture.
+     */
+    init() {
+        if (this.isInitialized || this.audioCtx) return;
+        try {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.audioCtx.createGain();
+            this.masterGain.connect(this.audioCtx.destination);
+            this.isInitialized = true;
+
+            // Apply pending volume if it was set before initialization
+            if (this.pendingVolume !== null) {
+                this.masterGain.gain.setValueAtTime(this.pendingVolume, this.audioCtx.currentTime);
+                this.pendingVolume = null;
+            } else if (typeof settings !== 'undefined' && typeof settings.volume !== 'undefined') {
+                // Fallback to settings.volume if available
+                this.masterGain.gain.setValueAtTime(settings.volume, this.audioCtx.currentTime);
+            }
+
+            console.log('Audio system initialized.');
+        } catch (e) {
+            console.error("Web Audio API not supported or could not be created.", e);
+        }
+    },
+
+    /**
+     * Sets the global volume for all sounds.
+     * @param {number} volume A value between 0.0 and 1.0.
+     */
+    setVolume(volume) {
+        const vol = Math.max(0.0001, volume);
+        if (this.isInitialized && this.masterGain) {
+            // Use a ramp to avoid clicks when changing volume.
+            this.masterGain.gain.exponentialRampToValueAtTime(vol, this.audioCtx.currentTime + 0.05);
+        } else {
+            this.pendingVolume = vol;
+        }
+    },
+
+    /**
+     * Plays a sound defined in the soundBank.
+     * @param {string} type The name of the sound to play.
+     */
+    playSound(type) {
+        if (!this.isInitialized || !this.audioCtx) {
+            return; // Audio system not ready.
+        }
+
+        // If context is suspended, try to resume it. 
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume().then(() => {
+                // Retry playing the sound once resumed
+                this.playSound(type);
+            }).catch(e => console.error("Could not resume audio context:", e));
+            return;
+        }
+
+        if (typeof settings !== 'undefined' && settings.volume === 0) return;
+
+        const soundGenerator = this.soundBank[type];
+        if (!soundGenerator) {
+            console.warn(`Sound type "${type}" not found in sound bank.`);
+            return;
+        }
+
+        const now = this.audioCtx.currentTime;
+        const gainNode = this.audioCtx.createGain();
+        gainNode.connect(this.masterGain);
+
+        const { oscillator, duration, vol } = soundGenerator(this.audioCtx);
+        oscillator.connect(gainNode);
+
+        const finalVolume = (vol || 1);
+
+        // Reduced ramp time for snappier response
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(finalVolume, now + 0.005);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        oscillator.start(now);
+        oscillator.stop(now + duration);
+    }
+};
+
+// Initialize audio on the first user interaction to comply with autoplay policies.
+document.body.addEventListener('click', () => audioManager.init(), { once: true });
+document.body.addEventListener('keydown', () => audioManager.init(), { once: true });
+
+const applySettings = (e) => {
+    // Determine target theme state
+    const isCurrentlyDark = document.documentElement.classList.contains('dark-mode');
+    const d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const willBeDark = settings.theme === 'dark' || (settings.theme === 'system' && d);
+
+    // Apply non-theme settings immediately
+    document.documentElement.style.setProperty('--accent', settings.accentColor);
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
+    if (typeof settings.volume === 'undefined') settings.volume = 0.3;
+    // This is now the single source of truth for setting the volume.
+    // It runs after settings are loaded, ensuring the correct volume is applied.
+    audioManager.setVolume(settings.volume);
+
+    // Check if volumeSlider exists before accessing it
+    const vSlider = document.getElementById('volume-slider');
+    if (vSlider) {
+        vSlider.value = settings.volume;
+    }
+
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
+    const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
+    if (s) s.classList.add('selected');
+
+    // If theme isn't changing, we're done.
+    if (isCurrentlyDark === willBeDark) return;
+
+    // --- View Transition Logic ---
+    if (!document.startViewTransition) {
+        // Fallback for unsupported browsers
+        document.documentElement.classList.toggle('dark-mode', willBeDark);
+        return;
+    }
+
+    // Get click coordinates for the animation origin
+    const x = e ? e.clientX : window.innerWidth / 2;
+    const y = e ? e.clientY : window.innerHeight / 2;
+    const endRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y)
+    );
+
+    // Start the transition
+    const transition = document.startViewTransition(() => {
+        document.documentElement.classList.toggle('dark-mode', willBeDark);
+    });
+
+    // Animate the transition
+    transition.ready.then(() => {
+        document.documentElement.animate(
+            { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`] },
+            { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', pseudoElement: '::view-transition-new(root)' }
+        );
+    });
+};
+
 function hideActiveTaskActions() {
     if (activeMobileActionsItem) {
         const optionsBtn = activeMobileActionsItem.querySelector('.options-btn');
@@ -197,7 +371,7 @@ function hideActiveTaskActions() {
 }
 
 const openModal = (modal) => {
-    if(modal) {
+    if (modal) {
         lastFocusedElement = document.activeElement;
         hideActiveTaskActions();
 
@@ -217,7 +391,7 @@ const openModal = (modal) => {
     }
 };
 const closeModal = (modal) => {
-    if(modal) {
+    if (modal) {
         // Only remove the blur if this is the last modal being closed.
         const visibleModals = document.querySelectorAll('.modal-overlay.visible');
         if (visibleModals.length <= 1) {
@@ -248,11 +422,11 @@ try {
             db = getFirestore(app); // Fallback to online-only
         }
     }
-    
+
     onAuthStateChanged(auth, async (user) => {
         // Cleanup previous user's data listeners to prevent memory leaks.
         if (unsubscribeFromFirestore) {
-            unsubscribeFromFirestore(); 
+            unsubscribeFromFirestore();
             unsubscribeFromFirestore = null;
         }
         if (unsubscribeFromFriendsAndShares) {
@@ -267,9 +441,9 @@ try {
             unsubscribeFromSharedGroups();
             unsubscribeFromSharedGroups = null;
         }
-        
+
         currentUser = user;
-        
+
         if (user) {
             // A user is logged in.
             loaderOverlay.style.display = 'none';
@@ -293,12 +467,12 @@ try {
             }
 
             if (!appController) {
-                appController = await initializeAppLogic(user); 
+                appController = await initializeAppLogic(user);
             } else {
                 await appController.updateUser(user);
             }
             appWrapper.classList.add('loaded'); // Trigger load animations
-        } else { 
+        } else {
             // No user is logged in.
             if (sessionStorage.getItem('isGuest')) {
                 loaderOverlay.style.display = 'none';
@@ -310,7 +484,7 @@ try {
                 loaderOverlay.style.display = 'none';
                 landingPage.style.display = 'flex';
                 appWrapper.style.display = 'none';
-                if(appController) appController.shutdown();
+                if (appController) appController.shutdown();
                 appController = null;
                 appWrapper.classList.remove('loaded'); // Reset on logout
             }
@@ -345,13 +519,13 @@ document.getElementById('landing-login-btn').addEventListener('click', () => {
 function showAuthFormsOnLanding(initialTab) {
     landingChoices.style.display = 'none';
     landingAuthContainer.style.display = 'block';
-    
-    const onAuthSuccess = () => {};
-    
+
+    const onAuthSuccess = () => { };
+
     setupAuthForms(landingAuthContainer, onAuthSuccess);
-    
+
     landingAuthContainer.querySelector(`.toggle-btn[data-tab="${initialTab}"]`).click();
-    
+
     if (!landingAuthContainer.querySelector('#landing-back-btn')) {
         const backBtn = document.createElement('button');
         backBtn.id = 'landing-back-btn';
@@ -400,7 +574,7 @@ async function initializeAppLogic(initialUser) {
     let lastPotentialShiftHoverItem = null; // To track the item under the mouse for shift-hover
 
     const debouncedRenderFriends = debounce(renderFriendsList, 100);
-    
+
     const sharedQuestsContainer = document.getElementById('shared-quests-container');
     const dailyCombinedListContainer = document.getElementById('daily-combined-list-container');
     const mainCombinedListContainer = document.getElementById('main-combined-list-container');
@@ -413,12 +587,12 @@ async function initializeAppLogic(initialUser) {
     const addDailyGroupBtn = document.getElementById('add-daily-group-btn');
     const addStandaloneTaskBtn = document.getElementById('add-standalone-task-btn');
     const addGroupBtn = document.getElementById('add-group-btn');
-    
+
     const addTaskModal = document.getElementById('add-task-modal');
     const addTaskModalTitle = document.getElementById('add-task-modal-title');
     const addTaskForm = document.getElementById('add-task-form');
     const newTaskInput = document.getElementById('new-task-input');
-    
+
     const editTaskModal = document.getElementById('edit-task-modal');
     const editTaskForm = document.getElementById('edit-task-form');
     const editTaskInput = document.getElementById('edit-task-input');
@@ -467,7 +641,7 @@ async function initializeAppLogic(initialUser) {
     const quoteEl = document.getElementById('quote-of-the-day');
     const offlineIndicator = document.getElementById('offline-indicator');
     let confirmCallback = null;
-    
+
     const friendsBtnDesktop = document.getElementById('friends-btn-desktop');
     const friendsModal = document.getElementById('friends-modal');
     const mobileNav = document.getElementById('mobile-nav');
@@ -516,14 +690,14 @@ async function initializeAppLogic(initialUser) {
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
         const existingData = docSnap.exists() ? docSnap.data().appData : null;
-        
+
         // Check if username is missing or if the user document itself doesn't exist
         if (!docSnap.exists() || !docSnap.data()?.username) {
             const usernameModal = document.getElementById('username-modal');
             const usernameForm = document.getElementById('username-form');
             const newUsernameInput = document.getElementById('new-username-input');
             const usernameErrorEl = usernameModal.querySelector('.username-error');
-            
+
             usernameModal.setAttribute('data-persistent', 'true');
 
             openModal(usernameModal);
@@ -542,7 +716,7 @@ async function initializeAppLogic(initialUser) {
                     const submitButton = usernameForm.querySelector('button[type="submit"]');
                     submitButton.disabled = true;
                     submitButton.textContent = 'Saving...';
-                    
+
                     try {
                         const usernamesRef = doc(db, "usernames", username);
                         const usernameSnap = await getDoc(usernamesRef);
@@ -553,16 +727,16 @@ async function initializeAppLogic(initialUser) {
 
                         const batch = writeBatch(db);
                         batch.set(usernamesRef, { userId: user.uid });
-                        
-                        batch.set(userDocRef, { 
-                            username: username, 
+
+                        batch.set(userDocRef, {
+                            username: username,
                             email: user.email,
                             appData: existingData || {},
                             friends: [],
                             friendRequests: []
                         }, { merge: true });
                         await batch.commit();
-                        
+
                         usernameModal.removeAttribute('data-persistent');
                         closeModal(usernameModal);
                         resolve();
@@ -577,7 +751,7 @@ async function initializeAppLogic(initialUser) {
             });
         }
     }
-    
+
     function updateMainNotificationBadges() {
         const requestCount = incomingFriendRequests.length;
         const sharesCount = incomingSharedItems.length;
@@ -598,12 +772,12 @@ async function initializeAppLogic(initialUser) {
 
     function debounce(func, delay) { // MODIFIED: Added a cancel method
         let timeout;
-        const debounced = function(...args) {
+        const debounced = function (...args) {
             const context = this;
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(context, args), delay);
         };
-        debounced.cancel = function() {
+        debounced.cancel = function () {
             clearTimeout(timeout);
         };
         return debounced;
@@ -625,17 +799,17 @@ async function initializeAppLogic(initialUser) {
             localStorage.setItem('anonymousUserData', JSON.stringify(data));
             return;
         }
-        
+
         try {
             const userDocRef = doc(db, "users", user.uid);
             // By including the timestamp, we can check on the client-side if the data
             // we receive from a snapshot is newer than what we currently have.
             await setDoc(userDocRef, { appData: data }, { merge: true });
-        } catch (error) { 
-            console.error("Error saving data to Firestore: ", getCoolErrorMessage(error)); 
+        } catch (error) {
+            console.error("Error saving data to Firestore: ", getCoolErrorMessage(error));
         }
     }
-    
+
     const debouncedSaveData = debounce(saveData, 1500);
 
     const saveState = () => {
@@ -656,10 +830,10 @@ async function initializeAppLogic(initialUser) {
             return item;
         }).filter(Boolean);
 
-        const data = { 
+        const data = {
             dailyItems: dailyItemsToSave,
             mainItems: mainItemsToSave,
-            playerData, 
+            playerData,
             settings
         };
 
@@ -684,7 +858,7 @@ async function initializeAppLogic(initialUser) {
                 expandedGroupIds.add(item.id);
             }
         });
-    
+
         // Load persisted data
         // For backwards compatibility, migrate old data structure to the new one.
         const oldStandaloneDaily = data.standaloneDailyQuests || data.dailyTasks || [];
@@ -696,10 +870,10 @@ async function initializeAppLogic(initialUser) {
         mainItems = data.mainItems || [...oldStandaloneMain, ...oldGeneralGroups];
 
         playerData = data.playerData || { level: 1, xp: 0 };
-        settings = { ...settings, ...(data.settings || {}) }; 
+        settings = { ...settings, ...(data.settings || {}) };
         // Store the timestamp of the data we're loading.
         localDataTimestamp = data.lastModified || 0;
-        
+
         // Re-apply the transient state to the newly loaded data
         [...dailyItems, ...mainItems].forEach(item => {
             if (item && item.tasks) { // It's a group
@@ -710,7 +884,7 @@ async function initializeAppLogic(initialUser) {
                 }
             }
         });
-        
+
         applySettings();
         renderAllLists();
         updateProgressUI();
@@ -724,9 +898,9 @@ async function initializeAppLogic(initialUser) {
                 resolve();
                 return;
             }
-            
+
             // Listen for friend requests and incoming shared quests
-            listenForFriendsAndShares(); 
+            listenForFriendsAndShares();
             // Listen for active shared quests (those accepted by both)
             listenForSharedQuests();
             // Listen for active shared groups
@@ -760,8 +934,8 @@ async function initializeAppLogic(initialUser) {
             }, (error) => {
                 console.error("Error listening to Firestore:", getCoolErrorMessage(error));
                 if (isFirstLoad) {
-                     isFirstLoad = false;
-                     resolve();
+                    isFirstLoad = false;
+                    resolve();
                 }
             });
         });
@@ -780,7 +954,7 @@ async function initializeAppLogic(initialUser) {
 
             userDisplay.textContent = `Logged in as: ${username}`;
             userDisplay.style.display = 'flex';
-            
+
             mobileNav.querySelector('[data-section="friends"]').style.display = 'flex';
 
         } else {
@@ -790,7 +964,7 @@ async function initializeAppLogic(initialUser) {
             guestDataManagementGroup.style.display = 'block';
             userDisplay.textContent = 'Playing as Guest';
             userDisplay.style.display = 'flex';
-            
+
             mobileNav.querySelector('[data-section="friends"]').style.display = 'none';
         }
     }
@@ -877,9 +1051,9 @@ async function initializeAppLogic(initialUser) {
         const allMainTasksDone = allMainItems.filter(t => !t.isShared).length === 0;
         return { allDailiesDone, allTasksDone: allDailiesDone && allMainTasksDone };
     }
-    
+
     // FIX: Updated rendering functions to correctly display tasks based on data
-    const renderDailyItems = () => { 
+    const renderDailyItems = () => {
         dailyCombinedListContainer.innerHTML = '';
 
         // Filter out original items that are now active/completed shared items
@@ -907,7 +1081,7 @@ async function initializeAppLogic(initialUser) {
         const totalDailies = dailyCombinedListContainer.children.length;
         noDailyTasksMessage.style.display = totalDailies === 0 ? 'block' : 'none';
     };
-    const renderMainItems = () => { 
+    const renderMainItems = () => {
         mainCombinedListContainer.innerHTML = '';
 
         // Filter out original items that are now active/completed shared items
@@ -948,7 +1122,7 @@ async function initializeAppLogic(initialUser) {
         if (selectedQuestIds.has(group.id)) {
             el.classList.add('multi-select-selected');
         }
-        
+
         if (group.isShared) {
             const sharedGroupData = allSharedGroupsFromListener.find(sg => sg.id === group.sharedGroupId);
             const otherParticipant = sharedGroupData ? sharedGroupData.participants.find(p => user && p !== user.uid) : null;
@@ -985,7 +1159,7 @@ async function initializeAppLogic(initialUser) {
         const shareBtnHTML = group.type !== 'daily' ? `<button class="btn icon-btn share-group-btn" aria-label="Share group" aria-haspopup="dialog" aria-controls="share-group-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>` : '';
 
         el.innerHTML = `<header class="main-quest-group-header"><div class="multi-select-checkbox"></div><div class="group-title-container"><svg class="expand-indicator" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg><h3>${group.name}</h3></div><div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div><div class="group-actions">${shareBtnHTML}<button class="btn icon-btn edit-group-btn" aria-label="Edit group name" aria-haspopup="dialog" aria-controls="add-group-modal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button><button class="btn icon-btn delete-group-btn" aria-label="Delete group"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button><button class="btn icon-btn add-task-to-group-btn" aria-label="Add task" aria-haspopup="dialog" aria-controls="add-task-modal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div></header><ul class="task-list-group" data-group-id="${group.id}"></ul>`;
-        const ul = el.querySelector('ul'); 
+        const ul = el.querySelector('ul');
         const tasksToRender = group.tasks.filter(task => {
             if (!task.isShared) return true;
             return !sharedQuests.some(sq => sq.id === task.sharedQuestId);
@@ -999,7 +1173,7 @@ async function initializeAppLogic(initialUser) {
         groupEl.className = 'main-quest-group shared-quest-group';
         if (group.isExpanded) groupEl.classList.add('expanded');
         groupEl.dataset.sharedGroupId = group.id;
-    
+
         const totalTasks = group.tasks.length;
         const completedTasks = group.tasks.filter(t => t.ownerCompleted && t.friendCompleted).length;
         const allTasksCompleted = totalTasks > 0 && completedTasks === totalTasks;
@@ -1008,7 +1182,7 @@ async function initializeAppLogic(initialUser) {
         if (allTasksCompleted) {
             groupEl.classList.add('all-completed');
         }
-    
+
         const isOwner = user.uid === group.ownerUid;
         const otherPlayerUsername = isOwner ? group.friendUsername : group.ownerUsername;
 
@@ -1073,7 +1247,7 @@ async function initializeAppLogic(initialUser) {
             <div class="task-buttons-wrapper">${buttonsHTML}</div>
             <div class="task-actions-container"><button class="btn icon-btn options-btn" aria-label="More options" ${optionsBtnDisabled}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button></div>
             <div class="shared-status-indicators">${friendStatusIndicatorHTML}</div>`;
-        
+
         if (myPartCompleted) {
             li.classList.add('my-part-completed');
         }
@@ -1258,7 +1432,7 @@ async function initializeAppLogic(initialUser) {
 
         return li;
     };
-    
+
     const addTask = (text, list, goal) => {
         const common = { id: Date.now().toString(), text, createdAt: Date.now() };
         let newTask, taskType, container;
@@ -1295,17 +1469,17 @@ async function initializeAppLogic(initialUser) {
             taskEl.classList.add('adding');
             container.appendChild(taskEl);
             taskEl.addEventListener('animationend', () => taskEl.classList.remove('adding'), { once: true });
-            
+
             if (list === 'daily') noDailyTasksMessage.style.display = 'none';
             else noGeneralTasksMessage.style.display = 'none';
         } else {
             renderAllLists();
         }
 
-        saveState(); 
+        saveState();
         audioManager.playSound('add');
     };
-    const addGroup = (name, type) => { 
+    const addGroup = (name, type) => {
         const newGroup = { id: 'group_' + Date.now(), name, tasks: [], isExpanded: false, type };
         let container;
 
@@ -1323,8 +1497,8 @@ async function initializeAppLogic(initialUser) {
         groupEl.addEventListener('animationend', () => groupEl.classList.remove('adding'), { once: true });
         noGeneralTasksMessage.style.display = 'none';
 
-        saveState(); 
-        audioManager.playSound('addGroup'); 
+        saveState();
+        audioManager.playSound('addGroup');
     };
     const editGroup = (id, newName) => {
         const { group } = findTaskAndContext(id);
@@ -1390,15 +1564,15 @@ async function initializeAppLogic(initialUser) {
         const group = sharedGroups.find(g => g && g.id === id); if (group) return { group, type: 'shared-group' };
         return {};
     };
-    const deleteTask = (id) => { 
-        stopTimer(id, false); 
-        const {task, list, type} = findTaskAndContext(id); 
+    const deleteTask = (id) => {
+        stopTimer(id, false);
+        const { task, list, type } = findTaskAndContext(id);
         if (!task || !list) return;
 
         // Prevent deletion of shared tasks from original lists, with a special case for orphans.
         if (task.isShared && type !== 'shared') {
             const sharedQuestData = questsMap.get(task.sharedQuestId);
-            
+
             // An orphan is a quest where the share doc doesn't exist,
             // OR the share doc exists but the other participant is no longer a friend.
             const otherParticipant = sharedQuestData ? sharedQuestData.participants.find(p => user && p !== user.uid) : null;
@@ -1406,8 +1580,8 @@ async function initializeAppLogic(initialUser) {
 
             if (isOrphan) {
                 showConfirm(
-                    "Clean Up Orphaned Quest?", 
-                    "This shared quest seems to be orphaned (it may have been removed by your friend or the share no longer exists). Would you like to convert it back to a normal quest?", 
+                    "Clean Up Orphaned Quest?",
+                    "This shared quest seems to be orphaned (it may have been removed by your friend or the share no longer exists). Would you like to convert it back to a normal quest?",
                     () => {
                         revertSharedQuest(task.id);
                         // Also try to delete the Firestore doc if it exists, just in case.
@@ -1417,7 +1591,7 @@ async function initializeAppLogic(initialUser) {
                     }
                 );
             } else {
-                showConfirm("Shared Quest", "This quest has been shared. It cannot be deleted from here. You can only delete it from the Shared Quests section once it's completed by both participants.", () => {});
+                showConfirm("Shared Quest", "This quest has been shared. It cannot be deleted from here. You can only delete it from the Shared Quests section once it's completed by both participants.", () => { });
             }
             return;
         }
@@ -1429,7 +1603,7 @@ async function initializeAppLogic(initialUser) {
 
             // Block deletion ONLY if the quest is active AND the other user is still a friend.
             if (task.status === 'active' && isFriend) {
-                showConfirm("Cannot Delete Shared Quest", "This shared quest is still active. It can only be deleted once both participants have completed it.", () => {});
+                showConfirm("Cannot Delete Shared Quest", "This shared quest is still active. It can only be deleted once both participants have completed it.", () => { });
                 return;
             }
             // For all other cases (pending, completed, rejected, or active but friend removed), allow deletion.
@@ -1446,7 +1620,7 @@ async function initializeAppLogic(initialUser) {
                     audioManager.playSound('delete');
                 } catch (error) {
                     console.error("Error deleting shared quest:", getCoolErrorMessage(error));
-                    showConfirm("Error", "Failed to delete shared quest. Please try again later.", () => {});
+                    showConfirm("Error", "Failed to delete shared quest. Please try again later.", () => { });
                 }
             });
         } else {
@@ -1475,7 +1649,7 @@ async function initializeAppLogic(initialUser) {
 
         // NEW: Prevent completion of shared tasks from original lists
         if (task.isShared && type !== 'shared') {
-            showConfirm("Shared Quest", "This quest has been shared. Manage its completion in the Shared Quests section.", () => {});
+            showConfirm("Shared Quest", "This quest has been shared. Manage its completion in the Shared Quests section.", () => { });
             return;
         }
 
@@ -1562,11 +1736,11 @@ async function initializeAppLogic(initialUser) {
 
         // NEW: Prevent uncompletion of shared tasks from original lists
         if (task.isShared && type !== 'shared') {
-            showConfirm("Shared Quest", "This quest has been shared. Manage its completion in the Shared Quests section.", () => {});
+            showConfirm("Shared Quest", "This quest has been shared. Manage its completion in the Shared Quests section.", () => { });
             return;
         }
-            
-        if(type === 'shared') { // Un-complete shared task part
+
+        if (type === 'shared') { // Un-complete shared task part
             completeSharedQuestPart(task, true); // `true` to un-complete
             return;
         }
@@ -1599,7 +1773,7 @@ async function initializeAppLogic(initialUser) {
         if (task) {
             if (type === 'shared') {
                 if (user.uid !== task.ownerUid) {
-                    showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => {});
+                    showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => { });
                     return;
                 }
                 try {
@@ -1608,13 +1782,13 @@ async function initializeAppLogic(initialUser) {
                     audioManager.playSound('toggle');
                 } catch (error) {
                     console.error("Error updating shared quest:", getCoolErrorMessage(error));
-                    showConfirm("Error", "Could not update shared quest.", () => {});
+                    showConfirm("Error", "Could not update shared quest.", () => { });
                 }
                 return;
             }
             // NEW: Prevent editing a task that's been shared from its original list
-            if (task.isShared) { 
-                showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => {});
+            if (task.isShared) {
+                showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => { });
                 return;
             }
             task.text = text;
@@ -1653,7 +1827,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('add');
         } catch (error) {
             console.error("Error adding task to shared group:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not add task to the shared group.", () => {});
+            showConfirm("Error", "Could not add task to the shared group.", () => { });
         }
     };
     const editSharedGroupName = async (groupId, newName) => {
@@ -1663,7 +1837,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('toggle');
         } catch (error) {
             console.error("Error editing shared group name:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not edit group name.", () => {});
+            showConfirm("Error", "Could not edit group name.", () => { });
         }
     };
     const editSharedTask = async (groupId, taskId, newText) => {
@@ -1672,10 +1846,10 @@ async function initializeAppLogic(initialUser) {
             // FIX: Use a transaction to prevent race conditions when editing.
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
-                    if (!groupDoc.exists()) { // eslint-disable-line
+                if (!groupDoc.exists()) { // eslint-disable-line
                     throw "Group not found!";
                 }
-                const tasks = groupDoc.data().tasks.map(t => ({...t}));
+                const tasks = groupDoc.data().tasks.map(t => ({ ...t }));
                 const taskIndex = tasks.findIndex(t => t.id === taskId);
                 if (taskIndex > -1) {
                     tasks[taskIndex].text = newText;
@@ -1685,7 +1859,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('toggle');
         } catch (error) {
             console.error("Error editing shared task:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not edit task.", () => {});
+            showConfirm("Error", "Could not edit task.", () => { });
         }
     };
     const deleteSharedTask = async (groupId, taskId) => {
@@ -1704,7 +1878,7 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error deleting shared task:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not delete task.", () => {});
+                showConfirm("Error", "Could not delete task.", () => { });
             }
         });
     };
@@ -1715,7 +1889,7 @@ async function initializeAppLogic(initialUser) {
         if (!group) return;
         const taskIndex = group.tasks.findIndex(t => t.id === taskId);
         if (taskIndex === -1) return;
-        
+
         const task = { ...group.tasks[taskIndex] }; // Work with a copy
         const isOwner = user.uid === group.ownerUid;
         const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
@@ -1737,10 +1911,10 @@ async function initializeAppLogic(initialUser) {
                 const uniqueId = `${groupId}_${taskId}`;
                 locallyAnimatingTasks.add(uniqueId);
                 setTimeout(() => locallyAnimatingTasks.delete(uniqueId), 3000);
-                
+
                 // The animation function handles sound and XP for full completion.
                 finishSharedGroupTaskAnimation(group, { ...task, status: 'completed' });
-                
+
                 task[myCompletionFlag] = true;
                 task.status = 'completed';
             } else {
@@ -1750,10 +1924,10 @@ async function initializeAppLogic(initialUser) {
                 task[myCompletionFlag] = true;
             }
         }
-        
+
         // 3. Apply the optimistic state to the local data model and re-render for instant feedback (e.g., strikethrough).
         group.tasks[taskIndex] = task;
-        
+
         // 4. Update just the specific task element for instant feedback, avoiding a full re-render.
         const taskEl = document.querySelector(`.task-item[data-id="${taskId}"][data-shared-group-id="${groupId}"]`);
         if (taskEl) {
@@ -1777,14 +1951,14 @@ async function initializeAppLogic(initialUser) {
             await runTransaction(db, async (transaction) => {
                 const groupDoc = await transaction.get(groupRef);
                 if (!groupDoc.exists()) throw "Document does not exist!";
-                
+
                 // FIX: Create a deep copy of the tasks array to avoid mutating the document snapshot from the transaction.
                 let serverTasks = JSON.parse(JSON.stringify(groupDoc.data().tasks || []));
                 const serverTaskIndex = serverTasks.findIndex(t => t.id === taskId);
                 if (serverTaskIndex === -1) return; // Task already removed by other user.
-                
+
                 const serverTaskToUpdate = serverTasks[serverTaskIndex];
-                
+
                 // Apply the change
                 serverTaskToUpdate[myCompletionFlag] = !uncompleting;
 
@@ -1794,7 +1968,7 @@ async function initializeAppLogic(initialUser) {
                 } else if (serverTaskToUpdate[friendCompletionFlag]) {
                     serverTaskToUpdate.status = 'completed';
                 }
-                
+
                 transaction.update(groupRef, { tasks: serverTasks });
             });
         } catch (error) {
@@ -1812,7 +1986,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('toggle');
         } catch (error) {
             console.error("Error updating shared group task order:", getCoolErrorMessage(error));
-            showConfirm("Error", "Could not reorder tasks. The list may revert.", () => {});
+            showConfirm("Error", "Could not reorder tasks. The list may revert.", () => { });
         }
     };
     const revertSharedQuest = (originalTaskId) => {
@@ -1832,7 +2006,7 @@ async function initializeAppLogic(initialUser) {
         if (!sharedQuest || taskType !== 'shared') return;
 
         if (user.uid !== sharedQuest.ownerUid) {
-            showConfirm("Cannot Unshare", "Only the owner can unshare a quest.", () => {});
+            showConfirm("Cannot Unshare", "Only the owner can unshare a quest.", () => { });
             return;
         }
 
@@ -1844,7 +2018,7 @@ async function initializeAppLogic(initialUser) {
                 await updateDoc(doc(db, "sharedQuests", questId), { status: 'unshared' });
             } catch (error) {
                 console.error("Error unsharing quest:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not unshare the quest.", () => {});
+                showConfirm("Error", "Could not unshare the quest.", () => { });
             }
         });
     };
@@ -1860,7 +2034,7 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error abandoning quest:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not abandon the quest.", () => {});
+                showConfirm("Error", "Could not abandon the quest.", () => { });
             }
         });
     };
@@ -1887,7 +2061,7 @@ async function initializeAppLogic(initialUser) {
                 const questData = sharedQuestSnap.data();
 
                 if (questData.ownerUid !== user.uid) {
-                    showConfirm("Error", "You are not the owner of this share.", () => {});
+                    showConfirm("Error", "You are not the owner of this share.", () => { });
                     return;
                 }
 
@@ -1906,10 +2080,10 @@ async function initializeAppLogic(initialUser) {
                 // The onSnapshot listener will see the deletion and remove the item from
                 // the `questsMap`, but the local revert ensures the UI is responsive.
                 audioManager.playSound('delete');
-                
+
             } catch (error) {
                 console.error("Error cancelling share:", getCoolErrorMessage(error));
-                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
+                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => { });
             }
         });
     };
@@ -1936,7 +2110,7 @@ async function initializeAppLogic(initialUser) {
                 const groupData = sharedGroupSnap.data();
 
                 if (groupData.ownerUid !== user.uid) {
-                    showConfirm("Error", "You are not the owner of this group share.", () => {});
+                    showConfirm("Error", "You are not the owner of this group share.", () => { });
                     return;
                 }
 
@@ -1954,13 +2128,13 @@ async function initializeAppLogic(initialUser) {
                     delete originalGroup.isShared; // eslint-disable-line
                     delete originalGroup.sharedGroupId;
                 }
-                
+
                 audioManager.playSound('delete');
                 renderAllLists();
                 saveState(); // Save the reverted state
             } catch (error) {
                 console.error("Error cancelling group share:", getCoolErrorMessage(error));
-                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => {});
+                showConfirm("Error", error.message || "Could not cancel the share. Please try again.", () => { });
             }
         });
     };
@@ -1996,7 +2170,7 @@ async function initializeAppLogic(initialUser) {
         if (!task) return;
 
         if (type !== 'shared' && task.isShared) {
-            showConfirm("Cannot Set Timer", "This quest is pending a share and cannot have a timer.", () => {});
+            showConfirm("Cannot Set Timer", "This quest is pending a share and cannot have a timer.", () => { });
             return;
         }
 
@@ -2023,13 +2197,13 @@ async function initializeAppLogic(initialUser) {
             // Also reset the ring's CSS when a timer is stopped.
             const taskEl = document.querySelector(`.task-item[data-id="${id}"]`);
             if (taskEl) {
-            // By removing the class, we disable all timer-related CSS rules,
-            // which is the most robust way to stop the animation.
-            taskEl.classList.remove('timer-active');
-            taskEl.classList.remove('timer-finished'); // Also remove the shaking animation class.
+                // By removing the class, we disable all timer-related CSS rules,
+                // which is the most robust way to stop the animation.
+                taskEl.classList.remove('timer-active');
+                taskEl.classList.remove('timer-finished'); // Also remove the shaking animation class.
                 const ringEl = taskEl.querySelector('.progress-ring-circle');
                 if (ringEl) {
-                // Resetting the transition and offset is good practice to prevent flashes.
+                    // Resetting the transition and offset is good practice to prevent flashes.
                     ringEl.style.transitionDuration = '0s';
                     ringEl.style.strokeDashoffset = 0;
                 }
@@ -2049,7 +2223,7 @@ async function initializeAppLogic(initialUser) {
 
         let needsSaveAndRender = false;
         const allTasks = [...dailyItems, ...mainItems].flatMap(item => item.tasks ? item.tasks : item);
-        
+
         allTasks.forEach(t => {
             const isCompleted = t.completedToday || t.pendingDeletion;
             // Only process timers for tasks that have timer properties and are not completed/shared.
@@ -2070,9 +2244,9 @@ async function initializeAppLogic(initialUser) {
                             // Set initial state without transition
                             ringEl.style.transitionDuration = '0s';
                             ringEl.style.strokeDashoffset = startOffset;
-                            
+
                             // Force reflow to apply the initial state
-                            ringEl.getBoundingClientRect(); 
+                            ringEl.getBoundingClientRect();
 
                             // Apply transition and set final state
                             ringEl.style.transitionDuration = `${remaining}s`;
@@ -2170,8 +2344,8 @@ async function initializeAppLogic(initialUser) {
             updateBatchActionsUI();
             return; // Stop further processing
         }
-        
-        if (groupHeader) { 
+
+        if (groupHeader) {
             const parentEl = groupHeader.parentElement;
 
             // NEW: Handle shared groups first
@@ -2212,7 +2386,7 @@ async function initializeAppLogic(initialUser) {
                     if (abandonBtn) { abandonSharedGroup(sharedGroupId); return; }
                     return; // Click was inside the actions overlay
                 }
-                
+
                 // Click on header body to expand/collapse
                 if (group) {
                     group.isExpanded = !group.isExpanded;
@@ -2240,13 +2414,13 @@ async function initializeAppLogic(initialUser) {
                 const isCleanupClick = e.target.closest('.cleanup-orphan-group-btn');
 
                 if (isAddClick) {
-                    currentListToAdd = groupId; 
-                    weeklyGoalContainer.style.display = 'none'; 
-                    addTaskModalTitle.textContent = `Add to "${g.name}"`; 
-                    openModal(addTaskModal); 
+                    currentListToAdd = groupId;
+                    weeklyGoalContainer.style.display = 'none';
+                    addTaskModalTitle.textContent = `Add to "${g.name}"`;
+                    openModal(addTaskModal);
                     focusOnDesktop(newTaskInput);
                     return;
-                } 
+                }
                 if (isDeleteClick) {
                     deleteGroup(groupId);
                     return;
@@ -2305,13 +2479,13 @@ async function initializeAppLogic(initialUser) {
                 hideActiveTaskActions();
                 return; // Event handled, don't fall through to expand/collapse
             }
-            
+
             // Click on header body to expand/collapse
             if (g) {
-                g.isExpanded = !g.isExpanded; 
+                g.isExpanded = !g.isExpanded;
                 groupHeader.parentElement.classList.toggle('expanded', g.isExpanded);
             }
-            return; 
+            return;
         }
 
         if (taskItem) {
@@ -2329,7 +2503,7 @@ async function initializeAppLogic(initialUser) {
                 // This handles daily quests
                 return task.completedToday;
             };
-            
+
             // NEW: Handle undo button click
             if (e.target.closest('.undo-btn')) {
                 undoCompleteMainQuest(id);
@@ -2343,7 +2517,7 @@ async function initializeAppLogic(initialUser) {
                 if (!group) return;
                 const sharedTask = group.tasks.find(t => t.id === id);
                 if (!sharedTask) return;
-                
+
                 if (e.target.closest('.options-btn')) {
                     shiftHoverItem = null; // A click on options button takes precedence
                     toggleTaskActions(taskItem);
@@ -2354,7 +2528,7 @@ async function initializeAppLogic(initialUser) {
                     } else if (e.target.closest('.edit-btn')) {
                         openEditSharedTaskModal(sharedGroupId, id);
                     } else if (e.target.closest('.timer-clock-btn')) {
-                        showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => {});
+                        showConfirm("Not Implemented", "Timers for shared tasks are not yet supported.", () => { });
                     }
                 } else if (!e.target.closest('button')) {
                     // Click on body to complete
@@ -2364,7 +2538,7 @@ async function initializeAppLogic(initialUser) {
                 }
                 return;
             }
-            
+
             // --- Case 2: Task is a normal task (not in a shared group) ---
             if (e.target.closest('.options-btn')) {
                 shiftHoverItem = null; // A click on options button takes precedence
@@ -2388,7 +2562,7 @@ async function initializeAppLogic(initialUser) {
                         // If on mobile and the daily section is not visible, switch to it.
                         if (isMobile && dailySection && !dailySection.classList.contains('mobile-visible')) {
                             sectionWasSwitched = true;
-                            
+
                             // Switch visible section
                             document.querySelectorAll('.task-group').forEach(group => {
                                 group.classList.toggle('mobile-visible', group.dataset.section === 'daily');
@@ -2398,7 +2572,7 @@ async function initializeAppLogic(initialUser) {
                             mobileNav.querySelectorAll('.mobile-nav-btn').forEach(btn => {
                                 btn.classList.toggle('active', btn.dataset.section === 'daily');
                             });
-                            
+
                             lastSection = 'daily';
                             audioManager.playSound('toggle');
                         }
@@ -2448,7 +2622,7 @@ async function initializeAppLogic(initialUser) {
                 }
                 else if (e.target.closest('.share-btn')) {
                     if (task && task.isShared) {
-                        showConfirm("Shared Quest", "This quest has already been shared.", () => {});
+                        showConfirm("Shared Quest", "This quest has already been shared.", () => { });
                         return;
                     }
                     openShareModal(id);
@@ -2468,12 +2642,12 @@ async function initializeAppLogic(initialUser) {
                         const isSharedPlaceholder = !isSharedFromList && task.isShared;
 
                         if (isSharedPlaceholder) {
-                            showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => {});
+                            showConfirm("Cannot Edit", "This quest has been shared. It cannot be edited from here.", () => { });
                             return;
                         }
 
                         if (isSharedFromList && user.uid !== task.ownerUid) {
-                            showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => {});
+                            showConfirm("Cannot Edit", "Only the owner of a shared quest can edit it.", () => { });
                             return;
                         }
 
@@ -2509,7 +2683,7 @@ async function initializeAppLogic(initialUser) {
             } else {
                 completeTask(id); // Main quests are completed (and then deleted)
             }
-        } 
+        }
     });
 
     addTaskForm.addEventListener('submit', (e) => { e.preventDefault(); const t = newTaskInput.value.trim(); if (t && currentListToAdd) { if (currentListToAdd.startsWith('shared-group-')) { const groupId = currentListToAdd.replace('shared-group-', ''); addTaskToSharedGroup(groupId, t); } else { const goal = (currentListToAdd === 'daily') ? parseInt(weeklyGoalSlider.value, 10) : 0; addTask(t, currentListToAdd, goal); } newTaskInput.value = ''; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); closeModal(addTaskModal); } });
@@ -2536,7 +2710,7 @@ async function initializeAppLogic(initialUser) {
             closeModal(editTaskModal);
         }
     });
-    timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value,10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch(u){ case 'seconds': m=v/60; break; case 'minutes': m=v; break; case 'hours': m=v*60; break; case 'days': m=v*1440; break; case 'weeks': m=v*10080; break; case 'months': m=v*43200; break; } if(m>0&&currentEditingTaskId){ if (currentEditingTaskId === 'batch_timer') { selectedQuestIds.forEach(id => { const { task } = findTaskAndContext(id); if (task && !task.isShared) { startTimer(id, m); } }); deactivateMultiSelectMode(); renderAllLists(); } else { startTimer(currentEditingTaskId,m); } closeModal(timerModal); currentEditingTaskId=null; } });
+    timerForm.addEventListener('submit', (e) => { e.preventDefault(); const v = parseInt(timerDurationSlider.value, 10), u = timerUnitSelector.querySelector('.selected').dataset.unit; let m = 0; switch (u) { case 'seconds': m = v / 60; break; case 'minutes': m = v; break; case 'hours': m = v * 60; break; case 'days': m = v * 1440; break; case 'weeks': m = v * 10080; break; case 'months': m = v * 43200; break; } if (m > 0 && currentEditingTaskId) { if (currentEditingTaskId === 'batch_timer') { selectedQuestIds.forEach(id => { const { task } = findTaskAndContext(id); if (task && !task.isShared) { startTimer(id, m); } }); deactivateMultiSelectMode(); renderAllLists(); } else { startTimer(currentEditingTaskId, m); } closeModal(timerModal); currentEditingTaskId = null; } });
     timerMenuCancelBtn.addEventListener('click', () => { if (currentEditingTaskId) stopTimer(currentEditingTaskId); closeModal(timerMenuModal); });
     timerDurationSlider.addEventListener('input', () => timerDurationDisplay.textContent = timerDurationSlider.value);
     timerUnitSelector.addEventListener('click', (e) => { const t = e.target.closest('.timer-unit-btn'); if (t) { timerUnitSelector.querySelector('.selected').classList.remove('selected'); t.classList.add('selected'); audioManager.playSound('toggle'); } });
@@ -2562,7 +2736,7 @@ async function initializeAppLogic(initialUser) {
             closeModal(addGroupModal);
         }
     });
-    
+
     addTaskTriggerBtnDaily.addEventListener('click', () => { currentListToAdd = 'daily'; weeklyGoalContainer.style.display = 'block'; addTaskModalTitle.textContent = 'Add Daily Quest'; weeklyGoalSlider.value = 0; updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay); openModal(addTaskModal); focusOnDesktop(newTaskInput); });
     addDailyGroupBtn.addEventListener('click', () => {
         currentEditingGroupId = null;
@@ -2584,7 +2758,7 @@ async function initializeAppLogic(initialUser) {
         focusOnDesktop(newGroupInput);
     });
     settingsBtn.addEventListener('click', () => openModal(settingsModal));
-    
+
     function handleFriendsModalClose() {
         mobileNav.querySelector('[data-section="friends"]').classList.remove('active');
         const lastSectionBtn = mobileNav.querySelector(`[data-section="${lastSection}"]`);
@@ -2604,73 +2778,19 @@ async function initializeAppLogic(initialUser) {
             }
         }
     }));
-    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal, batchActionsModal].forEach(m => { 
-        if (m) m.addEventListener('click', (e) => { 
+    [addTaskModal, editTaskModal, addGroupModal, settingsModal, confirmModal, timerModal, accountModal, manageAccountModal, document.getElementById('username-modal'), document.getElementById('google-signin-loader-modal'), friendsModal, shareQuestModal, shareGroupModal, batchActionsModal].forEach(m => {
+        if (m) m.addEventListener('click', (e) => {
             if (e.target === m && m.getAttribute('data-persistent') !== 'true') {
-                closeModal(m); 
+                closeModal(m);
                 if (m.id === 'friends-modal') {
                     handleFriendsModalClose();
                 }
             }
-        }); 
+        });
     });
     function showConfirm(title, text, cb) { confirmTitle.textContent = title; confirmText.textContent = text; confirmCallback = cb; openModal(confirmModal); }
     confirmActionBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); closeModal(confirmModal); });
     confirmCancelBtn.addEventListener('click', () => closeModal(confirmModal));
-    const applySettings = (e) => {
-        // Determine target theme state
-        const isCurrentlyDark = document.documentElement.classList.contains('dark-mode');
-        const d = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const willBeDark = settings.theme === 'dark' || (settings.theme === 'system' && d);
-
-        // Apply non-theme settings immediately
-        document.documentElement.style.setProperty('--accent', settings.accentColor);
-        document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === settings.accentColor));
-        if(typeof settings.volume === 'undefined') settings.volume = 0.3;
-        // This is now the single source of truth for setting the volume.
-        // It runs after settings are loaded, ensuring the correct volume is applied.
-        audioManager.setVolume(settings.volume);
-        volumeSlider.value = settings.volume; 
-        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('selected'));
-        const s = document.querySelector(`.theme-btn[data-theme="${settings.theme}"]`);
-        if(s) s.classList.add('selected');
-
-        // If theme isn't changing, we're done.
-        if (isCurrentlyDark === willBeDark) return;
-
-        // --- View Transition Logic ---
-        if (!document.startViewTransition) {
-            // Fallback for unsupported browsers
-            document.documentElement.classList.toggle('dark-mode', willBeDark);
-            return;
-        }
-
-        // Get click coordinates for the animation origin
-        const x = e ? e.clientX : window.innerWidth / 2;
-        const y = e ? e.clientY : window.innerHeight / 2;
-        const endRadius = Math.hypot(
-            Math.max(x, window.innerWidth - x),
-            Math.max(y, window.innerHeight - y)
-        );
-
-        // Start the transition
-        const transition = document.startViewTransition(() => {
-            document.documentElement.classList.toggle('dark-mode', willBeDark);
-        });
-
-        // Animate the transition
-        transition.ready.then(() => {
-            document.documentElement.animate(
-                { clipPath: [ `circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)` ] },
-                { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', pseudoElement: '::view-transition-new(root)' }
-            );
-        });
-    };
-    themeOptionsButtons.addEventListener('click', (e) => { const t = e.target.closest('.theme-btn'); if (t) { settings.theme = t.dataset.theme; saveState(); applySettings(e); audioManager.playSound('toggle'); } });
-    colorOptions.addEventListener('click', (e) => { if(e.target.classList.contains('color-swatch')) { settings.accentColor = e.target.dataset.color; saveState(); applySettings(); } });
-    volumeSlider.addEventListener('input', () => { settings.volume = parseFloat(volumeSlider.value); saveState(); audioManager.setVolume(settings.volume); });
-    volumeSlider.addEventListener('change', () => audioManager.playSound('toggle'));
-    
     function updateGoalDisplay(slider, display) {
         const value = slider.value;
         if (value === '0') {
@@ -2681,9 +2801,9 @@ async function initializeAppLogic(initialUser) {
     }
     weeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(weeklyGoalSlider, weeklyGoalDisplay));
     editWeeklyGoalSlider.addEventListener('input', () => updateGoalDisplay(editWeeklyGoalSlider, editWeeklyGoalDisplay));
-    
+
     if (resetProgressBtn) resetProgressBtn.addEventListener('click', () => showConfirm('Reset all progress?', 'This cannot be undone.', () => { playerData = { level: 1, xp: 0 }; dailyItems = []; mainItems = []; renderAllLists(); saveState(); audioManager.playSound('delete'); }));
-    if (exportDataBtn) exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], {type: "application/json"}), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
+    if (exportDataBtn) exportDataBtn.addEventListener('click', () => { const d = localStorage.getItem('anonymousUserData'); const b = new Blob([d || '{}'], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `procrasti-nope_guest_backup.json`; a.click(); });
     if (resetCloudDataBtn) {
         resetCloudDataBtn.addEventListener('click', () => {
             showConfirm('Reset all cloud data?', 'This will permanently erase all your quests and progress. This action cannot be undone.', () => { // eslint-disable-line
@@ -2697,9 +2817,9 @@ async function initializeAppLogic(initialUser) {
         });
     }
     if (importDataBtn) importDataBtn.addEventListener('click', () => importFileInput.click());
-    if (importFileInput) importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if(!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
+    if (importFileInput) importFileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; showConfirm("Import Guest Data?", "This will overwrite current guest data.", () => { const r = new FileReader(); r.onload = (e) => { localStorage.setItem('anonymousUserData', e.target.result); initialLoad(); }; r.readAsText(f); }); e.target.value = ''; });
     document.body.addEventListener('mouseover', e => { const t = e.target.closest('.btn, .color-swatch, .completion-indicator, .main-title'); if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return; audioManager.playSound('hover'); });
-    
+
     if (manageAccountBtn) {
         manageAccountBtn.addEventListener('click', () => {
             closeModal(settingsModal); // Close the settings modal first
@@ -2726,7 +2846,7 @@ async function initializeAppLogic(initialUser) {
 
     const reauthForm = document.getElementById('reauth-form');
     if (reauthForm) {
-        reauthForm.addEventListener('submit', async(e) => {
+        reauthForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const password = document.getElementById('reauth-password').value;
             const errorEl = document.getElementById('reauth-error');
@@ -2773,7 +2893,7 @@ async function initializeAppLogic(initialUser) {
                 const credential = EmailAuthProvider.credential(currentUser.email, password);
                 await reauthenticateWithCredential(currentUser, credential);
                 await updateEmail(currentUser, newEmail);
-                
+
                 const userDocRef = doc(db, "users", currentUser.uid);
                 await updateDoc(userDocRef, { email: newEmail });
 
@@ -2788,7 +2908,7 @@ async function initializeAppLogic(initialUser) {
 
     const updatePasswordForm = document.getElementById('update-password-form');
     if (updatePasswordForm) {
-        updatePasswordForm.addEventListener('submit', async(e) => {
+        updatePasswordForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const newPassword = document.getElementById('update-password-input').value;
             const errorEl = document.getElementById('update-password-error');
@@ -2801,14 +2921,14 @@ async function initializeAppLogic(initialUser) {
                 successEl.textContent = 'Password updated successfully!';
                 updatePasswordForm.reset();
             } catch (error) {
-                 errorEl.textContent = getCoolErrorMessage(error);
+                errorEl.textContent = getCoolErrorMessage(error);
             }
         });
     }
 
     const updateUsernameForm = document.getElementById('update-username-form');
     if (updateUsernameForm) {
-        updateUsernameForm.addEventListener('submit', async(e) => {
+        updateUsernameForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const newUsername = document.getElementById('update-username-input').value.trim().toLowerCase();
             const errorEl = document.getElementById('update-username-error');
@@ -2820,7 +2940,7 @@ async function initializeAppLogic(initialUser) {
                 errorEl.textContent = "You must be logged in.";
                 return;
             }
-            
+
             if (!newUsername || newUsername.length < 3) {
                 errorEl.textContent = 'Username must be at least 3 characters.';
                 return;
@@ -2835,10 +2955,10 @@ async function initializeAppLogic(initialUser) {
                     errorEl.textContent = "This is already your username.";
                     return;
                 }
-                
+
                 const newUsernameRef = doc(db, "usernames", newUsername);
                 const newUsernameSnap = await getDoc(newUsernameRef);
-                
+
                 if (newUsernameSnap.exists()) {
                     errorEl.textContent = "This username is already taken.";
                     return;
@@ -2860,7 +2980,7 @@ async function initializeAppLogic(initialUser) {
             }
         });
     }
-    
+
     function initSortable() {
         // Destroy any existing Sortable instances to prevent memory leaks and errors.
         sortableInstances.forEach(s => s.destroy());
@@ -2959,20 +3079,20 @@ async function initializeAppLogic(initialUser) {
         });
     }
 
-    function createConfetti(el) { if(!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
+    function createConfetti(el) { if (!el) return; const r = el.getBoundingClientRect(); createFullScreenConfetti(false, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
     function createFullScreenConfetti(party, o = null) {
         for (let i = 0; i < (party ? 150 : 50); i++) { // PERF: Reduced confetti particle count
             const c = document.createElement('div'); c.className = 'confetti';
-            const sx = o ? o.x : Math.random()*window.innerWidth, sy = o ? o.y : -20;
-            c.style.left=`${sx}px`; c.style.top=`${sy}px`; c.style.backgroundColor = ['var(--accent-pink)','var(--accent-blue)','var(--accent-green)','var(--accent-orange)','var(--accent-purple)'][Math.floor(Math.random()*5)];
+            const sx = o ? o.x : Math.random() * window.innerWidth, sy = o ? o.y : -20;
+            c.style.left = `${sx}px`; c.style.top = `${sy}px`; c.style.backgroundColor = ['var(--accent-pink)', 'var(--accent-blue)', 'var(--accent-green)', 'var(--accent-orange)', 'var(--accent-purple)'][Math.floor(Math.random() * 5)];
             document.body.appendChild(c);
-            const a = Math.random()*Math.PI*2, v=50+Math.random()*100, ex=Math.cos(a)*v*(Math.random()*5), ey=(Math.sin(a)*v)+(window.innerHeight-sy);
-            c.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${ex}px, ${ey}px) rotate(${Math.random()*720}deg)`,opacity:0}],{duration:3000+Math.random()*2000,easing:'cubic-bezier(0.1,0.5,0.5,1)'}).onfinish=()=>c.remove();
+            const a = Math.random() * Math.PI * 2, v = 50 + Math.random() * 100, ex = Math.cos(a) * v * (Math.random() * 5), ey = (Math.sin(a) * v) + (window.innerHeight - sy);
+            c.animate([{ transform: 'translate(0,0) rotate(0deg)', opacity: 1 }, { transform: `translate(${ex}px, ${ey}px) rotate(${Math.random() * 720}deg)`, opacity: 0 }], { duration: 3000 + Math.random() * 2000, easing: 'cubic-bezier(0.1,0.5,0.5,1)' }).onfinish = () => c.remove();
         }
-        if(party){const p=document.createElement('div');p.className='party-time-overlay';document.body.appendChild(p);setTimeout(()=>p.remove(),5000);}
+        if (party) { const p = document.createElement('div'); p.className = 'party-time-overlay'; document.body.appendChild(p); setTimeout(() => p.remove(), 5000); }
     }
     const renderAllLists = () => { renderDailyItems(); renderMainItems(); renderIncomingItems(); initSortable(); resumeTimers(); };
-    
+
     function setInitialActiveTab() {
         // The animation for the nav buttons is the longest, finishing around 0.4s (delay) + 0.4s (duration) = 0.8s.
         // We wait until after this animation to add the 'active' class. This prevents the class's styles
@@ -3001,12 +3121,12 @@ async function initializeAppLogic(initialUser) {
     logoutBtn.addEventListener('click', () => {
         showConfirm("Logout?", "You will be returned to the landing page.", () => {
             closeModal(settingsModal);
-            sessionStorage.removeItem('isGuest'); 
+            sessionStorage.removeItem('isGuest');
             localStorage.removeItem('userTheme');
             signOut(auth).catch(error => console.error("Logout Error:", getCoolErrorMessage(error)));
         });
     });
-    
+
     // NEW: Combined listener for friend requests and incoming shared quests
     function listenForFriendsAndShares() {
         if (!user) return;
@@ -3044,12 +3164,12 @@ async function initializeAppLogic(initialUser) {
                         // The recipient has already added us. Now we add them and delete the request.
                         const batch = writeBatch(db);
                         const currentUserRef = doc(db, "users", user.uid);
-                        
+
                         batch.update(currentUserRef, { friends: arrayUnion(requestData.recipientUid) });
                         batch.delete(requestRef);
-                        
+
                         await batch.commit();
-                    } 
+                    }
                     // I am the SENDER, and the recipient just DECLINED.
                     else if (user && requestData.senderUid === user.uid && requestData.status === 'declined') {
                         // The recipient has indicated they don't want to be friends. We just clean up the request.
@@ -3122,8 +3242,8 @@ async function initializeAppLogic(initialUser) {
                 // NEW: Revert any groups owned by the current user (the one being removed)
                 if (sharedGroupsData.length > 0) {
                     for (const groupData of sharedGroupsData) {
-                    if (user && groupData.ownerUid === user.uid) { // eslint-disable-line
-                        const originalGroup = mainItems.find(g => g.tasks && g.id === groupData.originalGroupId);
+                        if (user && groupData.ownerUid === user.uid) { // eslint-disable-line
+                            const originalGroup = mainItems.find(g => g.tasks && g.id === groupData.originalGroupId);
                             if (originalGroup) {
                                 delete originalGroup.isShared;
                                 delete originalGroup.sharedGroupId;
@@ -3252,14 +3372,14 @@ async function initializeAppLogic(initialUser) {
         e.preventDefault();
         const usernameToFind = searchUsernameInput.value.trim().toLowerCase();
         friendStatusMessage.textContent = '';
-        
+
         if (!user || !usernameToFind) return;
 
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
         const currentUserData = currentUserDoc.exists() ? currentUserDoc.data() : {};
         const currentUsername = currentUserData.username || null;
         const currentFriends = currentUserData.friends || [];
-        
+
         if (!currentUsername) {
             friendStatusMessage.textContent = "Error: Your username is not set. Cannot send request.";
             friendStatusMessage.style.color = 'var(--accent-red-light)';
@@ -3273,7 +3393,7 @@ async function initializeAppLogic(initialUser) {
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
-        
+
         const usernamesRef = doc(db, "usernames", usernameToFind);
         const usernameSnap = await getDoc(usernamesRef);
 
@@ -3282,7 +3402,7 @@ async function initializeAppLogic(initialUser) {
             friendStatusMessage.style.color = 'var(--accent-red-light)';
             return;
         }
-        
+
         const targetUserId = usernameSnap.data().userId;
 
         // Check if the target user is already a friend.
@@ -3323,7 +3443,7 @@ async function initializeAppLogic(initialUser) {
             friendStatusMessage.style.color = 'var(--accent-red-light)';
         }
     }
-    
+
     async function cancelSentRequest(requestId) {
         if (!requestId) return;
         try {
@@ -3365,7 +3485,7 @@ async function initializeAppLogic(initialUser) {
             await updateDoc(requestDocRef, { status: 'declined' });
         }
     }
-    
+
     async function removeFriend(e) {
         const button = e.target.closest('button');
         if (!button) return;
@@ -3380,7 +3500,7 @@ async function initializeAppLogic(initialUser) {
             const q2 = query(collection(db, "sharedQuests"), where("participants", "==", [friendUidToRemove, user.uid]));
             const qg1 = query(collection(db, "sharedGroups"), where("participants", "==", [user.uid, friendUidToRemove]));
             const qg2 = query(collection(db, "sharedGroups"), where("participants", "==", [friendUidToRemove, user.uid]));
-            
+
             let snap1, snap2, snapg1, snapg2;
             try {
                 [snap1, snap2, snapg1, snapg2] = await Promise.all([
@@ -3388,7 +3508,7 @@ async function initializeAppLogic(initialUser) {
                 ]);
             } catch (error) {
                 console.error("Error fetching shared items for removal:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not fetch shared items to remove. Please check your connection and try again.", () => {});
+                showConfirm("Error", "Could not fetch shared items to remove. Please check your connection and try again.", () => { });
                 return; // Stop if fetching failed
             }
 
@@ -3490,13 +3610,13 @@ async function initializeAppLogic(initialUser) {
         if (!group) return;
 
         if (user.uid !== group.ownerUid) {
-            showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
+            showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => { });
             return;
         }
 
         showConfirm("Unshare Group?", "This will convert it back to a normal group for you and remove it for your friend. Are you sure?", async () => {
             if (user.uid !== group.ownerUid) {
-                showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => {});
+                showConfirm("Cannot Unshare", "Only the owner can unshare a group.", () => { });
                 return;
             }
 
@@ -3511,7 +3631,7 @@ async function initializeAppLogic(initialUser) {
                 renderAllLists();
             } catch (error) {
                 console.error("Error unsharing group:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not unshare the group.", () => {});
+                showConfirm("Error", "Could not unshare the group.", () => { });
             }
         });
     };
@@ -3530,7 +3650,7 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error abandoning group:", getCoolErrorMessage(error));
-                showConfirm("Error", "Could not abandon the group.", () => {});
+                showConfirm("Error", "Could not abandon the group.", () => { });
             }
         });
     };
@@ -3539,14 +3659,14 @@ async function initializeAppLogic(initialUser) {
         openModal(friendsModal);
         // The listener will trigger renderFriendsAndRequests and renderIncomingShares
     });
-    
+
     addFriendForm.addEventListener('submit', handleAddFriend);
-    
+
     friendRequestsContainer.addEventListener('click', e => {
-         if (e.target.closest('.accept-request-btn')) handleRequestAction(e, 'accept');
-         if (e.target.closest('.decline-request-btn')) handleRequestAction(e, 'decline');
+        if (e.target.closest('.accept-request-btn')) handleRequestAction(e, 'accept');
+        if (e.target.closest('.decline-request-btn')) handleRequestAction(e, 'decline');
     });
-    
+
     friendsListContainer.addEventListener('click', e => {
         if (e.target.closest('.remove-friend-btn')) removeFriend(e);
         const cancelButton = e.target.closest('.cancel-request-btn');
@@ -3571,7 +3691,7 @@ async function initializeAppLogic(initialUser) {
         if (!button) return;
 
         const section = button.dataset.section;
-        
+
         if (section !== 'friends') {
             lastSection = section;
         }
@@ -3617,13 +3737,13 @@ async function initializeAppLogic(initialUser) {
 
                 // This is the sensitive operation that requires recent login.
                 await deleteUser(currentUser);
-                
+
                 // This commit will only run if deleteUser was successful.
                 await batch.commit();
 
                 closeModal(manageAccountModal);
                 signOut(auth);
-                window.location.reload(); 
+                window.location.reload();
             } catch (error) {
                 console.error("Error deleting account:", error);
                 closeModal(confirmModal); // Close the 'are you sure' modal first.
@@ -3652,20 +3772,20 @@ async function initializeAppLogic(initialUser) {
         resumeTimers();
         setInitialActiveTab(); // Set the initial active tab after everything is loaded.
     }
-    
+
     // --- SHARED QUESTS LOGIC ---
-    
+
     async function populateFriendListForSharing(listElement) {
         if (!user) {
             listElement.innerHTML = '<p style="text-align: center; padding: 1rem;">You must be logged in to share.</p>';
             return;
         }
-        
+
         listElement.innerHTML = '<div class="loader-box" style="margin: 2rem auto;"></div>';
 
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const friendUIDs = userDoc.data()?.friends || [];
-        
+
         if (friendUIDs.length === 0) {
             listElement.innerHTML = '<p style="text-align: center; padding: 1rem;">You need friends to share with!</p>';
             return;
@@ -3753,27 +3873,27 @@ async function initializeAppLogic(initialUser) {
 
                     const oldQuest = questsMap.get(change.doc.id);
                     if (oldQuest && change.type === 'modified') {
-                         const isOwner = newQuest.ownerUid === user.uid;
-                         const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
-                                                     (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted) && newQuest.status !== 'completed';
-                         if (friendJustCompleted) {
-                             const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
-                             if(taskEl) {
+                        const isOwner = newQuest.ownerUid === user.uid;
+                        const friendJustCompleted = (isOwner && !oldQuest.friendCompleted && newQuest.friendCompleted) ||
+                            (!isOwner && !oldQuest.ownerCompleted && newQuest.ownerCompleted) && newQuest.status !== 'completed';
+                        if (friendJustCompleted) {
+                            const taskEl = document.querySelector(`.task-item[data-id="${newQuest.id}"]`);
+                            if (taskEl) {
                                 taskEl.classList.add('friend-completed-pulse');
-                                taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), {once: true});
+                                taskEl.addEventListener('animationend', () => taskEl.classList.remove('friend-completed-pulse'), { once: true });
                                 audioManager.playSound('friendComplete');
-                             }
+                            }
                         }
                     }
                     questsMap.set(change.doc.id, newQuest);
                 }
             });
-            
+
             const allQuestsFromListener = Array.from(questsMap.values());
-        
+
             // Filter for active/completed quests for the main shared list
             sharedQuests = allQuestsFromListener.filter(q => q.status === 'active' || q.status === 'completed');
-    
+
             // Filter for pending quests for the incoming shares tab
             const incomingQuests = allQuestsFromListener.filter(q => q.status === 'pending' && q.friendUid === user.uid);
             const incomingGroups = allSharedGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
@@ -3785,7 +3905,7 @@ async function initializeAppLogic(initialUser) {
 
         // A single listener for all relevant statuses
         const allSharedQuestsQuery = query(
-            collection(db, "sharedQuests"), 
+            collection(db, "sharedQuests"),
             where("participants", "array-contains", user.uid),
             where("status", "in", ["pending", "active", "completed", "rejected", "abandoned", "unshared"])
         );
@@ -3912,7 +4032,7 @@ async function initializeAppLogic(initialUser) {
 
             sharedGroups = allSharedGroupsFromListener.filter(g => g.status === 'active' || g.status === 'completed');
             const incomingSharedGroups = allSharedGroupsFromListener.filter(g => g.status === 'pending' && g.friendUid === user.uid);
-            
+
             // Combine with individual quests for the "Shares" tab
             const incomingSharedQuests = sharedQuests.filter(q => q.status === 'pending' && q.friendUid === user.uid);
             incomingSharedItems = [...incomingSharedQuests, ...incomingSharedGroups];
@@ -3929,7 +4049,7 @@ async function initializeAppLogic(initialUser) {
             return;
         }
         if (task.isShared) {
-            showConfirm("Already Shared", "This quest has already been shared.", () => {});
+            showConfirm("Already Shared", "This quest has already been shared.", () => { });
             return;
         }
 
@@ -3945,7 +4065,7 @@ async function initializeAppLogic(initialUser) {
             const questId = shareQuestIdInput.value;
             const friendUid = button.dataset.uid;
             const friendUsername = button.dataset.username;
-            
+
             if (questId === 'batch_share') {
                 const promises = [];
                 selectedQuestIds.forEach(id => {
@@ -3962,7 +4082,7 @@ async function initializeAppLogic(initialUser) {
                     await shareQuest(questId, friendUid, friendUsername);
                 } catch (error) {
                     console.error("Failed to share quest:", error);
-                    showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => {});
+                    showConfirm("Sharing Failed", "An error occurred while sharing the quest. Please try again.", () => { });
                 }
             }
             closeModal(shareQuestModal);
@@ -3982,7 +4102,7 @@ async function initializeAppLogic(initialUser) {
 
         const userDoc = await getDoc(doc(db, "users", user.uid));
         const ownerUsername = userDoc.data().username;
-        
+
         const sharedQuestRef = doc(collection(db, "sharedQuests"));
 
         const sharedQuestData = {
@@ -4000,7 +4120,7 @@ async function initializeAppLogic(initialUser) {
             originalTaskType: type,
             originalGroupId: group ? group.id : null
         };
-        
+
         const batch = writeBatch(db);
         // Step 1: Create the shared quest document with 'pending' status
         batch.set(sharedQuestRef, sharedQuestData);
@@ -4012,26 +4132,26 @@ async function initializeAppLogic(initialUser) {
         // Step 3: Save the updated local state to Firestore
         const dataToSave = { dailyItems, mainItems, playerData, settings };
         batch.set(doc(db, "users", user.uid), { appData: dataToSave }, { merge: true });
-        
+
         await batch.commit();
         audioManager.playSound('share');
         renderAllLists(); // Re-render to show the original task as 'isShared'
     }
-    
+
     async function completeSharedQuestPart(task, uncompleting = false) {
         const questId = task.questId;
         const sharedQuestRef = doc(db, "sharedQuests", questId);
         const isOwner = user && task.ownerUid === user.uid;
-    
+
         // --- Optimistic Update ---
         // 1. Determine the change and give immediate feedback.
         const myCompletionFlag = isOwner ? 'ownerCompleted' : 'friendCompleted';
         const friendCompletionFlag = isOwner ? 'friendCompleted' : 'ownerCompleted';
-    
+
         if ((!uncompleting && task[myCompletionFlag]) || (uncompleting && !task[myCompletionFlag])) {
             return; // No change needed, already in the desired state.
         }
-    
+
         if (uncompleting) {
             audioManager.playSound('delete');
             addXp(-(XP_PER_SHARED_QUEST / 2));
@@ -4049,22 +4169,22 @@ async function initializeAppLogic(initialUser) {
             }
             task[myCompletionFlag] = true;
         }
-    
+
         // 2. Re-render the UI immediately with the optimistic state.
         renderAllLists();
-    
+
         // --- Background Sync ---
         // 3. Persist the change to Firestore.
         const updateData = {};
         updateData[myCompletionFlag] = !uncompleting;
-    
+
         // Check if this action completes the quest for everyone.
         const willBeCompleted = !uncompleting && task[friendCompletionFlag];
-    
+
         if (willBeCompleted) {
             updateData.status = 'completed';
         }
-    
+
         try {
             await updateDoc(sharedQuestRef, updateData);
         } catch (error) {
@@ -4075,11 +4195,11 @@ async function initializeAppLogic(initialUser) {
             });
         }
     }
-    
+
     function finishSharedQuestAnimation(questId, shouldDelete) {
         audioManager.playSound('sharedQuestFinish');
         const taskEl = document.querySelector(`.task-item[data-id="${questId}"]`);
-        
+
         if (taskEl) {
             taskEl.classList.add('shared-quest-finished');
             createConfetti(taskEl);
@@ -4123,7 +4243,7 @@ async function initializeAppLogic(initialUser) {
 
                             const currentTasks = groupDoc.data().tasks || [];
                             const updatedTasks = currentTasks.filter(t => t.id !== task.id);
-                            
+
                             if (updatedTasks.length === 0) {
                                 // This was the last task, mark the group as completed.
                                 transaction.update(groupRef, { tasks: updatedTasks, status: 'completed' });
@@ -4140,16 +4260,16 @@ async function initializeAppLogic(initialUser) {
     }
 
     async function openShareGroupModal(groupId) {
-        if (!user) return; 
+        if (!user) return;
         const { group } = findTaskAndContext(groupId);
         if (group && group.isShared) {
-            showConfirm("Already Shared", "This group has already been shared.", () => {});
+            showConfirm("Already Shared", "This group has already been shared.", () => { });
             return;
         }
 
         // Allow sharing empty groups, but block sharing groups that only contain already-shared tasks.
         if (!group || (group.tasks && group.tasks.length > 0 && group.tasks.filter(t => !t.isShared).length === 0)) {
-            showConfirm("Cannot Share Group", "This group contains only tasks that are already shared individually. Add a new task to this group to share it.", () => {});
+            showConfirm("Cannot Share Group", "This group contains only tasks that are already shared individually. Add a new task to this group to share it.", () => { });
             return;
         }
 
@@ -4171,7 +4291,7 @@ async function initializeAppLogic(initialUser) {
                 await shareGroup(groupId, friendUid, friendUsername);
             } catch (error) {
                 console.error("Failed to share group:", error);
-                showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => {});
+                showConfirm("Sharing Failed", "An error occurred while sharing the group. Please try again.", () => { });
             }
             closeModal(shareGroupModal);
         }
@@ -4193,7 +4313,7 @@ async function initializeAppLogic(initialUser) {
         // Block sharing only if the group is not empty but contains no shareable tasks.
         if (groupToShare.tasks && groupToShare.tasks.length > 0 && tasksToShare.length === 0) {
             console.warn("Attempted to share a group with only already-shared tasks.");
-            showConfirm("Cannot Share", "This group contains only tasks that are already shared individually.", () => {});
+            showConfirm("Cannot Share", "This group contains only tasks that are already shared individually.", () => { });
             return;
         }
 
@@ -4258,7 +4378,7 @@ async function initializeAppLogic(initialUser) {
         incomingSharedItems.forEach(item => {
             const shareItemEl = document.createElement('div');
             shareItemEl.className = 'incoming-share-item';
-            
+
             if (item.tasks) { // It's a group
                 shareItemEl.innerHTML = `
                     <span>Group "${item.name}" from ${item.ownerUsername}</span>
@@ -4290,7 +4410,7 @@ async function initializeAppLogic(initialUser) {
             audioManager.playSound('toggle'); // Use toggle sound for acceptance
         } catch (error) {
             console.error("Error accepting shared quest:", getCoolErrorMessage(error));
-            showConfirm("Error", "Failed to accept quest. Please try again.", () => {});
+            showConfirm("Error", "Failed to accept quest. Please try again.", () => { });
         }
     }
 
@@ -4308,7 +4428,7 @@ async function initializeAppLogic(initialUser) {
                 audioManager.playSound('delete');
             } catch (error) {
                 console.error("Error denying shared quest:", getCoolErrorMessage(error));
-                showConfirm("Error", "Failed to deny quest. Please try again.", () => {});
+                showConfirm("Error", "Failed to deny quest. Please try again.", () => { });
             }
         });
     }
@@ -4317,7 +4437,7 @@ async function initializeAppLogic(initialUser) {
     incomingSharesContainer.addEventListener('click', (e) => {
         const acceptBtn = e.target.closest('.accept-share-btn');
         const denyBtn = e.target.closest('.deny-share-btn');
-        
+
         if (acceptBtn) {
             const itemId = acceptBtn.dataset.itemId;
             const type = acceptBtn.dataset.type;
@@ -4350,9 +4470,9 @@ async function initializeAppLogic(initialUser) {
             let hasUnshared = false;
             let hasGroup = false;
             let hasActiveShared = false;
-    
+
             for (const id of selectedQuestIds) {
-                    const { task, group } = findTaskAndContext(id); // eslint-disable-line
+                const { task, group } = findTaskAndContext(id); // eslint-disable-line
                 const item = task || group;
 
                 if (!item) {
@@ -4375,7 +4495,7 @@ async function initializeAppLogic(initialUser) {
             } else { // Only unshared items
                 canUnshare = false;
             }
-            
+
             if (hasGroup) {
                 canComplete = false;
                 canUncomplete = false;
@@ -4396,7 +4516,7 @@ async function initializeAppLogic(initialUser) {
         isMultiSelectModeActive = false;
         questsLayout.classList.remove('multi-select-active');
         multiSelectToggleBtns.forEach(btn => btn.classList.remove('active'));
-        
+
         document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
         selectedQuestIds.clear();
 
@@ -4407,7 +4527,7 @@ async function initializeAppLogic(initialUser) {
         isMultiSelectModeActive = true;
         questsLayout.classList.add('multi-select-active');
         multiSelectToggleBtns.forEach(btn => btn.classList.add('active'));
-        
+
         selectedQuestIds.clear();
         document.querySelectorAll('.multi-select-selected').forEach(el => el.classList.remove('multi-select-selected'));
 
@@ -4486,7 +4606,7 @@ async function initializeAppLogic(initialUser) {
                 for (const id of selectedQuestIds) {
                     const { task } = findTaskAndContext(id);
                     // Only act on active shared quests selected for unsharing
-                    if (task && task.status === 'active') { 
+                    if (task && task.status === 'active') {
                         if (user.uid === task.ownerUid) {
                             // If I am the owner, I unshare.
                             promises.push(updateDoc(doc(db, "sharedQuests", id), { status: 'unshared' }));
@@ -4496,13 +4616,13 @@ async function initializeAppLogic(initialUser) {
                         }
                     }
                 }
-                
+
                 try {
                     await Promise.all(promises);
                     audioManager.playSound('delete');
                 } catch (error) {
                     console.error("Batch unshare/abandon failed:", getCoolErrorMessage(error));
-                    showConfirm("Error", "Could not update all selected quests. Please try again.", () => {});
+                    showConfirm("Error", "Could not update all selected quests. Please try again.", () => { });
                 }
                 deactivateMultiSelectMode();
             });
@@ -4530,7 +4650,7 @@ async function initializeAppLogic(initialUser) {
                         }
                     }
                 });
-                
+
                 if (needsSave) saveState();
                 deactivateMultiSelectMode();
                 renderAllLists();
@@ -4598,7 +4718,7 @@ async function initializeAppLogic(initialUser) {
         // Tab trapping inside modals
         if (e.key === 'Tab' && activeModal) {
             const focusableElements = Array.from(activeModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
-                                           .filter(el => el.offsetParent !== null); // Only visible, focusable elements
+                .filter(el => el.offsetParent !== null); // Only visible, focusable elements
             if (focusableElements.length === 0) {
                 e.preventDefault();
                 return;
@@ -4633,7 +4753,7 @@ async function initializeAppLogic(initialUser) {
                 hideActiveTaskActions(); // This will nullify activeMobileActionsItem
                 shiftHoverItem = null;
             }
-            
+
             // --- Pre-condition checks for showing the menu ---
             if (item.classList.contains('timer-active')) return;
             const optionsBtn = item.querySelector('.options-btn');
@@ -4679,12 +4799,12 @@ async function initializeAppLogic(initialUser) {
     return {
         isPartial: false,
         shutdown: () => {
-             debouncedSaveData.cancel();
-             activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
-             activeTimers.clear();
-             if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
-             if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
-             if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
+            debouncedSaveData.cancel();
+            activeTimers.forEach(timeoutId => clearTimeout(timeoutId));
+            activeTimers.clear();
+            if (unsubscribeFromFriendsAndShares) unsubscribeFromFriendsAndShares();
+            if (unsubscribeFromSharedQuests) unsubscribeFromSharedQuests();
+            if (unsubscribeFromSharedGroups) unsubscribeFromSharedGroups();
         },
         updateUser: async (newUser) => {
             user = newUser;
@@ -4700,7 +4820,7 @@ function getCoolErrorMessage(error) {
         return "Permission Denied! Check your Firestore Security Rules.";
     }
     if (error.code === 'permission-denied') {
-         return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
+        return "Permission Denied! Please check your Firestore Security Rules in the Firebase console.";
     }
     switch (error.code) {
         case 'auth/invalid-email': return "Hmm, that email doesn't look right. Check for typos?";
@@ -4735,8 +4855,8 @@ function setupAuthForms(container, onAuthSuccess) {
     googleBtn.type = 'button';
     googleBtn.className = 'google-btn-custom';
     googleBtn.innerHTML = `<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 6.93l3.66 2.84c.87-2.6 3.3-4.39 6.16-4.39z"/><path fill="none" d="M1 1h22v22H1z"/></svg><span>Sign in with Google</span>`;
-    if(googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
-    
+    if (googleBtnContainer) googleBtnContainer.appendChild(googleBtn);
+
     toggleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             toggleBtns.forEach(b => b.classList.remove('active'));
@@ -4776,7 +4896,7 @@ function setupAuthForms(container, onAuthSuccess) {
         const password = loginForm.querySelector('.login-password').value;
         const errorEl = loginForm.querySelector('.login-error');
         errorEl.textContent = '';
-        
+
         try {
             let emailToLogin = emailOrUsername;
             if (!emailOrUsername.includes('@')) {
@@ -4786,8 +4906,8 @@ function setupAuthForms(container, onAuthSuccess) {
                     const targetUserId = usernameSnap.data().userId;
                     const userDocRef = doc(db, "users", targetUserId);
                     const userDocSnap = await getDoc(userDocRef);
-                    if(userDocSnap.exists()) {
-                       emailToLogin = userDocSnap.data().email;
+                    if (userDocSnap.exists()) {
+                        emailToLogin = userDocSnap.data().email;
                     } else { throw new Error("User data not found for this username."); }
                 } else { throw { code: 'auth/user-not-found' }; }
             }
@@ -4798,7 +4918,7 @@ function setupAuthForms(container, onAuthSuccess) {
         }
     });
 
-    if(googleBtn) {
+    if (googleBtn) {
         googleBtn.addEventListener('click', async () => {
             const provider = new GoogleAuthProvider();
             const googleLoader = document.getElementById('google-signin-loader-modal');
